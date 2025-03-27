@@ -13,12 +13,7 @@ ImputeMissinRecordsData(data, dontuse = NULL, ...)
 thesev ariables will not be used for imputation or for imputing other
  variables.}
 
-\item{...}{Arguments passed to \code{ranger::ranger()}. If the data set is large,
-better use less trees (e.g. \code{num.trees = 20}) and/or a low value of
-\code{sample.fraction}.
-The following arguments are incompatible, amongst others:
-\code{write.forest}, \code{probability}, \code{split.select.weights},
-\code{dependent.variable.name}, and \code{classification}.}
+\item{...}{Additional arguments passed to \code{\link[ranger:ranger]{ranger::ranger()}}. Not all make sense.}
 }
 \value{
 Imputed data
