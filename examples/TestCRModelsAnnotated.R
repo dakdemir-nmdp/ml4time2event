@@ -2,11 +2,10 @@
 # Load the packages 
 library(ml4time2event)
 library(tidyverse)
-setwd("~/Library/CloudStorage/OneDrive-BeTheMatch/Documents2022_June/ml4time2event/examples/usage_examples")
 
 
-dataTrain<-read.csv("TrainingDataFollic.csv", row.names = 1)
-dataTest<-read.csv("TestDataFollic.csv",row.names = 1)
+dataTrain<-read.csv("examples/TrainingDataFollic.csv", row.names = 1)
+dataTest<-read.csv("examples/TestDataFollic.csv", row.names = 1)
 
 # Data preparation
 dataTrain$factvar<-factor(sample(c("A","B","C","D","E","F","G", "H","K","L"), nrow(dataTrain), replace=TRUE), levels=c("A","B","C","D","E","F","G", "H","K","L"))
@@ -131,5 +130,3 @@ sum(is.na(PredALLALLCRModelsM$NewProbs))
 hist(proba2score(PredALLALLCRModelsM$ModelPredictions$newprobsBART, Times=c(seq(0,30,length=1000)), ll=0, ul=36, scale=TRUE))
 
 ###############
-
-

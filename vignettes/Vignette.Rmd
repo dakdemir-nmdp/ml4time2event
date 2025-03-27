@@ -1,0 +1,57 @@
+---
+title: "Vignette for Competing Risks and Survival Models"
+author: "Your Name"
+date: "2025-03-27"
+output: html_document
+vignette: >
+  %\VignetteIndexEntry{CR and Survival Models Vignette}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+# Introduction
+
+This vignette demonstrates the usage of our models for competing risks (CR) and survival analysis. The examples in the `examples/` folder (namely, `TestCRModels.R`, `TestCRModelsAnnotated.R`, and `TestSurvModels.R`) illustrate how to run the models and validate their performance. This document serves as a consolidated guide for users to understand and reproduce these analyses.
+
+# Competing Risks Models
+
+The CR models are designed to handle events where competing risks may influence the probability of an event occurring. We illustrate the basic usage with the following code chunk:
+
+```{r, echo=TRUE}
+# Source the CR models test script
+source("examples/TestCRModels.R")
+```
+
+The `TestCRModels.R` script runs the core competing risks models. An annotated version is also available to provide additional insights into the methodology:
+
+```{r, echo=TRUE}
+# Source the annotated CR models test script for additional information
+source("examples/TestCRModelsAnnotated.R")
+```
+
+# Survival Models
+
+The survival models analyze time-to-event data. The following code chunk demonstrates how to execute the survival models test script:
+
+```{r, echo=TRUE}
+# Source the survival models test script
+source("examples/TestSurvModels.R")
+```
+
+# Discussion
+
+The examples show how to implement and test predictions using the provided functions in our package. Should you encounter issues, such as working directory errors (e.g. inability to change directory), ensure that your R working directory is set to the root of the package. This can be set with:
+
+```{r, eval=FALSE}
+setwd("path/to/ml4time2event")
+```
+
+For more details on each function, please refer to the corresponding documentation files in the `man/` folder.
+
+Note: The error "cannot change working directory" is expected if the example scripts attempt to set a working directory that is not available in your environment. This does not affect the functionality of the models.
+
+# Conclusion
+
+This vignette provides a reproducible guide to running and understanding our competing risks and survival analysis models. By following the examples and reviewing the associated source code, users can effectively apply these methods to their own datasets.
+
+Enjoy exploring the models!

@@ -4,11 +4,10 @@
 library(ml4time2event)
 library(tidyverse)
 library(survival)
-setwd("~/Library/CloudStorage/OneDrive-BeTheMatch/Year2023/ml4time2event/examples")
 
 
-dataTrain<-read.csv("TrainingDataFollic.csv", row.names = 1)
-dataTest<-read.csv("TestDataFollic.csv",row.names = 1)
+dataTrain<-read.csv("examples/TrainingDataFollic.csv", row.names = 1)
+dataTest<-read.csv("examples/TestDataFollic.csv", row.names = 1)
 dataTrain$factvar<-factor(sample(c("A","B","C","D","E","F","G","H","K"), nrow(dataTrain), replace=TRUE), levels=c("A","B","C","D","E","F","G","H","K"))
 dataTest$factvar<-factor(sample(c("A","B","C","D","E","F","G","H","K"), nrow(dataTest), replace=TRUE), levels=c("A","B","C","D","E","F","G","H","K"))
 
