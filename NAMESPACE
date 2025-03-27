@@ -1,0 +1,14 @@
+exportPattern("^[[:alpha:]]+")
+importFrom("stats", "as.formula", "coef", "model.matrix", "na.omit",
+           "predict", "runif", "complete.cases", "optim", "model.frame",
+           "approxfun", "dnorm", "lm", "pnorm","AIC", "quantile")
+importFrom("magrittr", "%>%")
+importFrom("party", "ctree", "ctree_control")
+#importFrom("mlr3proba", "LearnerSurvXgboost")
+
+importFrom("prodlim","Hist")
+importFrom("survival","Surv")
+importFrom("stats", "rpois", "sd")
+importFrom("utils", "capture.output", "read.csv")
+
+importFrom("labelled","generate_dictionary")
