@@ -1,4 +1,4 @@
-# ml4t2event
+# ml4time2event
 
 Machine learning for time to event analysis. This package provides a collection of tools for predicting time-to-event outcomes using various statistical and machine learning methods.
 
@@ -9,10 +9,10 @@ To install the package from GitHub, run the following commands in R:
 ```r
 # install.packages("devtools") # Uncomment if devtools is not installed
 library(devtools)
-install_github("dakdemir-nmdp/ml4t2event")
+install_github("dakdemir-nmdp/ml4time2event")
 ```
 
-This command will install ml4t2event along with its required dependencies as specified in the DESCRIPTION file. The package depends on R (>= 3.5.0) and utilizes packages such as magrittr, party, prodlim, survival, labelled, and xgboost.
+This command will install ml4time2event along with its required dependencies as specified in the DESCRIPTION file. The package depends on R (>= 3.5.0) and utilizes packages such as magrittr, party, prodlim, survival, labelled, and xgboost.
 
 ## R Dependencies and Components
 
@@ -42,7 +42,7 @@ The NAMESPACE file exposes package functions and imports essential functions fro
 Load the package in your R session with:
 
 ```r
-library(ml4t2event)
+library(ml4time2event)
 ```
 
 Then, you can explore various functions for:
@@ -61,4 +61,4 @@ This project is licensed under the GPL (>= 2) License.
 
 We thank all contributors and users for their support and feedback.
 
-Enjoy using ml4t2event!
+Enjoy using ml4time2event!

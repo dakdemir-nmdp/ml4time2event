@@ -1,6 +1,5 @@
 # History files
 .Rhistory
-<<<<<<< HEAD
 .Rapp.history
 
 # Session Data files
@@ -21,6 +20,7 @@
 
 # RStudio files
 .Rproj.user/
+*.Rproj
 
 # produced vignettes
 vignettes/*.html
@@ -48,18 +48,6 @@ po/*~
 
 # RStudio Connect folder
 rsconnect/
-=======
-.RData
-.Ruserdata
-
-# RStudio project files
-.Rproj.user/
-*.Rproj
-
-# R package build artifacts and checks
-.Rcheck/
-*.tar.gz
-*.zip
 
 # macOS system files
 .DS_Store
@@ -67,6 +55,11 @@ rsconnect/
 # Temporary files
 *.tmp
 *.temp
->>>>>>> 9358ffd (Initial commit)
+
+# Claude files
+CLAUDE.md
+
+# PDF files
+*.pdf
 
 **/.claude/settings.local.json
