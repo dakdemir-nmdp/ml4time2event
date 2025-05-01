@@ -1,0 +1,6 @@
+ID,Age,Sex,Value1,Value2,EventTime,EventStatus
+1,35,Male,10.5,A,100,1
+2,45,Female,20.1,B,150,0
+3,55,Male,,C,200,1
+4,65,Female,30.9,A,250,0
+5,75,Male,40.2,B,300,1

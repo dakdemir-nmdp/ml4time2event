@@ -6,16 +6,45 @@ Author: Deniz Akdemir
 Maintainer: Deniz Akdemir <dakdemir@nmdp.org>
 Description: More about what it does (maybe more than one line)
     Use four spaces when indenting paragraphs within the Description.
-License: GPL (>= 2)
+License: file LICENSE
 Encoding: UTF-8
 LazyData: true
 RoxygenNote: 7.3.2
-Imports: magrittr, party, prodlim, survival,labelled, xgboost
-Suggests: energy, gtsummary, data.table,  openxlsx, pacman, checkmate, 
-   dplyr, stringr, missRanger,reticulate, 
-   randomForestSRC, glmnet,
-   mgcv, partykit, rpart, gbm, mlr3,
-   mlr3learners, survivalmodels, pec,
-   pracma,  fastcmprsk, haven, BART, forcats,
-   pseudo, recipes, rsample, pbapply, torch
-Depends: R (>= 3.5.0), base, stats
+Imports:
+    BART,
+    dplyr,
+    energy,
+    fastcmprsk,
+    gbm,
+    glmnet,
+    gtsummary,
+    haven,
+    labelled,
+    lubridate,
+    magrittr,
+    methods,
+    mgcv,
+    missRanger,
+    openxlsx,
+    partykit,
+    pbapply,
+    pec,
+    pracma,
+    prodlim,
+    pseudo,
+    randomForestSRC,
+    recipes,
+    rpart,
+    rsample,
+    stats,
+    stringr,
+    survival,
+    utils,
+    xgboost
+Suggests:
+    checkmate,
+    forcats,
+    mlr3,
+    mlr3learners,
+    pacman
+Depends: R (>= 3.5.0), base

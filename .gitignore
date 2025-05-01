@@ -68,3 +68,5 @@ rsconnect/
 *.tmp
 *.temp
 >>>>>>> 9358ffd (Initial commit)
+
+**/.claude/settings.local.json
