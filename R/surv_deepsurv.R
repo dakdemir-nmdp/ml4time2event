@@ -106,7 +106,7 @@ unpack_weights <- function(w_vec, n_in, n_hidden) {
 #'   \item{expvars}{character vector of explanatory variables}
 #'   \item{factor_levels}{list of factor levels for categorical variables}
 #'
-#' @importFrom stats model.matrix as.formula scale
+#' @importFrom stats model.matrix as.formula
 #' @export
 SurvModel_DeepSurv <- function(data, expvars, timevar, eventvar,
                                size = 5, decay = 0.01, maxit = 1000, verbose = FALSE) {

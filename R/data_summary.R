@@ -8,7 +8,7 @@
 #' @return A symmetric matrix of pairwise distance correlations.
 #' @importFrom energy bcdcor
 #' @importFrom stats model.matrix
-#' @importFrom pbapply pblapply # Using pblapply for progress bar
+#' @importFrom pbapply pblapply
 #' @export
 pairwiserelationshipsDataSummmary <- function(data) {
   if (!requireNamespace("energy", quietly = TRUE)) stop("Package 'energy' needed.")
@@ -109,7 +109,7 @@ gethighcorvarsDataSummmary <- function(pmat, corcutoff = .8) {
 #'   and values are the distance correlations of each against the rest.
 #' @importFrom energy bcdcor
 #' @importFrom stats model.matrix
-#' @importFrom pbapply pbsapply # Using pbsapply for progress bar
+#' @importFrom pbapply pbsapply
 #' @export
 OneAgainstRestCorDataSummmary <- function(data) {
   if (!requireNamespace("energy", quietly = TRUE)) stop("Package 'energy' needed.")
@@ -164,8 +164,9 @@ OneAgainstRestCorDataSummmary <- function(data) {
 #' }
 #' }
 #' @importFrom gtsummary tbl_summary modify_header bold_labels italicize_labels
-#' @importFrom methods is # Used implicitly by gtsummary? Add just in case.
+#' @importFrom methods is
 #' @importFrom magrittr %>%
+#' @importFrom dplyr select all_of
 #' @export
 SummaryTableDataSummmary <- function(data, UseVars) {
     if (!requireNamespace("gtsummary", quietly = TRUE)) {

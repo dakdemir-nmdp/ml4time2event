@@ -9,7 +9,9 @@
 RemoveMonoVarsData <- function(data) {
   if (!is.data.frame(data)) stop("'data' must be a data frame.")
   num_unique_vals <- sapply(data, function(x) length(unique(x[!is.na(x)])))
-  cols_to_keep <- num_unique_vals > 1
+  # Only remove columns with exactly 1 unique non-NA value (true monotonous)
+  # Keep all-NA columns (0 unique values) for RemoveAllNAVars to handle
+  cols_to_keep <- num_unique_vals != 1
   if (sum(!cols_to_keep) > 0) {
       cat("Removing", sum(!cols_to_keep), "columns with only one unique non-NA value:", paste(colnames(data)[!cols_to_keep], collapse=", "), "\n")
   }
@@ -25,119 +27,21 @@ RemoveMonoVarsData <- function(data) {
 #' @export
 RemoveAllNAVars <- function(data) {
   if (!is.data.frame(data)) stop("'data' must be a data frame.")
+  
+  # Handle empty data frame
+  if (ncol(data) == 0 || nrow(data) == 0) {
+    return(data)
+  }
+  
   all_na_cols <- sapply(data, function(x) all(is.na(x)))
+  # Ensure it's a logical vector (sapply can return a list for empty data)
+  all_na_cols <- as.logical(all_na_cols)
+  
   if (sum(all_na_cols) > 0) {
       cat("Removing", sum(all_na_cols), "columns containing only NA values:", paste(colnames(data)[all_na_cols], collapse=", "), "\n")
   }
   return(data[, !all_na_cols, drop = FALSE])
 }
-
-
-
-#' findDiseaseSpecVarsData
-#'
-#' Utility function to heuristically detect disease-specific variables from data.
-#' A variable is considered specific to a disease if it's mostly non-NA within
-#' that disease group and mostly NA outside that group.
-#' Assumes a 'disease' column exists in the data.
-#'
-#' @param data Data frame containing a 'disease' column and potential disease-specific variables.
-#' @param pin Numeric threshold (0-1) for the minimum proportion of non-NA values within the disease group (default: 0.5).
-#' @param pout Numeric threshold (0-1) for the minimum proportion of NA values outside the disease group (default: 0.9).
-#' @return A named list where names are disease levels and values are character vectors of variables deemed specific to that disease.
-#' @export
-findDiseaseSpecVarsData <- function(data, pin = .5, pout = .9) {
-  if (!"disease" %in% colnames(data)) {
-      stop("Data frame must contain a 'disease' column.")
-  }
-  varstocheck <- setdiff(colnames(data), "disease")
-  diseases <- unique(data$disease[!is.na(data$disease)])
-  dislist <- vector(mode = "list")
-
-  for (disi in diseases) {
-    varlist <- c()
-    rows_disease <- which(data$disease == disi)
-    rows_other <- which(data$disease != disi)
-    n_disease <- length(rows_disease)
-    n_other <- length(rows_other)
-
-    if (n_disease == 0 || n_other == 0) next # Skip if no obs in/out of group
-
-    for (vari in varstocheck) {
-      col_data <- data[[vari]]
-      na_indices <- is.na(col_data)
-      non_na_indices <- !na_indices
-
-      # Proportion non-NA within the disease group
-      prop_non_na_in <- sum(non_na_indices[rows_disease]) / n_disease
-      # Proportion NA outside the disease group
-      prop_na_out <- sum(na_indices[rows_other]) / n_other
-
-      # Check thresholds
-      if (!is.nan(prop_non_na_in) && !is.nan(prop_na_out) && prop_non_na_in > pin && prop_na_out > pout) {
-        varlist <- c(varlist, vari)
-      }
-    }
-
-    if (length(varlist) > 0) {
-      dislist[[as.character(disi)]] <- varlist # Use disease level as name
-    }
-  }
-  if (length(dislist) > 0) {
-      cat("Found potentially disease-specific variables:\n")
-      print(utils::str(dislist))
-  } else {
-      cat("No potentially disease-specific variables found based on thresholds.\n")
-  }
-  dislist
-}
-
-
-
-
-#' processDiseaseSpecVarsData
-#'
-#' Utility function to process potentially disease-specific variables.
-#' For variables identified as specific to a disease (via `dislist`),
-#' replaces NA values outside that disease group with "NotApp" and converts the column to factor.
-#'
-#' @param data Data frame to process.
-#' @param dislist Named list (output of `findDiseaseSpecVarsData`) mapping diseases to specific variable names.
-#' @return Data frame with NAs replaced by "NotApp" for specific variables/disease combinations.
-#' @export
-processDiseaseSpecVarsData <- function(data, dislist) {
-  if (!is.list(dislist) || is.null(names(dislist))) {
-      stop("'dislist' must be a named list (e.g., output from findDiseaseSpecVarsData).")
-  }
-  if (!"disease" %in% colnames(data)) {
-      stop("Data frame must contain a 'disease' column.")
-  }
-
-  data_out <- data # Work on a copy
-
-  for (disease in names(dislist)) {
-    vars <- dislist[[disease]]
-    rows_not_disease <- which(data_out$disease != disease)
-
-    for (vari in vars) {
-      if (vari %in% colnames(data_out)) {
-          col_data <- data_out[[vari]]
-          # Convert to character to allow adding "NotApp" level
-          col_data_char <- as.character(col_data)
-          # Replace NA for rows *not* in the specific disease group
-          na_in_other_rows <- is.na(col_data_char[rows_not_disease])
-          col_data_char[rows_not_disease][na_in_other_rows] <- "NotApp"
-          # Convert back to factor, ensuring "NotApp" is a level
-          data_out[[vari]] <- factor(col_data_char, levels = unique(c(levels(col_data), "NotApp")))
-          cat("Processed variable '", vari, "' for disease '", disease, "', replacing NAs outside group with 'NotApp'.\n")
-      } else {
-          warning("Variable '", vari, "' listed for disease '", disease, "' not found in data.")
-      }
-    }
-  }
-  return(data_out)
-}
-
 
 
 
@@ -158,7 +62,7 @@ RemoveMissinVarsData <- function(data, maxprop = .2) {
   cols_removed <- colnames(data)[!cols_to_keep]
 
   if (length(cols_removed) > 0) {
-      cat("Removing", length(cols_removed), "columns with >", maxprop*100, "% missing values:", paste(cols_removed, collapse=", "), "\n")
+      cat("Removing", length(cols_removed), "columns with >=", maxprop*100, "% missing values:", paste(cols_removed, collapse=", "), "\n")
   }
   return(data[, cols_to_keep, drop = FALSE])
 }
@@ -180,7 +84,7 @@ RemoveMissinRecordsData <- function(data, maxprop = .2) {
   rows_removed_count <- sum(!rows_to_keep)
 
   if (rows_removed_count > 0) {
-      cat("Removing", rows_removed_count, "rows with >", maxprop*100, "% missing values.\n")
+      cat("Removing", rows_removed_count, "rows with >=", maxprop*100, "% missing values.\n")
   }
   return(data[rows_to_keep, , drop = FALSE])
 }
@@ -196,8 +100,17 @@ RemoveMissinRecordsData <- function(data, maxprop = .2) {
 #' @export
 getcharcolsData <- function(data) {
   if (!is.data.frame(data)) stop("'data' must be a data frame.")
+  
+  # Handle empty data frame
+  if (ncol(data) == 0) {
+    return(character(0))
+  }
+  
   charcols_logical <- sapply(data, is.character)
-  return(names(which(charcols_logical)))
+  # Ensure it's a logical vector (sapply can return a list for empty data)
+  charcols_logical <- as.logical(charcols_logical)
+  
+  return(colnames(data)[charcols_logical])
 }
 
 
@@ -334,7 +247,8 @@ RemoveRareBinaryVarsData <- function(data, minfreq = .01) {
        col_data <- data_out[[vari]]
        unique_non_na <- unique(col_data[!is.na(col_data)])
 
-       if (length(unique_non_na) == 2) { # Check if binary (ignoring NAs)
+       # Only process binary variables: numeric, logical, or factors (not character)
+       if (length(unique_non_na) == 2 && !is.character(col_data)) { # Check if binary (ignoring NAs)
            counts <- table(col_data, useNA = "no") # Exclude NA from table
            props <- prop.table(counts)
            min_prop <- min(props)
@@ -431,9 +345,16 @@ droplevelsoffactorsData <- function(data) {
 findvarsnamesthatrepeatData <- function(data) {
   if (!is.data.frame(data)) stop("'data' must be a data frame.")
   col_names <- colnames(data)
+  
+  # Handle empty data frame
+  if (length(col_names) == 0) {
+    cat("No simple substring relationships found between variable names.\n")
+    return(character(0))
+  }
+  
   out_list <- list()
 
-  for (i in 1:length(col_names)) {
+  for (i in seq_along(col_names)) {
     vari <- col_names[i]
     # Find other column names that contain vari as a substring
     # Ensure it's not just matching itself and use word boundaries for better matching?
@@ -456,7 +377,11 @@ findvarsnamesthatrepeatData <- function(data) {
       cat("No simple substring relationships found between variable names.\n")
   }
   # Convert list to named character vector for original return type
-  unlist(out_list)
+  result <- unlist(out_list)
+  if (is.null(result)) {
+    return(character(0))
+  }
+  return(result)
 }
 
 
@@ -475,9 +400,15 @@ findvarsnamesthatrepeatData <- function(data) {
 #' @export
 ReplaceOutlierNumValsData<-function(data, multIQR=1.5, minnumgroup=10){
   if (!is.data.frame(data)) stop("'data' must be a data frame.")
+  
+  # Handle empty data frame
+  if (ncol(data) == 0 || nrow(data) == 0) {
+    return(data)
+  }
+  
   data_out <- data
 
-  for (i in 1:ncol(data_out)){
+  for (i in seq_len(ncol(data_out))){
     col_data <- data_out[[i]]
     col_name <- colnames(data_out)[i]
 
@@ -486,16 +417,16 @@ ReplaceOutlierNumValsData<-function(data, multIQR=1.5, minnumgroup=10){
       if (length(unique_vals) >= minnumgroup){
           qnt <- stats::quantile(col_data, probs=c(.25, .75), na.rm = TRUE)
           H <- multIQR * stats::IQR(col_data, na.rm = TRUE)
-          lower_bound <- qnt[1] - H
-          upper_bound <- qnt[2] + H
+          lower_bound <- unname(qnt[1] - H)
+          upper_bound <- unname(qnt[2] + H)
 
           outliers_low <- col_data < lower_bound & !is.na(col_data)
           outliers_high <- col_data > upper_bound & !is.na(col_data)
 
           if(any(outliers_low) || any(outliers_high)) {
               cat("Variable '", col_name, "': Capping", sum(outliers_low), "low and", sum(outliers_high), "high outliers.\n")
-              col_data[outliers_low] <- lower_bound
-              col_data[outliers_high] <- upper_bound
+              col_data[outliers_low] <- unname(lower_bound)
+              col_data[outliers_high] <- unname(upper_bound)
               data_out[[i]] <- col_data
           }
       }
@@ -521,16 +452,17 @@ MakeTestDataConfWithTrainData<-function(traindata, testdata){
       stop("Both 'traindata' and 'testdata' must be data frames.")
   }
 
+  # Handle empty train data
+  if (ncol(traindata) == 0) {
+    return(data.frame())
+  }
+
   train_cols <- colnames(traindata)
   test_cols <- colnames(testdata)
   common_cols <- intersect(train_cols, test_cols)
   missing_in_test <- setdiff(train_cols, test_cols)
   extra_in_test <- setdiff(test_cols, train_cols)
 
-  if (length(missing_in_test) > 0) {
-      warning("Columns from training data missing in test data: ", paste(missing_in_test, collapse=", "), ". They cannot be included.")
-      # Or potentially add them as NA columns? Depends on requirement.
-  }
    if (length(extra_in_test) > 0) {
       cat("Removing columns from test data not present in training data:", paste(extra_in_test, collapse=", "), "\n")
   }
@@ -538,7 +470,29 @@ MakeTestDataConfWithTrainData<-function(traindata, testdata){
   # Subset test data to common columns, maintaining order of training data
   testdata_out <- testdata[, intersect(train_cols, common_cols), drop = FALSE]
 
-  # Conform factor levels
+  # Add missing columns filled with NA
+  if (length(missing_in_test) > 0) {
+      cat("Adding columns from training data missing in test data:", paste(missing_in_test, collapse=", "), "\n")
+      for (col in missing_in_test) {
+        # Create NA values with the same type as training column
+        if (is.factor(traindata[[col]])) {
+          testdata_out[[col]] <- factor(rep(NA, nrow(testdata_out)), levels = levels(traindata[[col]]))
+        } else {
+          testdata_out[[col]] <- rep(NA, nrow(testdata_out))
+          # Ensure same type as training data
+          if (is.numeric(traindata[[col]])) {
+            testdata_out[[col]] <- as.numeric(testdata_out[[col]])
+          } else if (is.character(traindata[[col]])) {
+            testdata_out[[col]] <- as.character(testdata_out[[col]])
+          } else if (is.logical(traindata[[col]])) {
+            testdata_out[[col]] <- as.logical(testdata_out[[col]])
+          }
+        }
+      }
+  }
+
+  # Ensure columns are in the same order as training data
+  testdata_out <- testdata_out[, train_cols, drop = FALSE]
   for (vari in colnames(testdata_out)){
     if (is.factor(traindata[[vari]])){ # Check type in training data
       train_levels <- levels(traindata[[vari]])

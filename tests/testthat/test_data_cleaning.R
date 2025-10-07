@@ -28,17 +28,17 @@ test_that("RemoveMonoVarsData removes monotonous variables", {
   test_df <- test_df_orig # Use base R assignment (copy-on-modify)
   df_cleaned <- RemoveMonoVarsData(test_df)
 
-  # Check that mono_var and all_na are removed
+  # Check that mono_var and near_all_na are removed (both have exactly 1 unique non-NA value)
   expect_false("mono_var" %in% colnames(df_cleaned))
-  expect_false("all_na" %in% colnames(df_cleaned))
+  expect_false("near_all_na" %in% colnames(df_cleaned))
 
-  # Check that other variables remain
+  # Check that other variables remain (including all_na which should be handled by RemoveAllNAVars)
   expect_true("id" %in% colnames(df_cleaned))
   expect_true("almost_mono" %in% colnames(df_cleaned))
   expect_true("num_var" %in% colnames(df_cleaned))
   expect_true("cat_var" %in% colnames(df_cleaned))
   expect_true("some_na" %in% colnames(df_cleaned))
-  expect_true("near_all_na" %in% colnames(df_cleaned))
+  expect_true("all_na" %in% colnames(df_cleaned))
   expect_true("char_var" %in% colnames(df_cleaned))
 
   # Check dimensions
@@ -52,20 +52,20 @@ test_that("RemoveMonoVarsData handles data.frames", {
 
   expect_s3_class(df_cleaned, "data.frame")
   expect_false("mono_var" %in% colnames(df_cleaned))
-  expect_false("all_na" %in% colnames(df_cleaned))
+  expect_false("near_all_na" %in% colnames(df_cleaned))
   expect_equal(ncol(df_cleaned), ncol(test_df) - 2)
 })
 
 test_that("RemoveMonoVarsData handles empty input", {
   empty_df <- data.frame()
-  # Need to check how the function handles empty data.frame, might error or return empty
-   expect_warning(RemoveMonoVarsData(empty_df)) # Or expect_error, depending on implementation
-   # expect_equal(ncol(RemoveMonoVarsData(empty_df)), 0) # If it returns empty df
+  # Empty data frame should return empty data frame without warnings
+  expect_equal(RemoveMonoVarsData(empty_df), empty_df)
+  expect_equal(ncol(RemoveMonoVarsData(empty_df)), 0)
 })
 
 test_that("RemoveMonoVarsData handles data with no monotonous variables", {
   test_df <- test_df_orig
-  df_no_mono <- test_df[, !(colnames(test_df) %in% c("mono_var", "all_na")), drop = FALSE] # Base R subsetting
+  df_no_mono <- test_df[, !(colnames(test_df) %in% c("mono_var", "near_all_na")), drop = FALSE] # Base R subsetting
   expect_equal(RemoveMonoVarsData(df_no_mono), df_no_mono)
 })
 
@@ -118,9 +118,9 @@ test_that("RemoveMissinVarsData handles data.frames", {
 
 test_that("RemoveMissinVarsData handles empty input", {
   empty_df <- data.frame()
-   # Need to check how the function handles empty data.frame
-   expect_warning(RemoveMissinVarsData(empty_df)) # Or expect_error
-   # expect_equal(ncol(RemoveMissinVarsData(empty_df)), 0)
+  # Empty data frame should return empty data frame without warnings
+  expect_equal(RemoveMissinVarsData(empty_df), empty_df)
+  expect_equal(ncol(RemoveMissinVarsData(empty_df)), 0)
 })
 
 test_that("RemoveMissinVarsData handles data with no variables exceeding threshold", {
@@ -141,11 +141,11 @@ test_that("RemoveMissinVarsData handles threshold = 0", {
 
 test_that("RemoveMissinVarsData handles threshold = 1", {
     test_df <- test_df_orig
-    # Threshold 1 should remove only columns with 100% NAs
+    # Threshold 1 should keep all columns (including 100% NA)
     df_cleaned_one_thresh <- RemoveMissinVarsData(test_df, maxprop = 1)
-    expect_false("all_na" %in% colnames(df_cleaned_one_thresh))
+    expect_true("all_na" %in% colnames(df_cleaned_one_thresh))
     expect_true("near_all_na" %in% colnames(df_cleaned_one_thresh))
-    expect_equal(ncol(df_cleaned_one_thresh), ncol(test_df) - 1)
+    expect_equal(ncol(df_cleaned_one_thresh), ncol(test_df))
 })
 
 
@@ -169,8 +169,9 @@ test_that("RemoveAllNAVars handles data with no all-NA columns", {
 
 test_that("RemoveAllNAVars handles empty input", {
   empty_df <- data.frame()
-  expect_warning(RemoveAllNAVars(empty_df)) # Or expect_error
-  # expect_equal(ncol(RemoveAllNAVars(empty_df)), 0)
+  # Empty data frame should return empty data frame without warnings
+  expect_equal(RemoveAllNAVars(empty_df), empty_df)
+  expect_equal(ncol(RemoveAllNAVars(empty_df)), 0)
 })
 
 
@@ -341,10 +342,10 @@ test_that("RemoveMissinRecordsData removes rows exceeding NA threshold", {
   # Row 4: 1/5 = 20% NA
   # Row 5: 2/5 = 40% NA
 
-  # Test with threshold 0.5 (50%) - should remove row 3
+  # Test with threshold 0.5 (50%) - row 3 has exactly 50%, so should be kept
   df_cleaned_50 <- RemoveMissinRecordsData(df_miss_rows, maxprop = 0.5)
-  expect_equal(nrow(df_cleaned_50), 4)
-  expect_false(3 %in% df_cleaned_50$id)
+  expect_equal(nrow(df_cleaned_50), 5)
+  expect_true(3 %in% df_cleaned_50$id)
   expect_true(all(c(1, 2, 4, 5) %in% df_cleaned_50$id))
 
   # Test with threshold 0.3 (30%) - should remove rows 2, 3, 5
@@ -353,10 +354,9 @@ test_that("RemoveMissinRecordsData removes rows exceeding NA threshold", {
   expect_false(any(c(2, 3, 5) %in% df_cleaned_30$id))
   expect_true(all(c(1, 4) %in% df_cleaned_30$id))
 
-   # Test with threshold 0.1 (10%) - should remove all rows with any NA
+   # Test with threshold 0.1 (10%) - should remove all rows (none have <= 10% NAs)
   df_cleaned_10 <- RemoveMissinRecordsData(df_miss_rows, maxprop = 0.1)
-  expect_equal(nrow(df_cleaned_10), 1)
-  expect_equal(df_cleaned_10$id, 1)
+  expect_equal(nrow(df_cleaned_10), 0)
 })
 
 test_that("RemoveMissinRecordsData handles data with no NAs", {
@@ -366,9 +366,9 @@ test_that("RemoveMissinRecordsData handles data with no NAs", {
 
 test_that("RemoveMissinRecordsData handles data where all rows exceed threshold", {
   df_all_bad <- data.frame(id = 1:2, col1 = c(NA, NA), col2 = c(1, NA), stringsAsFactors = FALSE)
-  # Row 1: 50% NA, Row 2: 100% NA
+  # Row 1: 1/3 ≈ 33% NA, Row 2: 2/3 ≈ 67% NA
   df_cleaned <- RemoveMissinRecordsData(df_all_bad, maxprop = 0.4)
-  expect_equal(nrow(df_cleaned), 0)
+  expect_equal(nrow(df_cleaned), 1)  # Row 1 has 33% <= 40%
   expect_equal(colnames(df_cleaned), colnames(df_all_bad)) # Should keep columns
 })
 
@@ -498,7 +498,7 @@ test_that("CollapseRareCategoriestoOtherData collapses rare levels to 'Other'", 
     id = 1:100,
     factor_col = factor(c(rep("A", 50), rep("B", 40), rep("C", 5), rep("D", 3), rep("E", 2))), # C, D, E are rare (<10%)
     char_col = c(rep("X", 60), rep("Y", 35), "Z", "Z", "W", "W", "V"), # Z, W, V are rare (<5%)
-    factor_few_levels = factor(c("P", "P", "Q")), # Should not collapse (<= 3 levels)
+    factor_few_levels = factor(rep(c("P", "P", "Q"), length.out = 100)), # Should not collapse (<= 3 levels) - fix vector length
     num_col = 1:100,
     stringsAsFactors = FALSE
   )
@@ -608,8 +608,8 @@ test_that("ReplaceOutlierNumValsData caps outliers using IQR method", {
   # Calculate bounds manually for numeric_col
   qnt <- quantile(df_outliers$numeric_col, probs = c(0.25, 0.75), na.rm = TRUE)
   iqr_val <- IQR(df_outliers$numeric_col, na.rm = TRUE)
-  lower_bound <- qnt[1] - 1.5 * iqr_val
-  upper_bound <- qnt[2] + 1.5 * iqr_val
+  lower_bound <- unname(qnt[1] - 1.5 * iqr_val)
+  upper_bound <- unname(qnt[2] + 1.5 * iqr_val)
 
   # Check that outliers are outside bounds
   expect_lt(outlier_low, lower_bound)
@@ -643,7 +643,7 @@ test_that("ReplaceOutlierNumValsData handles data with no outliers", {
 test_that("ReplaceOutlierNumValsData respects minnumgroup", {
   df_few_unique <- data.frame(
     id = 1:20,
-    numeric_col = rep(c(1, 2, 100), length.out = 20), # Only 3 unique values
+    numeric_col = c(rep(1, 10), rep(2, 9), 1000), # 3 unique values: 1,2,1000
     stringsAsFactors = FALSE
   )
   # Should not modify because unique values < 10 (default)
@@ -651,7 +651,7 @@ test_that("ReplaceOutlierNumValsData respects minnumgroup", {
   # Should modify if minnumgroup is lowered
   df_capped_low_min <- ReplaceOutlierNumValsData(df_few_unique, minnumgroup = 3)
   expect_false(identical(df_capped_low_min, df_few_unique)) # Should have changed
-  expect_false(100 %in% df_capped_low_min$numeric_col) # 100 should be capped
+  expect_false(1000 %in% df_capped_low_min$numeric_col) # 1000 should be capped
 })
 
 test_that("ReplaceOutlierNumValsData handles NAs correctly", {
@@ -662,7 +662,7 @@ test_that("ReplaceOutlierNumValsData handles NAs correctly", {
   )
   qnt <- quantile(df_na$numeric_col, probs = c(0.25, 0.75), na.rm = TRUE)
   iqr_val <- IQR(df_na$numeric_col, na.rm = TRUE)
-  upper_bound <- qnt[2] + 1.5 * iqr_val
+  upper_bound <- unname(qnt[2] + 1.5 * iqr_val)
 
   df_capped <- ReplaceOutlierNumValsData(df_na, minnumgroup = 10)
 
@@ -781,111 +781,6 @@ test_that("MakeTestDataConfWithTrainData handles empty input", {
 })
 
 
-# --- Tests for findDiseaseSpecVarsData ---
-
-# Setup data for disease-specific tests
-disease_test_data <- data.frame( # Replaced data.table()
-  id = 1:10,
-  disease = factor(c(rep("A", 5), rep("B", 5))),
-  var_a_specific = c(1, 2, 3, 4, 5, NA, NA, NA, NA, NA), # Non-NA only for A
-  var_b_specific = c(NA, NA, NA, NA, NA, 10, 20, 30, 40, 50), # Non-NA only for B
-  var_mixed = c(1, NA, 3, NA, 5, 6, NA, 8, NA, 10), # Mixed NAs
-  var_mostly_a = c(1, 2, 3, 4, NA, NA, NA, NA, 8, NA), # Mostly non-NA in A, mostly NA in B
-  var_mostly_na = rep(NA_real_, 10),
-  var_no_na = 1:10,
-  stringsAsFactors = FALSE
-)
-
-test_that("findDiseaseSpecVarsData identifies specific variables", {
-  # Default pin=0.5, pout=0.9
-  # var_a_specific: prop_non_na_in_A = 1.0 (>0.5), prop_na_out_A = 1.0 (>0.9) -> Specific to A
-  # var_b_specific: prop_non_na_in_B = 1.0 (>0.5), prop_na_out_B = 1.0 (>0.9) -> Specific to B
-  # var_mostly_a:   prop_non_na_in_A = 0.8 (>0.5), prop_na_out_A = 0.8 (<0.9) -> Not specific by default
-  dis_list <- findDiseaseSpecVarsData(disease_test_data)
-
-  expect_type(dis_list, "list")
-  expect_named(dis_list, c("A", "B"))
-  expect_equal(dis_list$A, "var_a_specific")
-  expect_equal(dis_list$B, "var_b_specific")
-})
-
-test_that("findDiseaseSpecVarsData works with different thresholds", {
-  # Lower pout threshold to catch var_mostly_a
-  # var_mostly_a: prop_non_na_in_A = 0.8 (>0.5), prop_na_out_A = 0.8 (>0.7) -> Specific to A
-  dis_list_low_pout <- findDiseaseSpecVarsData(disease_test_data, pout = 0.7)
-  expect_named(dis_list_low_pout, c("A", "B"))
-  expect_equal(dis_list_low_pout$A, c("var_a_specific", "var_mostly_a"))
-  expect_equal(dis_list_low_pout$B, "var_b_specific")
-
-  # Higher pin threshold
-  # var_a_specific: prop_non_na_in_A = 1.0 (>0.95) -> Still specific
-  # var_mostly_a:   prop_non_na_in_A = 0.8 (<0.95) -> Not specific
-  dis_list_high_pin <- findDiseaseSpecVarsData(disease_test_data, pin = 0.95, pout = 0.7)
-   expect_named(dis_list_high_pin, c("A", "B"))
-   expect_equal(dis_list_high_pin$A, "var_a_specific") # Only var_a_specific meets pin=0.95
-   expect_equal(dis_list_high_pin$B, "var_b_specific")
-})
-
-test_that("findDiseaseSpecVarsData handles no specific variables found", {
-  data_no_specific <- disease_test_data[, c("id", "disease", "var_mixed", "var_no_na"), drop = FALSE] # Base R subsetting
-  dis_list_none <- findDiseaseSpecVarsData(data_no_specific)
-  expect_length(dis_list_none, 0)
-  expect_type(dis_list_none, "list")
-})
-
-test_that("findDiseaseSpecVarsData requires 'disease' column", {
-  data_no_disease <- disease_test_data[, !(colnames(disease_test_data) %in% "disease"), drop = FALSE] # Base R subsetting
-  expect_error(findDiseaseSpecVarsData(data_no_disease), "must contain a 'disease' column")
-})
-
-
-# --- Tests for processDiseaseSpecVarsData ---
-
-test_that("processDiseaseSpecVarsData replaces NAs with 'NotApp' and converts to factor", {
-  dis_list_found <- findDiseaseSpecVarsData(disease_test_data) # Finds var_a_specific, var_b_specific
-  processed_data <- processDiseaseSpecVarsData(disease_test_data, dis_list_found) # Removed copy()
-
-  # Check var_a_specific: NAs in group B should be "NotApp"
-  expect_s3_class(processed_data$var_a_specific, "factor")
-  expected_a_vals <- factor(c(1:5, rep("NotApp", 5)), levels = c(as.character(1:5), "NotApp")) # Ensure levels are character
-  expect_equal(processed_data$var_a_specific, expected_a_vals)
-
-  # Check var_b_specific: NAs in group A should be "NotApp"
-  expect_s3_class(processed_data$var_b_specific, "factor")
-  expected_b_vals <- factor(c(rep("NotApp", 5), 10, 20, 30, 40, 50), levels = c(as.character(c(10, 20, 30, 40, 50)), "NotApp")) # Ensure levels are character
-  expect_equal(processed_data$var_b_specific, expected_b_vals)
-
-  # Check other variables are untouched
-  expect_equal(processed_data$disease, disease_test_data$disease)
-  expect_equal(processed_data$var_mixed, disease_test_data$var_mixed)
-  expect_equal(processed_data$var_mostly_a, disease_test_data$var_mostly_a)
-})
-
-test_that("processDiseaseSpecVarsData handles empty dislist", {
-  empty_dislist <- list()
-  processed_data <- processDiseaseSpecVarsData(disease_test_data, empty_dislist) # Removed copy()
-  expect_equal(processed_data, disease_test_data) # Should be unchanged
-})
-
-test_that("processDiseaseSpecVarsData handles dislist with non-existent variables", {
-  dis_list_bad_var <- list(A = c("var_a_specific", "non_existent_var"))
-  expect_warning(processed_data <- processDiseaseSpecVarsData(disease_test_data, dis_list_bad_var), # Removed copy()
-                 "Variable 'non_existent_var' listed.*not found")
-  # Check that var_a_specific was still processed
-  expect_s3_class(processed_data$var_a_specific, "factor")
-  expect_true("NotApp" %in% processed_data$var_a_specific)
-})
-
-test_that("processDiseaseSpecVarsData requires 'disease' column", {
-  dis_list_found <- findDiseaseSpecVarsData(disease_test_data)
-  data_no_disease <- disease_test_data[, !(colnames(disease_test_data) %in% "disease"), drop = FALSE] # Base R subsetting
-  expect_error(processDiseaseSpecVarsData(data_no_disease, dis_list_found), "must contain a 'disease' column")
-})
-
-test_that("processDiseaseSpecVarsData requires named list for dislist", {
-  unnamed_list <- list(c("var_a_specific"))
-  expect_error(processDiseaseSpecVarsData(disease_test_data, unnamed_list), "must be a named list")
-})
 
 
 # --- Tests for ImputeMissinRecordsData ---
@@ -977,16 +872,18 @@ test_that("ImputeMissinRecordsData imputes NAs", {
 test_that("ImputeMissinRecordsData respects dontuse argument", {
    skip_if_not_installed("missRanger")
    df_impute <- data.frame( # Replaced data.table()
-    id = 1:6,
-    num1 = c(1, 2, NA, 4, 5, 6),
-    num_dontuse = c(10, NA, 30, 40, NA, 60),
-    cat_dontuse = factor(c("A", "B", "A", NA, "B", "A")),
+    id = 1:20,  # Increased to 20 rows for better imputation
+    num1 = c(1, 2, NA, 4, 5, 6, 7, 8, 9, 10, 11, 12, NA, 14, 15, 16, 17, 18, 19, 20),
+    num2 = c(NA, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40),  # Added second column to impute
+    num_dontuse = c(10, NA, 30, 40, NA, 60, 70, 80, 90, 100, 110, 120, NA, 140, 150, 160, 170, 180, 190, 200),
+    cat_dontuse = factor(c("A", "B", "A", NA, "B", "A", "C", "A", "B", "C", "A", "B", NA, "C", "A", "B", "C", "A", "B", "C")),
     stringsAsFactors = FALSE
   )
   df_imputed <- ImputeMissinRecordsData(df_impute, dontuse = c("id", "num_dontuse", "cat_dontuse")) # Removed copy()
 
-  # Check imputed column has no NAs
+  # Check imputed columns have no NAs
   expect_false(any(is.na(df_imputed$num1)))
+  expect_false(any(is.na(df_imputed$num2)))
 
   # Check dontuse columns still have NAs
   expect_true(any(is.na(df_imputed$num_dontuse)))

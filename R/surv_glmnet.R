@@ -97,7 +97,6 @@ SurvModel_glmnet <- function(data,
 #' Probs: predicted survival probability matrix (rows=times, cols=observations),
 #' Times: the unique times for which the probabilities are calculated (including 0).
 #'
-#' @importFrom glmnet predict.cv.glmnet
 #' @importFrom survival survfit
 #' @importFrom stats model.matrix
 #' @export

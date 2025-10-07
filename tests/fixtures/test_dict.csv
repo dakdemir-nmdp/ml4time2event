@@ -1,8 +1,0 @@
-Variable,Type,Label,MissingValue,Format
-ID,Num,"Patient Identifier",NA,
-Age,Num,"Age in years",NA,
-Sex,Cat,"Biological Sex",NA,
-Value1,Num,"Measurement 1",NA,%.1f
-Value2,Cat,"Category Type",NA,
-EventTime,Num,"Time to Event",NA,
-EventStatus,Num,"Event Status (0=Censored, 1=Event)",NA,

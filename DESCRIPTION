@@ -19,8 +19,6 @@ Imports:
     glmnet,
     gtsummary,
     haven,
-    labelled,
-    lubridate,
     magrittr,
     methods,
     mgcv,
@@ -37,7 +35,6 @@ Imports:
     rpart,
     rsample,
     stats,
-    stringr,
     survival,
     utils,
     xgboost

@@ -1,13 +1,12 @@
 #' @title t2edata_split
 #' @description creates a list object with training and test dataset using
 #' 'rsample::initial_split'.
-#' @import recipes
-#' @import rsample
 #'
 #' @param data A dataset
 #' @param ... other parameters passed to 'rsample::initial_split'#'
 #' @return a list containing Train: training data and Test: test data
 #'
+#' @importFrom rsample initial_split training testing
 #' @export
 t2edata_split<-function(data, ...){
 train_test_split <- rsample::initial_split(data, ...)
@@ -19,7 +18,6 @@ return(list(Train=rsample::training(train_test_split), Test=rsample::testing(tra
 
 #' @title t2emodel_data_recipe_init
 #' @description initiate a model object using 'recipes::recipe'.
-#' @import recipes
 #'
 #' @param timevar character name of time variable
 #' @param eventvar character name of event variable
@@ -28,6 +26,7 @@ return(list(Train=rsample::training(train_test_split), Test=rsample::testing(tra
 #' @param traindata training data
 #' @return return an initiated recipe object
 #'
+#' @importFrom recipes recipe
 #' @export
 t2emodel_data_recipe_init<-function(timevar, eventvar, expvar,idvars,  traindata){
 
@@ -47,7 +46,6 @@ t2emodel_data_recipe_init<-function(timevar, eventvar, expvar,idvars,  traindata
 
 #' @title minimal_data_recipe
 #' @description Minimal data recipe
-#' @import recipes
 #'
 #' @param model_recipe initiated model recipe
 #' @param pmiss percentage missing to delete a variable
@@ -56,6 +54,7 @@ t2emodel_data_recipe_init<-function(timevar, eventvar, expvar,idvars,  traindata
 #' @param onehot whether onehot encoding is used or not (will miss one category)
 #' @return return a  recipe object
 #'
+#' @importFrom recipes step_filter_missing step_impute_mean step_other step_impute_mode step_dummy step_nzv step_zv step_range all_numeric_predictors all_nominal_predictors all_predictors
 #' @export
 minimal_data_recipe<-function(model_recipe, pmiss=.3, pother=.05,dummy=TRUE, onehot=FALSE){
   vars<-model_recipe$vars
@@ -99,12 +98,12 @@ minimal_data_recipe<-function(model_recipe, pmiss=.3, pother=.05,dummy=TRUE, one
 
 #' @title data_recipe_corstep
 #' @description Remove variables based on correlation
-#' @import recipes
 #'
 #' @param model_recipe initiated model recipe
 #' @param treshold removal treshold
 #' @return return a  recipe object
 #'
+#' @importFrom recipes step_corr all_numeric_predictors
 #' @export
 data_recipe_corstep<-function(model_recipe, treshold=.9){
   vars<-model_recipe$vars
@@ -120,7 +119,6 @@ data_recipe_corstep<-function(model_recipe, treshold=.9){
 
 #' @title rfimp_data_recipe
 #' @description Data recipe random forest imputation
-#' @import recipes
 #'
 #' @param model_recipe initiated model recipe
 #' @param dummy use dummy coding or not
@@ -132,6 +130,7 @@ data_recipe_corstep<-function(model_recipe, treshold=.9){
 #' currently set as 'options = list(nbagg=10,keepX = TRUE)'
 #' @return return a  recipe object
 #'
+#' @importFrom recipes step_filter_missing step_other step_impute_bag step_dummy step_nzv step_zv step_range all_predictors all_numeric_predictors all_nominal_predictors
 #' @export
 rfimp_data_recipe<-function(model_recipe, dummy=TRUE, onehot=FALSE, pmiss=.3, pother=.05, trees=10, options = list(nbagg=10,keepX = TRUE)){
   vars<-model_recipe$vars
@@ -168,12 +167,12 @@ rfimp_data_recipe<-function(model_recipe, dummy=TRUE, onehot=FALSE, pmiss=.3, po
 
 #' @title prep_data_recipe
 #' @description prepare a recipe using training data
-#' @import recipes
 #'
 #' @param model_recipe initiated model recipe
 #' @param training training data
 #' @return return a prepared recipe object
 #'
+#' @importFrom recipes prep
 #' @export
 prep_data_recipe<-function(model_recipe,training){
   # Simplify: Directly return the output of prep, remove vars handling
@@ -184,12 +183,12 @@ prep_data_recipe<-function(model_recipe,training){
 
 #' @title bake_data_recipe
 #' @description bake data using a recipe
-#' @import recipes
 #'
 #' @param model_recipe initiated model recipe
 #' @param data  data to be baked
 #' @return baked data
 #'
+#' @importFrom recipes bake
 #' @export
 bake_data_recipe<-function(model_recipe,data){
   # Pass the full new data to bake()

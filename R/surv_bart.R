@@ -88,7 +88,7 @@ SurvModel_BART <- function(data,
 #' Probs: predicted survival probability matrix (rows=times, cols=observations),
 #' Times: the unique times for which the probabilities are calculated (including 0).
 #'
-#' @importFrom BART surv.pre.bart bartModelMatrix predict
+#' @importFrom BART surv.pre.bart bartModelMatrix
 #' @importFrom stats model.matrix
 #' @export
 Predict_SurvModel_BART <- function(modelout, newdata, newtimes = NULL) {
