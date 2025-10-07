@@ -4,7 +4,18 @@
 \alias{SurvModel_Cox}
 \title{SurvModel_Cox}
 \usage{
-SurvModel_Cox(data, expvars, timevar, eventvar)
+SurvModel_Cox(
+  data,
+  expvars,
+  timevar,
+  eventvar,
+  varsel = "none",
+  penalty = "AIC",
+  alpha = 0.5,
+  nfolds = 10,
+  ntimes = 50,
+  verbose = FALSE
+)
 }
 \arguments{
 \item{data}{data frame with explanatory and outcome variables}
@@ -14,12 +25,68 @@ SurvModel_Cox(data, expvars, timevar, eventvar)
 \item{timevar}{character name of time variable in data}
 
 \item{eventvar}{character name of event variable in data (needs to be 0/1)}
+
+\item{varsel}{character string specifying variable selection method:
+"none" (default, no selection),
+"backward" (backward elimination),
+"forward" (forward selection),
+"both" (stepwise selection),
+"penalized" (elastic net penalized Cox via glmnet)}
+
+\item{penalty}{character string specifying penalty criterion for stepwise methods: "AIC" (default) or "BIC"}
+
+\item{alpha}{numeric value in [0,1] for elastic net mixing parameter when varsel="penalized".
+alpha=1 is lasso, alpha=0 is ridge, alpha=0.5 (default) is elastic net.}
+
+\item{nfolds}{integer, number of cross-validation folds for penalized Cox (default: 10)}
+
+\item{ntimes}{integer, number of time points to use for prediction grid (default: 50)}
+
+\item{verbose}{logical, print progress messages (default: FALSE)}
 }
 \value{
-a list of three items: cph_model: the final Cox PH model object after step selection,
- times: unique event times from the training data,
- varprof: profile of explanatory variables.
+a list with the following components:
+  \item{cph_model}{the fitted Cox model object (coxph or cv.glmnet)}
+  \item{time_range}{vector with min and max observed event times}
+  \item{varprof}{variable profile list containing factor levels and numeric ranges}
+  \item{model_type}{character string "cox_standard" or "cox_penalized"}
+  \item{expvars}{character vector of explanatory variables used}
+  \item{timevar}{character name of time variable}
+  \item{eventvar}{character name of event variable}
+  \item{varsel_method}{character string indicating variable selection method used}
 }
 \description{
-Fit a Cox model for survival outcomes using forward selection via stats::step.
+Fit a Cox proportional hazards model for survival outcomes with optional variable selection.
+}
+\note{
+Predictions can be made at any time points via interpolation.
+  No fixed time grid is stored in the model.
+}
+\examples{
+\dontrun{
+# Simulate survival data
+set.seed(123)
+n <- 200
+data <- data.frame(
+  time = rexp(n, 0.1),
+  event = rbinom(n, 1, 0.7),
+  x1 = rnorm(n),
+  x2 = rnorm(n),
+  x3 = factor(sample(c("A","B","C"), n, replace=TRUE))
+)
+
+# Fit Cox model without variable selection
+model1 <- SurvModel_Cox(data, expvars=c("x1","x2","x3"),
+                        timevar="time", eventvar="event")
+
+# Fit Cox model with backward selection (AIC)
+model2 <- SurvModel_Cox(data, expvars=c("x1","x2","x3"),
+                        timevar="time", eventvar="event",
+                        varsel="backward", penalty="AIC")
+
+# Fit penalized Cox model (elastic net)
+model3 <- SurvModel_Cox(data, expvars=c("x1","x2","x3"),
+                        timevar="time", eventvar="event",
+                        varsel="penalized", alpha=0.5)
+}
 }

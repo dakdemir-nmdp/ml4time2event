@@ -31,13 +31,11 @@ SurvModel_glmnet(
 }
 \value{
 a list containing the following objects:
-traindata: a sample of original training predictors (for factor level consistency),
-TrainMat: a sample of the model matrix used for training (for prediction structure),
-yTrain: a sample of the Surv object used for training (for prediction structure),
+model: cv.glmnet fit object,
+times: unique event times from the training data,
+varprof: profile of explanatory variables,
 expvars: character vector of explanatory variables used,
-cv.fit: cv.glmnet fit object,
-est.coef: estimated model coefficients at lambda.min,
-varprof: profile of explanatory variables.
+factor_levels: list containing factor levels for consistent prediction.
 }
 \description{
 Fit a penalized Cox model for survival outcomes using glmnet.

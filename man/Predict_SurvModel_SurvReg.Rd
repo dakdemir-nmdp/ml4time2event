@@ -4,7 +4,7 @@
 \alias{Predict_SurvModel_SurvReg}
 \title{Predict_SurvModel_SurvReg}
 \usage{
-Predict_SurvModel_SurvReg(modelout, newdata, times = NULL)
+Predict_SurvModel_SurvReg(modelout, newdata, newtimes = NULL)
 }
 \arguments{
 \item{modelout}{the output from 'SurvModel_SurvReg'}

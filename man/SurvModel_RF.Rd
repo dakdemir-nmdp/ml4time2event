@@ -12,7 +12,10 @@ SurvModel_RF(
   ntree = 300,
   samplesize = 500,
   nsplit = 5,
-  trace = TRUE
+  trace = TRUE,
+  splitrule = "bs.gradient",
+  nodesize_try = c(1, 5, 10, 15),
+  ...
 )
 }
 \arguments{
@@ -24,17 +27,25 @@ SurvModel_RF(
 
 \item{eventvar}{character name of event variable in data (needs to be 0/1)}
 
-\item{ntree}{integer value,  number of trees to grow}
+\item{ntree}{integer value, number of trees to grow (default: 300)}
 
-\item{samplesize}{integer value,  sample size for each grown tree (swor)}
+\item{samplesize}{integer value, sample size for each grown tree (default: 500)}
 
-\item{nsplit}{integer value, maximum number of splits for each tree}
+\item{nsplit}{integer value, maximum number of splits for each tree (default: 5)}
 
-\item{trace}{logical, trace tuning process or not}
+\item{trace}{logical, trace tuning process or not (default: TRUE)}
+
+\item{splitrule}{character, split rule for trees (default: "bs.gradient")}
+
+\item{nodesize_try}{numeric vector, nodesize values to try during tuning (default: c(1, 5, 10, 15))}
+
+\item{...}{additional parameters passed to randomForestSRC functions}
 }
 \value{
-a list containing the fitted randomForestSRC object ('hd.obj') and
-variable profile ('varprof').
+a list of four items: model: fitted randomForestSRC model object,
+ times: unique event times from the training data,
+ varprof: profile of explanatory variables,
+ expvars: the explanatory variables used.
 }
 \description{
 Fit a RF model for survival outcomes using randomForestSRC.

@@ -18,12 +18,9 @@ SurvModel_SurvReg(data, expvars, timevar, eventvar, dist = "exponential")
 \item{dist}{distribution for the parametric model, one of "weibull", "exponential", "gaussian", "logistic","lognormal" or "loglogistic".}
 }
 \value{
-a list containing the following objects:
-survregOut: fitted survreg model object after forward selection,
-predicttrain: predicted survival probabilities matrix for training data (rows=times, cols=observations),
-times.interest: unique times for which the probabilities are calculated (including 0),
-expvars: explanatory variables included in the final selected model,
-varprof: profile of explanatory variables originally provided.
+a list of three items: survregOut: the final fitted survreg model object after forward selection,
+ times: unique event times from the training data,
+ varprof: profile of explanatory variables.
 }
 \description{
 Fit parametric survival models using survival::survreg with forward selection.

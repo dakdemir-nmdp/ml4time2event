@@ -19,9 +19,10 @@ SurvModel_GAM(data, expvars, timevar, eventvar, shrinkTreshold = 10)
 factor levels for factor variables to be considered for shrinkage ('re' basis).}
 }
 \value{
-a list with two elements. b: the fitted GAM model object from mgcv::gam,
-model: list containing the internal Cox model ('model') and survfit object ('sf') from score2proba based on training predictions.
-varprof: profile of explanatory variables.
+a list of four items: model: fitted GAM model object from mgcv::gam,
+ times: unique event times from the training data,
+ varprof: profile of explanatory variables,
+ expvars: the explanatory variables used.
 }
 \description{
 Fit a GAM model for survival outcomes using Cox PH family.

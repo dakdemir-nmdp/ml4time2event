@@ -117,7 +117,7 @@ SurvModel_SurvReg <- function(data, expvars, timevar, eventvar, dist = "exponent
 #'
 #' @importFrom stats predict
 #' @export
-Predict_SurvModel_SurvReg <- function(modelout, newdata, times = NULL) {
+Predict_SurvModel_SurvReg <- function(modelout, newdata, newtimes = NULL) {
   # Select only the variables used in the final model
   selected_vars <- attr(terms(modelout$survregOut), "term.labels")
   # Check if selected_vars exist in newdata
@@ -141,10 +141,10 @@ Predict_SurvModel_SurvReg <- function(modelout, newdata, times = NULL) {
   predicted_times_for_quantiles <- stats::predict(modelout$survregOut, newdata = X, type = "quantile", p = p_seq)
 
   # Determine time points for interpolation
-  if (is.null(times)) {
+  if (is.null(newtimes)) {
     times.interest <- modelout$times # Use times from training fit
   } else {
-    times.interest <- sort(unique(c(0, times))) # Use provided times, ensure 0 included
+    times.interest <- sort(unique(c(0, newtimes))) # Use provided times, ensure 0 included
   }
 
   # Interpolate survival probabilities at desired times.interest

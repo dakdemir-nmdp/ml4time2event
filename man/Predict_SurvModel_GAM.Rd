@@ -4,17 +4,17 @@
 \alias{Predict_SurvModel_GAM}
 \title{Predict_SurvModel_GAM}
 \usage{
-Predict_SurvModel_GAM(modelout, newdata)
+Predict_SurvModel_GAM(modelout, newdata, newtimes = NULL)
 }
 \arguments{
-\item{modelout}{the output from 'SurvModel_GAM'}
+\item{modelout}{the output from 'SurvModel_GAM' (a list containing 'model', 'times', 'varprof', 'expvars')}
 
 \item{newdata}{the data for which the predictions are to be calculated}
 }
 \value{
-a list object with three items. Probs: survival probability predictions matrix (rows=times, cols=observations),
-Times: the times of the returned probabilities,
-sf: prediction object from survival::survfit.
+a list containing the following items:
+ Probs: predicted Survival probability matrix (rows=times, cols=observations),
+ Times: The times at which the probabilities are predicted.
 }
 \description{
 Get predictions from a GAM survival model for a test dataset.

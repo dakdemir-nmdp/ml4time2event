@@ -10,7 +10,7 @@ RunSurvModels(
   timevar,
   eventvar,
   models = c("glmnet", "coxph", "rulefit", "xgboost", "gam", "gbm", "ExpSurvReg",
-    "WeibSurvReg", "bart"),
+    "WeibSurvReg", "bart", "deepsurv"),
   ntreeRF = 300,
   nvars = 20,
   ...
@@ -26,7 +26,8 @@ RunSurvModels(
 \item{eventvar}{character name of event variable in data (needs to be 0/1)}
 
 \item{models}{character vector of additional models to fit, chosen from:
-"glmnet","coxph","rulefit","xgboost","gam","gbm","ExpSurvReg","WeibSurvReg","bart".}
+"glmnet" (penalized Cox with elastic net), "coxph" (Cox with backward selection),
+"rulefit", "xgboost", "gam", "gbm", "ExpSurvReg", "WeibSurvReg", "bart".}
 
 \item{ntreeRF}{number of trees for Random Forest models.}
 

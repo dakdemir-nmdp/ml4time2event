@@ -119,7 +119,7 @@ SurvModel_gbm<-function(data,expvars, timevar, eventvar, ntree=200, max.depth=3,
 #' Times: the unique times for which the probabilities are calculated (including 0).
 #'
 #' @export
-Predict_SurvModel_gbm<-function(modelout, newdata){
+Predict_SurvModel_gbm <- function(modelout, newdata, newtimes = NULL) {
   if (missing(modelout)) stop("argument \"modelout\" is missing")
   if (missing(newdata)) stop("argument \"newdata\" is missing")
 
@@ -140,15 +140,21 @@ Predict_SurvModel_gbm<-function(modelout, newdata){
   event_prediction <- suppressWarnings(predict(modelout$model, data_test, n.trees=modelout$model$best.iter, type="link"))
 
   # Calculate survival probabilities using stored baseline hazard
-  survMat<-NULL
+  survMat <- NULL
   for (i in seq_along(event_prediction)){
     surf.i <- exp(-exp(event_prediction[i])*modelout$model$basehaz.cum)
-    survMat<-rbind(survMat,surf.i) # Matrix: rows=obs, cols=times
+    survMat <- rbind(survMat,surf.i) # Matrix: rows=obs, cols=times
   }
 
   # Add time 0 with probability 1
   Probs <- t(cbind(1, survMat)) # Transpose to rows=times, cols=obs
   Times <- c(0, modelout$model$time.interest)
 
-  return(list(Probs=Probs, Times=Times))
+  # If newtimes specified, interpolate to those times
+  if (!is.null(newtimes)) {
+    Probs <- survprobMatInterpolator(probsMat = Probs, times = Times, newtimes = newtimes)
+    Times <- newtimes
+  }
+
+  return(list(Probs = Probs, Times = Times))
 }

@@ -101,7 +101,7 @@ SurvModel_glmnet <- function(data,
 #' @importFrom survival survfit
 #' @importFrom stats model.matrix
 #' @export
-Predict_SurvModel_glmnet <- function(modelout, newdata) {
+Predict_SurvModel_glmnet <- function(modelout, newdata, newtimes = NULL) {
 
   if (missing(modelout)) stop("argument \"modelout\" is missing")
   if (missing(newdata)) stop("argument \"newdata\" is missing")
@@ -159,8 +159,17 @@ Predict_SurvModel_glmnet <- function(modelout, newdata) {
     surv_probs <- rbind(rep(1, ncol(surv_probs)), surv_probs)
   }
 
+  Probs <- surv_probs
+  Times <- times
+
+  # If newtimes specified, interpolate to those times
+  if (!is.null(newtimes)) {
+    Probs <- survprobMatInterpolator(probsMat = Probs, times = Times, newtimes = newtimes)
+    Times <- newtimes
+  }
+
   return(list(
-    Probs = surv_probs,
-    Times = times
+    Probs = Probs,
+    Times = Times
   ))
 }

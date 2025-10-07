@@ -4,10 +4,10 @@
 \alias{Predict_SurvModel_gbm}
 \title{Predict_SurvModel_gbm}
 \usage{
-Predict_SurvModel_gbm(modelout, newdata)
+Predict_SurvModel_gbm(modelout, newdata, newtimes = NULL)
 }
 \arguments{
-\item{modelout}{the output from 'SurvModel_gbm'}
+\item{modelout}{the output from 'SurvModel_gbm' (a list containing 'model', 'times', 'varprof', 'expvars')}
 
 \item{newdata}{the data for which the predictions are to be calculated}
 }

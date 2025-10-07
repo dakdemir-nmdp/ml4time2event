@@ -4,18 +4,31 @@
 \alias{integratedBrier}
 \title{integratedBrier}
 \usage{
-integratedBrier(times, scores, minmax = c(1, 35))
+integratedBrier(
+  predsurv,
+  predsurvtimes,
+  obstimes,
+  obsevents,
+  eval.times = NULL,
+  TestMat = NULL
+)
 }
 \arguments{
-\item{times}{The times at which the Brier scores were calculated.}
+\item{predsurv}{Predicted survival probability matrix (rows=times, cols=observations)}
 
-\item{scores}{Time-dependent Brier scores corresponding to 'times'.}
+\item{predsurvtimes}{The times for which the survival probabilities are predicted}
 
-\item{minmax}{Numeric vector of length 2 specifying the integration limits [min, max].}
+\item{obstimes}{Observed times vector}
+
+\item{obsevents}{Observed event indicator vector (0=censored, 1=event)}
+
+\item{eval.times}{Optional vector of evaluation times for integration}
+
+\item{TestMat}{Optional test dataset}
 }
 \value{
-A scalar value representing the integrated Brier score, scaled by the interval length.
+Integrated Brier score (scalar)
 }
 \description{
-Calculate the integrated Brier score (IBS) over a specified time range.
+Calculate integrated Brier score over time range
 }

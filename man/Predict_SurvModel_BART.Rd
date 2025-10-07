@@ -4,19 +4,19 @@
 \alias{Predict_SurvModel_BART}
 \title{Predict_SurvModel_BART}
 \usage{
-Predict_SurvModel_BART(modelout, newdata, times = NULL)
+Predict_SurvModel_BART(modelout, newdata, newtimes = NULL)
 }
 \arguments{
 \item{modelout}{the output from 'SurvModel_BART'}
 
 \item{newdata}{the data for which the predictions are to be calculated}
 
-\item{times}{optional vector of times for prediction (currently ignored by surv.pre.bart/predict).}
+\item{newtimes}{optional vector of new time points for interpolation. If NULL, uses model's native time points.}
 }
 \value{
-a list containing the following objects:
+a list containing the following items:
 Probs: predicted survival probability matrix (rows=times, cols=observations),
-Times: the times at which the probabilities are calculated (including 0, from model).
+Times: the unique times for which the probabilities are calculated (including 0).
 }
 \description{
 Make predictions using a fitted BART survival model.

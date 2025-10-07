@@ -229,7 +229,7 @@ SurvModel_xgboost<-function(data, expvars, timevar, eventvar, eta = 0.01, max_de
 #' @importFrom stats model.matrix
 #' @importFrom xgboost xgb.DMatrix
 #' @export
-Predict_SurvModel_xgboost<-function(modelout, newdata){
+Predict_SurvModel_xgboost <- function(modelout, newdata, newtimes = NULL) {
   # Get the feature names from the stored model
   feature_names <- modelout$model$feature_names
 
@@ -250,11 +250,11 @@ Predict_SurvModel_xgboost<-function(modelout, newdata){
 
   # Get the actual model object - handle both 'model' and 'learner' fields
   actual_model <- if (!is.null(modelout$model)) modelout$model else modelout$learner
-  
+
   if (is.null(actual_model)) {
     stop("No model found in modelout$model or modelout$learner")
   }
-  
+
   # Get evaluation times from the baseline hazard stored in the model
   times <- sort(unique(c(0, actual_model$baseline_hazard$time)))
 
@@ -262,5 +262,14 @@ Predict_SurvModel_xgboost<-function(modelout, newdata){
   preds <- predict.xgb.Booster.surv(actual_model, dtest, type = "surv", times=times)
 
   # Transpose predictions to match standard output: rows=times, cols=observations
-  return(list(Probs=t(preds), Times=times))
+  Probs <- t(preds)
+  Times <- times
+
+  # If newtimes specified, interpolate to those times
+  if (!is.null(newtimes)) {
+    Probs <- survprobMatInterpolator(probsMat = Probs, times = Times, newtimes = newtimes)
+    Times <- newtimes
+  }
+
+  return(list(Probs = Probs, Times = Times))
 }

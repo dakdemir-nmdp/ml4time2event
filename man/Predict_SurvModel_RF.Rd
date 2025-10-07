@@ -4,18 +4,19 @@
 \alias{Predict_SurvModel_RF}
 \title{Predict_SurvModel_RF}
 \usage{
-Predict_SurvModel_RF(modelout, newdata)
+Predict_SurvModel_RF(modelout, newdata, newtimes = NULL)
 }
 \arguments{
-\item{modelout}{the output from 'SurvModel_RF' (a list containing 'hd.obj')}
+\item{modelout}{the output from 'SurvModel_RF' (a list containing 'model', 'times', 'varprof', 'expvars')}
 
 \item{newdata}{the data for which the predictions are to be calculated}
+
+\item{newtimes}{optional vector of new time points for interpolation. If NULL, uses model's native time points.}
 }
 \value{
 a list containing the following items:
  Probs: predicted Survival probability matrix (rows=times, cols=observations),
- Times: The times at which the probabilities are predicted,
- predSurvsTestRF: the raw output object from 'randomForestSRC::predict.rfsrc'.
+ Times: The times at which the probabilities are predicted.
 }
 \description{
 Get predictions from a RF survival model for a test dataset.

@@ -4,7 +4,7 @@
 \alias{Predict_SurvModel_xgboost}
 \title{Predict_SurvModel_xgboost}
 \usage{
-Predict_SurvModel_xgboost(modelout, newdata)
+Predict_SurvModel_xgboost(modelout, newdata, newtimes = NULL)
 }
 \arguments{
 \item{modelout}{the output from 'SurvModel_xgboost'}

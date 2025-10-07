@@ -21,12 +21,11 @@ SurvModel_BART(data, expvars, timevar, eventvar, K = 8, ntree = 50)
 }
 \value{
 a list containing the following objects:
-post: fitted BART model object from surv.bart,
+model: fitted BART model object from surv.bart,
+times: time points used in the BART model,
+varprof: profile of explanatory variables,
 expvars: character vector of explanatory variables used,
-eventvarvec: numeric event variable values used in fitting,
-timevarvec: numeric time variable values used in fitting,
-x.train: model matrix used for training,
-varprof: profile of explanatory variables.
+factor_levels: list containing factor levels for consistent prediction.
 }
 \description{
 Fit a BART model for survival outcomes using BART::surv.bart.

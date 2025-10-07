@@ -36,14 +36,10 @@ SurvModel_gbm(
 \item{learninrate}{learning rate (shrinkage) for the boosting algorithm}
 }
 \value{
-a list which contains the following objects:
-gbmmodel: fitted gbm model object,
-best.iter: best iteration number based on cross-validation performance,
-expvars: vector of the names of explanatory variables used,
-survMat: survival probabilities matrix for training data (rows=obs, cols=times),
-basehaz.cum: baseline cumulative hazard estimated on training data,
-time.interest: unique observed event times from training data,
-varprof: profile of explanatory variables.
+a list of four items: model: fitted gbm model object,
+ times: unique event times from the training data,
+ varprof: profile of explanatory variables,
+ expvars: the explanatory variables used.
 }
 \description{
 Fit a gbm model for survival outcomes using gbm package.

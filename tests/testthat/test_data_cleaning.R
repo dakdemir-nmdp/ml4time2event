@@ -3,7 +3,7 @@ library(here)
 # library(data.table) # Removed
 
 # Assuming the functions are available in the environment
-source(here("R/data/data_cleaning.R"))
+source(here("R/data_cleaning.R"))
 
 context("Testing data_cleaning functions")
 
@@ -1015,57 +1015,3 @@ if (exists("ImputeMissinRecordsData_original")) {
   ImputeMissinRecordsData <- ImputeMissinRecordsData_original
   rm(ImputeMissinRecordsData_original)
 }
-</final_file_content>
-
-IMPORTANT: For any future changes to this file, use the final_file_content shown above as your reference. This content reflects the current state of the file, including any auto-formatting (e.g., if you used single quotes but the formatter converted them to double quotes). Always base your SEARCH/REPLACE operations on this final version to ensure accuracy.
-
-
-
-New problems detected after saving the file:
-../../../../../../../../test_data_cleaning.R
-- [lintr Error] Line 1: Failed to run diagnostics: ! in callr subprocess.
-Caused by error in `lintr::lint(path, cache = cache, text = content)`:
-! Linter `linter()` failed in '':
-Caused by error in `normalizePath()`:
-! path[1]="": No such file or directory<environment_details>
-# VSCode Visible Files
-tests/testthat/test-data/test_data_cleaning.R
-
-# VSCode Open Tabs
-DESCRIPTION
-R/data/data_cleaning.R
-R/recipes/recipes_steps.R
-tests/testthat/test-data_summary.R
-tests/testthat/test-general-utils.R
-tests/testthat/test-cr-utils/test_cr_interpolation.R
-tests/testthat/test-cr-utils/test_cr_ensemble.R
-tests/testthat/test-surv-models/test_surv_gbm.R
-tests/testthat/test-cr-utils/test_cr_metrics.R
-tests/testthat/test-surv-models/test_surv_xgboost.R
-tests/testthat/test-outcome-prediction.R
-tests/testthat/test-surv-models/test_surv_glmnet.R
-tests/testthat/test-recipes_steps.R
-tests/testthat/test-surv-models/test_surv_rulefit.R
-tests/testthat/test-surv-models/test_surv_bart.R
-tests/testthat/test-surv-models/test_surv_gam.R
-tests/testthat/test-surv-models/test_surv_random_forest.R
-tests/testthat/test-cr-models/test_cr_random_forest.R
-tests/testthat/test-surv-utils/test_surv_ensemble.R
-tests/testthat/test-surv-models/test_surv_reg.R
-tests/testthat/test-surv-models/test_surv_cox.R
-tests/testthat/test-surv-utils/test_surv_metrics.R
-tests/testthat/test-surv-utils/test_surv_interpolation.R
-tests/testthat/test-dictionary/test_dict_processing.R
-tests/testthat/test-dictionary/test_dict_detection.R
-tests/testthat/test-data/test_data_cleaning.R
-tests/testthat/test-cr-models/test_cr_fine_gray.R
-tests/testthat/test-cr-models/test_cr_bart.R
-tests/testthat/test-cr-models/test_cr_rulefit.R
-tests/testthat/test-cr-models/test_cr_cox.R
-
-# Current Time
-4/2/2025, 4:24:51 PM (America/New_York, UTC-4:00)
-
-# Current Mode
-ACT MODE
-</environment_details>

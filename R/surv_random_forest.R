@@ -73,6 +73,7 @@ SurvModel_RF<-function(data, expvars, timevar, eventvar, ntree=300, samplesize=5
 #'
 #' @param modelout the output from 'SurvModel_RF' (a list containing 'model', 'times', 'varprof', 'expvars')
 #' @param newdata the data for which the predictions are to be calculated
+#' @param newtimes optional vector of new time points for interpolation. If NULL, uses model's native time points.
 #'
 #' @return a list containing the following items:
 #'  Probs: predicted Survival probability matrix (rows=times, cols=observations),
@@ -80,7 +81,7 @@ SurvModel_RF<-function(data, expvars, timevar, eventvar, ntree=300, samplesize=5
 #'
 #' @importFrom randomForestSRC predict.rfsrc
 #' @export
-Predict_SurvModel_RF<-function(modelout, newdata){
+Predict_SurvModel_RF <- function(modelout, newdata, newtimes = NULL) {
   # Ensure character columns in newdata are factors with same levels as training data
   # This requires access to training data factor levels, often stored in varprof or model object
   # Placeholder: Assuming levels are handled correctly or newdata is preprocessed.
@@ -95,7 +96,7 @@ Predict_SurvModel_RF<-function(modelout, newdata){
       }
   }
 
-  predSurvsTestRF<-randomForestSRC::predict.rfsrc(modelout$model, newdata = newdata)
+  predSurvsTestRF <- randomForestSRC::predict.rfsrc(modelout$model, newdata = newdata)
 
   # Extract survival probabilities and times
   # randomForestSRC returns survival as obs x times matrix
@@ -104,8 +105,14 @@ Predict_SurvModel_RF<-function(modelout, newdata){
   Probs <- rbind(1, Probs)  # Add time 0 with probability 1 for all observations
   Times <- c(0, predSurvsTestRF$time.interest)
 
+  # If newtimes specified, interpolate to those times
+  if (!is.null(newtimes)) {
+    Probs <- survprobMatInterpolator(probsMat = Probs, times = Times, newtimes = newtimes)
+    Times <- newtimes
+  }
+
   return(list(
     Probs = Probs, # Return as rows=times, cols=observations
     Times = Times
-    ))
+  ))
 }

@@ -2,7 +2,7 @@
 % Please edit documentation in R/surv_rulefit.R
 \name{SurvModel_rulefit}
 \alias{SurvModel_rulefit}
-\title{SurvModel_rulefit}
+\title{Fit a RuleFit Model for Survival Outcomes}
 \usage{
 SurvModel_rulefit(
   data,
@@ -12,37 +12,47 @@ SurvModel_rulefit(
   ntree = 300,
   nsample = 300,
   keepvars = NULL,
-  cuttimes = NULL
+  cuttimes = NULL,
+  alpha = 0.5,
+  maxit = 2000,
+  ...
 )
 }
 \arguments{
-\item{data}{data frame with explanatory and outcome variables}
+\item{data}{A data frame with explanatory and outcome variables.}
 
-\item{expvars}{character vector of names of explanatory variables in data}
+\item{expvars}{Character vector of names of explanatory variables in `data`.}
 
-\item{timevar}{character name of time variable in data}
+\item{timevar}{Character name of the time-to-event variable in `data`.}
 
-\item{eventvar}{character name of event variable in data}
+\item{eventvar}{Character name of the event indicator variable in `data`.}
 
-\item{ntree}{number of trees to fit to extract rules}
+\item{ntree}{Integer, the number of trees to generate for rule extraction.}
 
-\item{nsample}{number of samples for each tree}
+\item{nsample}{Integer, the number of samples to draw (with replacement) for training each tree.}
 
-\item{keepvars}{these variables will be used in each bagging iteration}
+\item{keepvars}{Character vector of variable names to be included in every tree's bagging iteration.}
 
-\item{cuttimes}{these cut times are used for calculating pseudo observation}
+\item{cuttimes}{Numeric vector of time points used to create binary outcomes for classification trees.
+If NULL, quantiles of the time variable are used.}
+
+\item{alpha}{Numeric, the elastic net mixing parameter (default: 0.5).}
+
+\item{maxit}{Integer, maximum number of iterations for glmnet (default: 2000).}
+
+\item{...}{Additional parameters passed to glmnet::cv.glmnet.}
 }
 \value{
-a list object with the following: datasamp: a sample of data,
-varprof: profile of explanatory variables,
-ruleslist: list of the fitted rules,
-TrainMat: fitted rules matrix (combined with original features),
-ctreelist: list of tree models,
-yTrain: survival object for outcome variables,
-cv.fitRules: fitted glmnet survival models for a range of shrinkage parameters,
-timesTrain: unique times in the outcome variable from survfit object
-expvars: explanatory variables used in the model
+A list with the following components:
+\item{model}{The fitted RuleFit model object containing all components.}
+\item{times}{Unique event times observed in the training data.}
+\item{varprof}{A profile of the explanatory variables.}
+\item{expvars}{The names of the original explanatory variables.}
+\item{factor_levels}{A list containing factor levels for each variable to ensure consistent prediction.}
 }
 \description{
-Fit a rulefit model for survival outcomes
+Implements the RuleFit algorithm by generating rules from an ensemble of
+decision trees and fitting a penalized Cox model (via glmnet) on the original
+features plus the derived rules.
 }
+\concept{RuleFit Survival Modeling}

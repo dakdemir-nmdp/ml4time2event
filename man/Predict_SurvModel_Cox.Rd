@@ -4,19 +4,40 @@
 \alias{Predict_SurvModel_Cox}
 \title{Predict_SurvModel_Cox}
 \usage{
-Predict_SurvModel_Cox(modelout, newdata)
+Predict_SurvModel_Cox(modelout, newdata, newtimes = NULL)
 }
 \arguments{
-\item{modelout}{the output from 'SurvModel_Cox' (list containing 'cph_model' and 'times')}
+\item{modelout}{the output from 'SurvModel_Cox'}
 
-\item{newdata}{the data for which the predictions are to be calculated}
+\item{newdata}{data frame with new observations for prediction}
+
+\item{newtimes}{optional numeric vector of time points for prediction.
+If NULL (default), generates 50 equally-spaced points from 0 to max observed time.
+Can be any positive values - interpolation handles all time points.}
 }
 \value{
 a list containing:
-Probs: predicted survival probability matrix (rows=times, cols=observations),
-Times: the times at which the probabilities are calculated (including 0),
-cph_modelTestPredict: the raw output object from 'survival::survfit'.
+  \item{Probs}{predicted survival probability matrix
+    (rows=times, cols=observations)}
+  \item{Times}{the times at which probabilities are calculated
+    (always includes time 0)}
+  \item{survfit_obj}{the raw survfit object from prediction
+    (for diagnostics)}
 }
 \description{
-Get predictions from a Cox survival model for a test dataset.
+Get predictions from a fitted Cox survival model for new data.
+}
+\examples{
+\dontrun{
+# Fit model
+model <- SurvModel_Cox(train_data, expvars = c("x1", "x2"),
+                       timevar = "time", eventvar = "event")
+
+# Predict on test data
+preds <- Predict_SurvModel_Cox(model, test_data)
+
+# Predict at specific times
+preds_custom <- Predict_SurvModel_Cox(model, test_data,
+                                      newtimes = c(30, 60, 90, 180, 365))
+}
 }

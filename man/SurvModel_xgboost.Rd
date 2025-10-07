@@ -4,7 +4,16 @@
 \alias{SurvModel_xgboost}
 \title{SurvModel_xgboost}
 \usage{
-SurvModel_xgboost(data, expvars, timevar, eventvar)
+SurvModel_xgboost(
+  data,
+  expvars,
+  timevar,
+  eventvar,
+  eta = 0.01,
+  max_depth = 5,
+  nrounds = 100,
+  ...
+)
 }
 \arguments{
 \item{data}{data frame with explanatory and outcome variables}
@@ -14,14 +23,19 @@ SurvModel_xgboost(data, expvars, timevar, eventvar)
 \item{timevar}{character name of time variable in data}
 
 \item{eventvar}{character name of event variable in data (needs to be 0/1)}
+
+\item{eta}{learning rate (default: 0.01)}
+
+\item{max_depth}{maximum depth of trees (default: 5)}
+
+\item{nrounds}{number of boosting rounds (default: 100)}
+
+\item{...}{additional parameters passed to xgboost}
 }
 \value{
-a list containing the following objects:
-expvars: vector of explanatory variables used,
-learner: fitted model object (class xgb.Booster.surv),
-estSURVTrain: predicted survival probabilities matrix for training data (rows=obs, cols=times),
-datatrainProf: sample data frame of original predictors (for factor level consistency),
-varprof: profile of explanatory variables.
+a list of three items: model: fitted xgboost model object (class xgb.Booster.surv),
+ times: unique event times from the training data,
+ varprof: profile of explanatory variables.
 }
 \description{
 Fit an xgboost model for survival outcomes.

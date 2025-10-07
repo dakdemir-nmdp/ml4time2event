@@ -213,7 +213,7 @@ SurvModel_rulefit <- function(data,
 #' @importFrom survival survfit
 #'
 #' @export
-Predict_SurvModel_rulefit <- function(modelout, newdata) {
+Predict_SurvModel_rulefit <- function(modelout, newdata, newtimes = NULL) {
 
   if (missing(modelout)) stop("argument \"modelout\" is missing")
   if (missing(newdata)) stop("argument \"newdata\" is missing")
@@ -300,8 +300,17 @@ Predict_SurvModel_rulefit <- function(modelout, newdata) {
     predSurvsTestRules <- rbind(rep(1, ncol(predSurvsTestRules)), predSurvsTestRules)
   }
 
+  Probs <- predSurvsTestRules
+  Times <- timesTest
+
+  # If newtimes specified, interpolate to those times
+  if (!is.null(newtimes)) {
+    Probs <- survprobMatInterpolator(probsMat = Probs, times = Times, newtimes = newtimes)
+    Times <- newtimes
+  }
+
   return(list(
-    Probs = predSurvsTestRules,
-    Times = timesTest
+    Probs = Probs,
+    Times = Times
   ))
 }

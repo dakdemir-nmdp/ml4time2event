@@ -2,19 +2,22 @@
 % Please edit documentation in R/surv_rulefit.R
 \name{Predict_SurvModel_rulefit}
 \alias{Predict_SurvModel_rulefit}
-\title{Predict_SurvModel_rulefit}
+\title{Predict Survival Probabilities from a RuleFit Model}
 \usage{
-Predict_SurvModel_rulefit(modelout, newdata)
+Predict_SurvModel_rulefit(modelout, newdata, newtimes = NULL)
 }
 \arguments{
-\item{modelout}{the output from 'SurvModel_rulefit'}
+\item{modelout}{The output from `SurvModel_rulefit` (a list containing 'model', 'times', 'varprof', 'expvars', 'factor_levels').}
 
-\item{newdata}{the data for which the predictions are to be calculated}
+\item{newdata}{A new data frame for which to generate predictions. It must contain
+all variables specified in `modelout$expvars`.}
 }
 \value{
-a list object with three items. Probs: survival probability predictions matrix (rows=times, cols=observations),
-Times: the times of the returned probabilities, sfitTestRules: prediction object from survfit
+A list with two items:
+\item{Probs}{A matrix of survival probability predictions, where rows are time points and columns are observations.}
+\item{Times}{The vector of time points corresponding to the rows of `Probs`.}
 }
 \description{
-Get predictions from a rulefit model for a test dataset
+Generates survival probability predictions for new data using a
+previously trained RuleFit model.
 }

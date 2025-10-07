@@ -4,22 +4,28 @@
 \alias{timedepConcordance}
 \title{timedepConcordance}
 \usage{
-timedepConcordance(predsurv, predsurvtimes, obstimes, obsevents, ctimes = NULL)
+timedepConcordance(
+  predsurv,
+  predsurvtimes,
+  obstimes,
+  obsevents,
+  TestMat = NULL
+)
 }
 \arguments{
-\item{predsurv}{Predicted matrix of survival probabilities (rows=times, cols=observations).}
+\item{predsurv}{Predicted survival probability matrix (rows=times, cols=observations)}
 
-\item{predsurvtimes}{The times for which the probabilities are predicted.}
+\item{predsurvtimes}{The times for which the survival probabilities are predicted}
 
-\item{obstimes}{Observed times vector.}
+\item{obstimes}{Observed times vector}
 
-\item{obsevents}{Observed event indicator vector (0=censored, 1=event).}
+\item{obsevents}{Observed event indicator vector (0=censored, 1=event)}
 
-\item{ctimes}{Optional numeric vector of times at which to calculate the C-index. If NULL, uses predsurvtimes.}
+\item{TestMat}{Optional test dataset (used if formula needs predictors)}
 }
 \value{
-Output from the 'pec::cindex' function, containing C-index values over time.
+Output from the pec::cindex function
 }
 \description{
-Get time dependent concordance index (C-index) for survival models.
+Calculate time-dependent concordance for survival predictions
 }
