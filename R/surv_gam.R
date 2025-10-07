@@ -35,9 +35,10 @@ score2proba <-
 #' @param shrinkTreshold integer value, minimum number of
 #' factor levels for factor variables to be considered for shrinkage ('re' basis).
 #'
-#' @return a list with two elements. b: the fitted GAM model object from mgcv::gam,
-#' model: list containing the internal Cox model ('model') and survfit object ('sf') from score2proba based on training predictions.
-#' varprof: profile of explanatory variables.
+#' @return a list of four items: model: fitted GAM model object from mgcv::gam,
+#'  times: unique event times from the training data,
+#'  varprof: profile of explanatory variables,
+#'  expvars: the explanatory variables used.
 #'
 #' @importFrom mgcv gam cox.ph s
 #' @importFrom stats as.formula predict
@@ -127,10 +128,19 @@ SurvModel_GAM <-
         conf.int = 0.95,
         which.est = "point"
       )
+
+    # Store the baseline hazard information in the model
+    b$baseline_model <- preds$model
+    b$baseline_sf <- preds$sf
+
+    # Get unique event times from training data
+    times <- sort(unique(data[data[[eventvar]] == 1, timevar]))
+
     return(list(
-      b = b, # The fitted GAM object
-      model = preds, # List containing internal Cox model and survfit object
-      varprof=varprof
+      model = b, # The fitted GAM object with baseline hazard info
+      times = times,
+      varprof = varprof,
+      expvars = expvars
     ))
   }
 
@@ -138,28 +148,31 @@ SurvModel_GAM <-
 #'
 #' @description Get predictions from a GAM survival model for a test dataset.
 #'
-#' @param modelout the output from 'SurvModel_GAM'
+#' @param modelout the output from 'SurvModel_GAM' (a list containing 'model', 'times', 'varprof', 'expvars')
 #' @param newdata the data for which the predictions are to be calculated
 #'
-#' @return a list object with three items. Probs: survival probability predictions matrix (rows=times, cols=observations),
-#' Times: the times of the returned probabilities,
-#' sf: prediction object from survival::survfit.
+#' @return a list containing the following items:
+#'  Probs: predicted Survival probability matrix (rows=times, cols=observations),
+#'  Times: The times at which the probabilities are predicted.
 #'
 #' @importFrom stats predict
 #' @importFrom survival survfit
 #' @export
 Predict_SurvModel_GAM <- function(modelout, newdata) {
+  if (missing(modelout)) stop("argument \"modelout\" is missing")
+  if (missing(newdata)) stop("argument \"newdata\" is missing")
+
   # Predict linear scores for new data using the fitted GAM
-  fvTest <- stats::predict(modelout$b,
+  fvTest <- stats::predict(modelout$model,
                     newdata = newdata,
                     type = "link", # Get linear predictor
                     se.fit = TRUE) # Request standard errors (though not used here)
 
-  # Use the internal Cox model (baseline hazard) from the training fit (modelout$model$model)
+  # Use the stored baseline hazard from the training fit
   # and the new scores (fvTest$fit) to get survival probabilities for the new data
   sf <-
     survival::survfit(
-      modelout$model$model, # Use the Cox model stored during training
+      modelout$model$baseline_model, # Use the stored Cox model
       newdata = data.frame("score" = fvTest$fit),
       conf.int = .95
     )
@@ -173,7 +186,6 @@ Predict_SurvModel_GAM <- function(modelout, newdata) {
   }
   return(list(
     Probs = estSURVTest,
-    Times = time.interest,
-    sf=sf # Return the survfit object as well
+    Times = time.interest
   ))
 }

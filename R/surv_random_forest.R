@@ -7,19 +7,25 @@
 #' @param expvars character vector of names of explanatory variables in data
 #' @param timevar character name of time variable in data
 #' @param eventvar character name of event variable in data (needs to be 0/1)
-#' @param ntree integer value,  number of trees to grow
-#' @param samplesize integer value,  sample size for each grown tree (swor)
-#' @param nsplit integer value, maximum number of splits for each tree
-#' @param trace logical, trace tuning process or not
+#' @param ntree integer value, number of trees to grow (default: 300)
+#' @param samplesize integer value, sample size for each grown tree (default: 500)
+#' @param nsplit integer value, maximum number of splits for each tree (default: 5)
+#' @param trace logical, trace tuning process or not (default: TRUE)
+#' @param splitrule character, split rule for trees (default: "bs.gradient")
+#' @param nodesize_try numeric vector, nodesize values to try during tuning (default: c(1, 5, 10, 15))
+#' @param ... additional parameters passed to randomForestSRC functions
 #'
-#' @return a list containing the fitted randomForestSRC object ('hd.obj') and
-#' variable profile ('varprof').
+#' @return a list of four items: model: fitted randomForestSRC model object,
+#'  times: unique event times from the training data,
+#'  varprof: profile of explanatory variables,
+#'  expvars: the explanatory variables used.
 #'
 #' @importFrom randomForestSRC tune rfsrc predict.rfsrc
 #' @importFrom stats as.formula
 #' @importFrom survival Surv
 #' @export
-SurvModel_RF<-function(data,expvars, timevar, eventvar, ntree=300, samplesize=500, nsplit=5, trace=TRUE){
+SurvModel_RF<-function(data, expvars, timevar, eventvar, ntree=300, samplesize=500, nsplit=5, trace=TRUE, 
+                       splitrule="bs.gradient", nodesize_try=c(1, 5, 10, 15), ...){
   # Assuming VariableProfile is loaded/available
   varprof<-VariableProfile(data, expvars) # Placeholder
 
@@ -39,36 +45,38 @@ SurvModel_RF<-function(data,expvars, timevar, eventvar, ntree=300, samplesize=50
   # Adjust samplesize if it exceeds 70% of data
   samplesize <- min(ceiling(0.7 * nrow(data)), samplesize)
 
-  # Tune hyperparameters (nodesize, mtry)
-  # Using bs.gradient split rule and sampling without replacement (swor) as in original code
+  # Tune hyperparameters (nodesize, mtry) with user-provided parameters
   o <- randomForestSRC::tune(formRF, data = data[,c(timevar, eventvar, expvars), drop=FALSE],
-                             splitrule="bs.gradient", samptype = "swor", sampsize = samplesize,
-                             trace = trace, nsplit=nsplit, stepFactor = 1.5,
+                             splitrule = splitrule, samptype = "swor", sampsize = samplesize,
+                             trace = trace, nsplit = nsplit, stepFactor = 1.5,
                              mtryStart = 2, # Start tuning mtry from 2
-                             nodesizeTry = c(seq(1, 101, by = 10)), # Tune nodesize
-                             ntreeTry = ntree) # Use fixed ntree for tuning speed
+                             nodesizeTry = nodesize_try, # Use user-provided nodesize values
+                             ntreeTry = ntree, # Use fixed ntree for tuning speed
+                             ...)
 
   # Fit final model with optimal parameters
   hd.obj <- randomForestSRC::rfsrc(formRF, data = data[,c(timevar, eventvar, expvars), drop=FALSE],
-                                   nodesize =o$optimal[[1]], ntree=ntree, mtry= o$optimal[[2]],
-                                   tree.err = FALSE, importance = TRUE, statistics=TRUE,
-                                   do.trace = trace, splitrule="bs.gradient", samptype = "swor",
-                                   sampsize = samplesize, nsplit = nsplit)
+                                   nodesize = o$optimal[[1]], ntree = ntree, mtry = o$optimal[[2]],
+                                   tree.err = FALSE, importance = TRUE, statistics = TRUE,
+                                   do.trace = trace, splitrule = splitrule, samptype = "swor",
+                                   sampsize = samplesize, nsplit = nsplit, ...)
 
-  return(list(hd.obj=hd.obj, varprof=varprof))
+  # Get unique event times from training data
+  times <- sort(unique(data[data[[eventvar]] == 1, timevar]))
+
+  return(list(model = hd.obj, times = times, varprof = varprof, expvars = expvars))
 }
 
 #' @title Predict_SurvModel_RF
 #'
 #' @description Get predictions from a RF survival model for a test dataset.
 #'
-#' @param modelout the output from 'SurvModel_RF' (a list containing 'hd.obj')
+#' @param modelout the output from 'SurvModel_RF' (a list containing 'model', 'times', 'varprof', 'expvars')
 #' @param newdata the data for which the predictions are to be calculated
 #'
 #' @return a list containing the following items:
 #'  Probs: predicted Survival probability matrix (rows=times, cols=observations),
-#'  Times: The times at which the probabilities are predicted,
-#'  predSurvsTestRF: the raw output object from 'randomForestSRC::predict.rfsrc'.
+#'  Times: The times at which the probabilities are predicted.
 #'
 #' @importFrom randomForestSRC predict.rfsrc
 #' @export
@@ -87,17 +95,17 @@ Predict_SurvModel_RF<-function(modelout, newdata){
       }
   }
 
-
-  predSurvsTestRF<-randomForestSRC::predict.rfsrc(modelout$hd.obj, newdata = newdata)
+  predSurvsTestRF<-randomForestSRC::predict.rfsrc(modelout$model, newdata = newdata)
 
   # Extract survival probabilities and times
-  # Add time 0 with probability 1
-  Probs<-rbind(1, predSurvsTestRF$survival) # rfsrc survival matrix is obs x times
-  Times<-c(0, predSurvsTestRF$time.interest)
+  # randomForestSRC returns survival as obs x times matrix
+  # We need to transpose to get times x obs and add time 0 with probability 1
+  Probs <- t(predSurvsTestRF$survival)  # Transpose to times x obs
+  Probs <- rbind(1, Probs)  # Add time 0 with probability 1 for all observations
+  Times <- c(0, predSurvsTestRF$time.interest)
 
   return(list(
     Probs = Probs, # Return as rows=times, cols=observations
-    Times = Times,
-    predSurvsTestRF=predSurvsTestRF) # Return the full prediction object
-    )
+    Times = Times
+    ))
 }

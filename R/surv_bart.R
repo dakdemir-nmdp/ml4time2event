@@ -10,105 +10,141 @@
 #' @param ntree number of trees in BART model
 #'
 #' @return a list containing the following objects:
-#' post: fitted BART model object from surv.bart,
+#' model: fitted BART model object from surv.bart,
+#' times: time points used in the BART model,
+#' varprof: profile of explanatory variables,
 #' expvars: character vector of explanatory variables used,
-#' eventvarvec: numeric event variable values used in fitting,
-#' timevarvec: numeric time variable values used in fitting,
-#' x.train: model matrix used for training,
-#' varprof: profile of explanatory variables.
+#' factor_levels: list containing factor levels for consistent prediction.
 #'
-#' @importFrom BART surv.bart surv.pre.bart bartModelMatrix
+#' @importFrom BART surv.bart
 #' @importFrom stats model.matrix
-#' @importFrom dplyr bind_rows
 #' @export
-SurvModel_BART<-function(data,expvars, timevar, eventvar, K=8, ntree=50){
-  # Assuming VariableProfile is loaded/available
-  varprof<-ml4time2event::VariableProfile(data, expvars) # Placeholder
+SurvModel_BART <- function(data,
+                           expvars,
+                           timevar,
+                           eventvar,
+                           K = 8,
+                           ntree = 50) {
+
+  if (missing(data)) stop("argument \"data\" is missing")
+  if (missing(expvars)) stop("argument \"expvars\" is missing")
+  if (missing(timevar)) stop("argument \"timevar\" is missing")
+  if (missing(eventvar)) stop("argument \"eventvar\" is missing")
+
+  # Variable profile
+  varprof <- VariableProfile(data, expvars)
+
+  # Store factor levels for prediction
+  factor_levels <- lapply(data[, expvars, drop=FALSE], function(x) {
+    if (is.factor(x)) levels(x) else NULL
+  })
 
   # Prepare data
-  timevarvec<-data[[timevar]]
-  eventvarvec<-as.integer(data[[eventvar]] == 1) # Ensure 0/1
+  timevarvec <- data[[timevar]]
+  eventvarvec <- as.integer(data[[eventvar]] == 1) # Ensure 0/1
 
   # Create model matrix
-  x.train<-as.matrix(stats::model.matrix(~-1+., data=data[, expvars, drop=FALSE]))
+  x.train <- as.matrix(stats::model.matrix(~ -1 + ., data = data[, expvars, drop = FALSE]))
 
-  # Fit BART model with error handling
-  failcount<-0
-  post<-NULL
-  while ((is.null(post) & (failcount<4))){
-    failcount<-failcount+1
-    post <- tryCatch(BART::surv.bart(x.train=x.train, times=timevarvec, delta=eventvarvec, x.test=x.train, # Predict on train? Check necessity
-                                     K=K, ntree=ntree, ndpost=2000, nskip=500,
-                                     keepevery = 2L), # Added verbose=FALSE
-                     error=function(e){
-                         warning("BART fitting attempt ", failcount, " failed: ", e$message)
-                         NULL
-                         }
-    )
-  }
-  if (is.null(post)) {
-      stop("Failed to fit BART model after multiple attempts.")
-  }
+  # Fit BART model
+  post <- surv.bart(
+    x.train = x.train,
+    times = timevarvec,
+    delta = eventvarvec,
+    x.test = x.train,
+    K = K,
+    ntree = ntree,
+    ndpost = 200,
+    nskip = 50,
+    keepevery = 2L
+  )
 
-  return(list(post=post, expvars=expvars, eventvarvec=eventvarvec, timevarvec=timevarvec, x.train=x.train, varprof=varprof ))
+  # Get times from the fitted model
+  times <- post$times
+
+  # Return standardized output
+  list(
+    model = post,
+    times = times,
+    varprof = varprof,
+    expvars = expvars,
+    factor_levels = factor_levels,
+    x_train = x.train,
+    times_train = timevarvec,
+    delta_train = eventvarvec
+  )
 }
 
 
 #' @title Predict_SurvModel_BART
 #'
 #' @description Make predictions using a fitted BART survival model.
+#'
 #' @param modelout the output from 'SurvModel_BART'
 #' @param newdata the data for which the predictions are to be calculated
-#' @param times optional vector of times for prediction (currently ignored by surv.pre.bart/predict).
+#' @param newtimes optional vector of new time points for interpolation. If NULL, uses model's native time points.
 #'
-#' @return a list containing the following objects:
+#' @return a list containing the following items:
 #' Probs: predicted survival probability matrix (rows=times, cols=observations),
-#' Times: the times at which the probabilities are calculated (including 0, from model).
+#' Times: the unique times for which the probabilities are calculated (including 0).
 #'
-#' @importFrom BART surv.pre.bart bartModelMatrix
+#' @importFrom BART surv.pre.bart bartModelMatrix predict
 #' @importFrom stats model.matrix
-#' @importFrom dplyr bind_rows
 #' @export
-Predict_SurvModel_BART<-function(modelout, newdata, times=NULL){
-  # Prepare test matrix, ensuring factor levels and columns match training
-  x.test_orig <-stats::model.matrix(~-1+., data=newdata[, modelout$expvars, drop=FALSE])
+Predict_SurvModel_BART <- function(modelout, newdata, newtimes = NULL) {
 
-  # Ensure columns match training matrix (x.train stored in modelout)
-  train_cols <- colnames(modelout$x.train)
-  missing_cols <- setdiff(train_cols, colnames(x.test_orig))
-  if (length(missing_cols) > 0) {
-      warning("Columns missing in newdata compared to training: ", paste(missing_cols, collapse=", "), ". Adding them with 0.")
-      add_mat <- matrix(0, nrow = nrow(x.test_orig), ncol = length(missing_cols), dimnames = list(NULL, missing_cols))
-      x.test_combined <- cbind(x.test_orig, add_mat)
-  } else {
-      x.test_combined <- x.test_orig
+  if (missing(modelout)) stop("argument \"modelout\" is missing")
+  if (missing(newdata)) stop("argument \"newdata\" is missing")
+
+  # Prepare newdata: ensure factors have same levels as training data
+  data_test <- newdata[, modelout$expvars, drop=FALSE]
+  for (vari in modelout$expvars){
+    if (!is.null(modelout$factor_levels[[vari]])) { # Check if var was factor in training
+        train_levels <- modelout$factor_levels[[vari]]
+        # Ensure the column exists in newdata before attempting to modify
+        if (vari %in% colnames(data_test)) {
+            # Convert to character first to handle potential new levels, then factor
+            data_test[[vari]] <- factor(as.character(data_test[[vari]]), levels = train_levels)
+        }
+    }
   }
-  # Ensure correct column order
-  x.test <- x.test_combined[, train_cols, drop = FALSE]
 
+  # Create test model matrix
+  x.test_orig <- stats::model.matrix(~ -1 + ., data = data_test)
 
-  # Prepare BART prediction structure
-  # Note: The original code had a complex rbind structure which seemed unnecessary/potentially problematic.
-  # Simplifying based on surv.pre.bart documentation.
-  print(str(modelout))
-
-  # It seems surv.pre.bart primarily needs the training times/events and the test matrix.
-  pre=BART::surv.pre.bart(times=modelout$timevarvec, delta=modelout$eventvarvec,
-                          x.train= BART::bartModelMatrix(modelout$x.train), # Use stored training matrix
-                          x.test=  BART::bartModelMatrix(x.test), # Use prepared test matrix
-                          K=modelout$post$K) # Use K from fitted model
+  # Prepare BART prediction structure using stored training data
+  pre <- surv.pre.bart(
+    times = modelout$times_train,
+    delta = modelout$delta_train,
+    x.train = bartModelMatrix(modelout$x_train),
+    x.test = bartModelMatrix(x.test_orig),
+    K = modelout$model$K
+  )
 
   # Predict using the fitted BART model
-  pred = predict(modelout$post, pre$tx.test) # Predict on test data structure
+  pred <- predict(modelout$model, pre$tx.test)
 
   # Extract mean survival probabilities
-  # pred$surv.test.mean is matrix: rows=observations, cols=K time points
-  PredMat<-matrix(pred$surv.test.mean, ncol=modelout$post$K, byrow = FALSE) # Ensure correct matrix shape
+  # CRITICAL FIX: pred$surv.test.mean is a VECTOR (not matrix) containing
+  # survival probabilities for all patients concatenated: [patient1_times, patient2_times, ...]
+  # We need to reshape it correctly with byrow=TRUE to get proper patient grouping
+  PredMat <- matrix(pred$surv.test.mean, ncol = modelout$model$K, byrow = TRUE)
 
-  # Add time 0 with probability 1
-  Probs <- t(cbind(1, PredMat)) # Transpose to rows=times, cols=obs
-  Times <- c(0, modelout$post$times) # Get times from model object
+  # CRITICAL FIX: Sort times and reorder probabilities accordingly
+  # BART times are not guaranteed to be sorted, which breaks monotonicity
+  time_order <- order(modelout$times)
+  sorted_times <- modelout$times[time_order]
+  sorted_PredMat <- PredMat[, time_order, drop = FALSE]
 
-  print(str(list(Probs=Probs, Times=Times)))
-  return(list(Probs=Probs, Times=Times))
+  # Transpose to rows=times, cols=observations and add time 0 with probability 1
+  Probs <- t(cbind(1, sorted_PredMat))
+  Times <- c(0, sorted_times)
+
+  # If newtimes specified, interpolate to those times
+  if (!is.null(newtimes)) {
+    Probs <- survprobMatInterpolator(probsMat = Probs, times = Times, newtimes = newtimes)
+    Times <- newtimes
+  }
+
+  return(list(Probs = Probs, Times = Times))
 }

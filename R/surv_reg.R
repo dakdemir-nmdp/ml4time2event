@@ -7,12 +7,9 @@
 #' @param eventvar character name of event variable in data (needs to be 0/1)
 #' @param dist distribution for the parametric model, one of "weibull", "exponential", "gaussian", "logistic","lognormal" or "loglogistic".
 #'
-#' @return a list containing the following objects:
-#' survregOut: fitted survreg model object after forward selection,
-#' predicttrain: predicted survival probabilities matrix for training data (rows=times, cols=observations),
-#' times.interest: unique times for which the probabilities are calculated (including 0),
-#' expvars: explanatory variables included in the final selected model,
-#' varprof: profile of explanatory variables originally provided.
+#' @return a list of three items: survregOut: the final fitted survreg model object after forward selection,
+#'  times: unique event times from the training data,
+#'  varprof: profile of explanatory variables.
 #'
 #' @importFrom survival survreg Surv
 #' @importFrom stats AIC as.formula predict quantile
@@ -98,61 +95,11 @@ SurvModel_SurvReg <- function(data, expvars, timevar, eventvar, dist = "exponent
     stop("No valid model could be fit even after selection. Please check the data and variables.")
   }
 
-  # --- Predict on Training Data ---
-  # Define time points for prediction (e.g., unique event times)
-  times.interest <- sort(unique(dataYX[[timevar]])) # Use all unique times for smoother curve
-  times.interest <- times.interest[times.interest >= 0] # Ensure non-negative times
-
-  # Predict quantiles (which correspond to survival times)
-  # Need a sequence of probabilities (e.g., 0.01 to 0.99) to invert to get survival times
-  p_seq <- seq(0.01, 0.99, length.out = 100)
-  # predict gives time t such that S(t) = 1-p => p = 1 - S(t) = F(t)
-  predicted_times_for_quantiles <- stats::predict(final_model, newdata = dataYX, type = "quantile", p = p_seq)
-
-  # Interpolate to get S(t) at desired times.interest
-  # For each observation (row in predicted_times_for_quantiles):
-  # We have times (predicted_times_for_quantiles[i,]) corresponding to survival probs (1-p_seq)
-  predicttrain <- apply(predicted_times_for_quantiles, 1, function(pred_times_row) {
-      # Need to handle potential non-monotonicity or errors in prediction
-      # Sort predicted times and corresponding survival probs
-      valid_idx <- !is.na(pred_times_row) & !is.infinite(pred_times_row)
-      if (sum(valid_idx) < 2) return(rep(NA, length(times.interest))) # Need at least 2 points
-
-      sorted_idx <- order(pred_times_row[valid_idx])
-      t_pred <- pred_times_row[valid_idx][sorted_idx]
-      s_pred <- (1 - p_seq)[valid_idx][sorted_idx] # Corresponding survival probs
-
-      # Add (0, 1) and potentially (max_time, min_prob) for interpolation range
-      t_interp <- c(0, t_pred)
-      s_interp <- c(1, s_pred)
-      # Optional: add endpoint if needed, e.g., max(times.interest)
-      # max_t_interest = max(times.interest)
-      # if (max(t_interp) < max_t_interest) {
-      #     t_interp <- c(t_interp, max_t_interest)
-      #     s_interp <- c(s_interp, min(s_interp)) # Assume survival stays at min observed
-      # }
-
-      # Use the survival probability interpolator
-      survivalProbsInterpolator(times.interest, probs = s_interp, times = t_interp)
-  })
-  # Result is matrix: rows=times.interest, cols=observations
-
-  # Add time 0 if not present (should be handled by interpolator with yleft=1)
-  if (!0 %in% times.interest) {
-      times.interest <- c(0, times.interest)
-      # Prepend row of 1s if predicttrain is not NULL
-      if (!is.null(predicttrain) && ncol(predicttrain) > 0) {
-          predicttrain <- rbind(rep(1, ncol(predicttrain)), predicttrain)
-      } else if (!is.null(predicttrain)) { # Handle case where predicttrain might be vector/empty
-          predicttrain <- c(1, predicttrain)
-      }
-  }
-
+  # Get unique event times from training data
+  times <- sort(unique(dataYX[dataYX[[eventvar]] == 1, timevar]))
 
   return(list(survregOut = final_model,
-              predicttrain = predicttrain,
-              times.interest = times.interest,
-              expvars = selected_vars, # Return selected variables
+              times = times,
               varprof = varprof))
 }
 
@@ -172,7 +119,7 @@ SurvModel_SurvReg <- function(data, expvars, timevar, eventvar, dist = "exponent
 #' @export
 Predict_SurvModel_SurvReg <- function(modelout, newdata, times = NULL) {
   # Select only the variables used in the final model
-  selected_vars <- modelout$expvars
+  selected_vars <- attr(terms(modelout$survregOut), "term.labels")
   # Check if selected_vars exist in newdata
   missing_pred_vars <- setdiff(selected_vars, colnames(newdata))
   if (length(missing_pred_vars) > 0) {
@@ -195,7 +142,7 @@ Predict_SurvModel_SurvReg <- function(modelout, newdata, times = NULL) {
 
   # Determine time points for interpolation
   if (is.null(times)) {
-    times.interest <- modelout$times.interest # Use times from training fit
+    times.interest <- modelout$times # Use times from training fit
   } else {
     times.interest <- sort(unique(c(0, times))) # Use provided times, ensure 0 included
   }

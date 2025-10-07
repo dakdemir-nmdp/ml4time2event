@@ -49,113 +49,48 @@ xgb.train.surv <- function(params = list(), data, label, weight = NULL, nrounds,
   )
 
 
-  # --- Estimate Baseline Hazard ---
-  # Create data frame with time, status, and original features
-  data_data.frame <- data.frame(data, time = abs(label), status = ifelse(sign(label) == 1, 1, 0))
+  # --- Proper Baseline Hazard Estimation (Breslow-like approach) ---
+  # Create data frame with time, status, and linear predictors
+  # XGBoost label convention: positive time = event, negative time = censored
+  data_data.frame <- data.frame(data, time = abs(label), status = ifelse(label > 0, 1, 0))
+  
+  # Get linear predictors for all training observations
+  lp_train <- xgboost:::predict.xgb.Booster(xgboost_model, data)  
+  data_data.frame$lp <- lp_train
+  data_data.frame$exp_lp <- exp(lp_train)
 
-  # Fit a standard Cox model on the training data (features only)
-  # This is used ONLY to get an initial estimate of the baseline hazard shape
-  # Note: This assumes the feature names in 'data' are valid for formula
-  # It might be safer to use the matrix 'data' directly if column names are problematic
-  cox_formula <- tryCatch(
-      stats::as.formula(paste("survival::Surv(time, status) ~", paste(colnames(data), collapse = "+"))),
-      error = function(e) survival::Surv(time, status) ~ . # Fallback if colnames are bad
-  )
-  cox_model <- tryCatch(
-      survival::coxph(formula = cox_formula, data = data_data.frame, x = FALSE, y = FALSE),
-      error = function(e) {
-          warning("Failed to fit Cox model for baseline hazard estimation: ", e$message)
-          return(NULL)
-      }
-  )
-
-  if (!is.null(cox_model)) {
-      baseline_hazard <- tryCatch(
-          survival::basehaz(cox_model, centered = FALSE), # Get non-centered baseline hazard
-          error = function(e) {
-              warning("Failed to calculate basehaz: ", e$message)
-              return(NULL)
-          }
-      )
+  # Get unique event times and estimate baseline hazard using Breslow method
+  unique_event_times <- sort(unique(data_data.frame$time[data_data.frame$status == 1]))
+  
+  if (length(unique_event_times) == 0) {
+    # No events - create minimal baseline hazard
+    baseline_hazard <- data.frame(time = c(0, max(data_data.frame$time, na.rm = TRUE)), 
+                                 hazard = c(0, 0.01))
   } else {
-      baseline_hazard <- NULL
+    # Breslow baseline hazard estimation
+    baseline_hazard <- data.frame(time = numeric(0), hazard = numeric(0))
+    
+    for(t in unique_event_times) {
+      # Number of events at time t
+      d_t <- sum(data_data.frame$time == t & data_data.frame$status == 1)
+      
+      # Risk set at time t (all individuals still at risk)
+      risk_set <- data_data.frame$time >= t
+      
+      # Sum of exp(lp) for individuals in risk set
+      sum_exp_lp <- sum(data_data.frame$exp_lp[risk_set])
+      
+      # Breslow baseline hazard increment: d_t / sum(exp(lp))
+      h0_t <- if(sum_exp_lp > 0) d_t / sum_exp_lp else 0.01
+      
+      baseline_hazard <- rbind(baseline_hazard, data.frame(time = t, hazard = h0_t))
+    }
+    
+    # Ensure baseline hazard starts at time 0 with hazard 0
+    if(nrow(baseline_hazard) > 0 && baseline_hazard[1, "time"] != 0) {
+      baseline_hazard <- rbind(data.frame(time = 0, hazard = 0), baseline_hazard)
+    }
   }
-
-
-  # If basehaz fails, create a simple placeholder (e.g., based on unique event times)
-  if (is.null(baseline_hazard)) {
-      warning("Using simplified baseline hazard based on unique event times.")
-      unique_event_times <- sort(unique(data_data.frame$time[data_data.frame$status == 1]))
-      # Simple cumulative hazard estimate (e.g., Nelson-Aalen type)
-      cum_haz_est <- cumsum(1 / rev(seq_along(unique_event_times))) # Basic estimate
-      baseline_hazard <- data.frame(hazard = cum_haz_est, time = unique_event_times)
-  }
-
-
-  # Ensure baseline hazard starts at time 0 with hazard 0
-  if (nrow(baseline_hazard) == 0 || baseline_hazard[1, "time"] != 0) {
-    baseline_hazard <- rbind(c(0, 0), baseline_hazard)
-    colnames(baseline_hazard) <- c("hazard", "time") # Ensure correct names
-  }
-
-  # --- Optimize Baseline Hazard Scaling using PEC ---
-  # Predict Hazard Ratios (HR) using the trained xgboost model
-  HR <- xgboost:::predict.xgb.Booster(object = xgboost_model, newdata = data_DMatrix)
-
-  # Define function to calculate prediction error (CRPS) for a given baseline hazard scaling constant
-  baseline_pred_error <- function(const) {
-    # Scale the baseline hazard estimate
-    scaled_baseline_hazard <- baseline_hazard
-    scaled_baseline_hazard[, "hazard"] <- scaled_baseline_hazard[, "hazard"] * const
-
-    # Calculate survival probabilities: S(t) = exp(-H0(t) * HR)
-    # Need to interpolate baseline hazard at required times if necessary
-    # For simplicity here, assume evaluation times match baseline_hazard times
-    risk <- HR %*% matrix(scaled_baseline_hazard[, "hazard"], nrow = 1) # Should be HR * H0(t) -> matrix mult? No, element-wise exponent?
-    # Correct calculation: S(t|X) = S0(t)^exp(LP) = exp(-H0(t))^exp(LP) = exp(-H0(t) * exp(LP))
-    # xgboost predict gives LP (linear predictor), not HR=exp(LP) directly for survival:cox
-    # So, risk = exp(HR) where HR is the output of predict.xgb.Booster
-    # surv = exp(-matrix(scaled_baseline_hazard[, "hazard"], nrow=1) * exp(HR)) # This seems wrong dim mismatch
-    # Let's use the structure from predict.xgb.Booster.surv: surv = exp(HR %*% -matrix(scaled_baseline_hazard[,1], nrow=1))
-    # This assumes HR is log(HR), i.e., the linear predictor.
-    surv <- exp(HR %*% -matrix(scaled_baseline_hazard[, "hazard"], nrow = 1))
-
-    # Ensure predictions match the times in baseline_hazard
-    eval_times <- scaled_baseline_hazard[, "time"]
-    surv_at_eval_times <- surv[, findInterval(eval_times, eval_times)] # Should already match if eval_times = baseline_hazard$time
-
-    # Format for pec
-    Models <- list("xgboost" = t(surv_at_eval_times)) # pec expects rows=obs, cols=times
-
-    # Calculate PEC
-    PredError<-tryCatch(
-        pec::pec(object=Models, formula=survival::Surv(time,status)~1,
-                 data=data_data.frame,
-                 cens.model="marginal", # Use marginal censoring model
-                 times = eval_times,
-                 exact = FALSE, # Use faster approximation
-                 verbose = FALSE,
-                 reference = FALSE,
-                 splitMethod = "none" # Evaluate on the same data
-                 ),
-        error = function(e) {warning("pec calculation failed: ", e$message); return(NULL)}
-    )
-
-    if (is.null(PredError)) return(Inf) # Return high error if pec failed
-
-    # Return integrated CRPS
-    return(mean(pec::crps(PredError), na.rm = TRUE)) # Average CRPS over time
-  }
-
-  # Optimize the scaling constant
-  optimal_const_result <- tryCatch(
-      stats::optim(par = 1, fn = baseline_pred_error, method = "Brent", lower = 1e-4, upper = 10),
-      error = function(e) {warning("Baseline hazard optimization failed: ", e$message); return(list(par=1))} # Default to 1 if optim fails
-      )
-  optimal_const <- optimal_const_result$par
-
-  # Apply optimal scaling to the baseline hazard
-  baseline_hazard[, "hazard"] <- baseline_hazard[, "hazard"] * optimal_const
 
   # Store the optimized baseline hazard in the model object
   xgboost_model$baseline_hazard <- baseline_hazard
@@ -191,9 +126,18 @@ predict.xgb.Booster.surv <- function(object, newdata, type = "risk", times = NUL
       eval_times <- baseline_hazard[, "time"] # Use times from baseline hazard
     }
 
-    # Interpolate baseline cumulative hazard H0(t) at evaluation times
-    haz_func <- stats::approxfun(baseline_hazard$time, baseline_hazard$hazard, method = "constant", f = 0, yleft = 0, rule = 2)
-    H0_t <- haz_func(eval_times)
+    # Calculate baseline cumulative hazard H0(t) at evaluation times
+    # Sum baseline hazard increments up to each time point
+    H0_t <- numeric(length(eval_times))
+    for(i in seq_along(eval_times)) {
+      # Sum baseline hazard increments up to time eval_times[i]
+      relevant_times <- baseline_hazard$time[baseline_hazard$time <= eval_times[i]]
+      if(length(relevant_times) > 0) {
+        H0_t[i] <- sum(baseline_hazard$hazard[baseline_hazard$time %in% relevant_times])
+      } else {
+        H0_t[i] <- 0
+      }
+    }
 
     # Calculate survival probability: S(t|X) = exp(-H0(t) * exp(LP))
     # LP is the linear predictor from xgboost
@@ -219,18 +163,19 @@ predict.xgb.Booster.surv <- function(object, newdata, type = "risk", times = NUL
 #' @param expvars character vector of names of explanatory variables in data
 #' @param timevar character name of time variable in data
 #' @param eventvar character name of event variable in data (needs to be 0/1)
+#' @param eta learning rate (default: 0.01)
+#' @param max_depth maximum depth of trees (default: 5)
+#' @param nrounds number of boosting rounds (default: 100)
+#' @param ... additional parameters passed to xgboost
 #'
-#' @return a list containing the following objects:
-#' expvars: vector of explanatory variables used,
-#' learner: fitted model object (class xgb.Booster.surv),
-#' estSURVTrain: predicted survival probabilities matrix for training data (rows=obs, cols=times),
-#' datatrainProf: sample data frame of original predictors (for factor level consistency),
-#' varprof: profile of explanatory variables.
+#' @return a list of three items: model: fitted xgboost model object (class xgb.Booster.surv),
+#'  times: unique event times from the training data,
+#'  varprof: profile of explanatory variables.
 #'
 #' @importFrom xgboost xgb.DMatrix
 #' @importFrom stats model.matrix
 #' @export
-SurvModel_xgboost<-function(data,expvars, timevar, eventvar){
+SurvModel_xgboost<-function(data, expvars, timevar, eventvar, eta = 0.01, max_depth = 5, nrounds = 100, ...){
   # Assuming VariableProfile is loaded/available
   varprof<-VariableProfile(data, expvars) # Placeholder
 
@@ -245,26 +190,23 @@ SurvModel_xgboost<-function(data,expvars, timevar, eventvar){
   yTrain<-ytimes
   yTrain[yevents==0]<-(-yTrain[yevents==0])
 
-  # Define xgboost parameters
+  # Define xgboost parameters with user-provided values
   params <- list(objective='survival:cox',
                  eval_metric = "cox-nloglik",
-                 eta = 0.01, # learning_rate
-                 max_depth=5
-                 # early_stopping_rounds=10 # Consider adding watchlist for this
-                 )
+                 eta = eta,
+                 max_depth = max_depth,
+                 ...)
 
   # Train the survival xgboost model using the internal helper function
-  bst <- xgb.train.surv(data=X, label=yTrain, params = params, nrounds=100, verbose = 0) # Use helper
+  bst <- xgb.train.surv(data=X, label=yTrain, params = params, nrounds = nrounds, verbose = 0)
 
-  # Predict survival probabilities on training data using the specific predict method
-  dtrain <- xgboost::xgb.DMatrix(data=X) # Need DMatrix for prediction
-  preds<-predict.xgb.Booster.surv(bst, dtrain, type = "surv") # Use specific predict method
+  # Get unique event times from training data
+  times <- sort(unique(data[data[[eventvar]] == 1, timevar]))
 
-  # Store sample of original data for prediction consistency
-  sample_rows <- sample(1:nrow(data), min(10, nrow(data))) # Keep small sample
-  datatrainProf <- data[sample_rows, c(expvars), drop=FALSE]
+  # Store feature names in the model for prediction consistency
+  bst$feature_names <- colnames(X)
 
-  return(list(expvars=expvars, learner=bst, estSURVTrain=preds, datatrainProf=datatrainProf, varprof=varprof))
+  return(list(model = bst, times = times, varprof = varprof, expvars = expvars))
 }
 
 
@@ -288,38 +230,36 @@ SurvModel_xgboost<-function(data,expvars, timevar, eventvar){
 #' @importFrom xgboost xgb.DMatrix
 #' @export
 Predict_SurvModel_xgboost<-function(modelout, newdata){
-  # Prepare test matrix ensuring factor levels and columns match training
-  # Use the rbind trick with the sampled training data profile
-  mmdata<-rbind(modelout$datatrainProf, newdata[,modelout$expvars, drop=FALSE])
-  TestMat_full<-stats::model.matrix(~-1+., data=mmdata)
-  # Select rows corresponding to newdata
-  TestMat <- TestMat_full[-c(1:nrow(modelout$datatrainProf)), , drop=FALSE]
+  # Get the feature names from the stored model
+  feature_names <- modelout$model$feature_names
 
-  # Ensure TestMat has the same columns as the matrix used for training
-  # This relies on model.matrix handling factors based on the combined data
-  train_cols <- colnames(modelout$learner$feature_names) # Get feature names from xgb model if stored
-  if (is.null(train_cols)) {
-      # Fallback: try to infer from training data matrix if feature_names not stored
-      # This requires storing the training matrix or its colnames in modelout
-      warning("Could not retrieve feature names from xgboost model, column consistency not guaranteed.")
-  } else {
-      missing_cols <- setdiff(train_cols, colnames(TestMat))
-      for(col in missing_cols){
-          TestMat[[col]] <- 0 # Add missing columns with 0
-      }
-      # Ensure correct column order and selection
-      TestMat <- TestMat[, train_cols, drop = FALSE]
+  # Apply the same model.matrix transformation to newdata as was done during training
+  # This ensures factors are properly converted to dummy variables
+  X_new <- stats::model.matrix(~-1+., newdata[, modelout$expvars, drop=FALSE])
+
+  # Ensure X_new has the same columns as training (in case of missing factor levels)
+  missing_cols <- setdiff(feature_names, colnames(X_new))
+  for(col in missing_cols){
+    X_new[[col]] <- 0 # Add missing columns with 0
   }
-
+  # Ensure correct column order
+  X_new <- X_new[, feature_names, drop = FALSE]
 
   # Create DMatrix for prediction
-  dtest <- xgboost::xgb.DMatrix(data=TestMat)
+  dtest <- xgboost::xgb.DMatrix(data=X_new)
 
+  # Get the actual model object - handle both 'model' and 'learner' fields
+  actual_model <- if (!is.null(modelout$model)) modelout$model else modelout$learner
+  
+  if (is.null(actual_model)) {
+    stop("No model found in modelout$model or modelout$learner")
+  }
+  
   # Get evaluation times from the baseline hazard stored in the model
-  times=sort(unique(c(0, modelout$learner$baseline_hazard$time)))
+  times <- sort(unique(c(0, actual_model$baseline_hazard$time)))
 
   # Predict survival probabilities using the specific predict method
-  preds<-predict.xgb.Booster.surv(modelout$learner, dtest, type = "surv", times=times)
+  preds <- predict.xgb.Booster.surv(actual_model, dtest, type = "surv", times=times)
 
   # Transpose predictions to match standard output: rows=times, cols=observations
   return(list(Probs=t(preds), Times=times))

@@ -13,58 +13,53 @@ survivalProbsInterpolator<-function(x, probs, times){
   probs <- probs[order_idx]
 
   # Create an interpolation function
-  # Use constant interpolation (f=0) for survival curves (right-continuous)
+  # Use linear interpolation for smooth survival curves (not step functions)
   # yleft=1 (survival starts at 1), yright=min(probs) (survival at max time)
-  f<-stats::approxfun(times, probs, method = "constant", f = 0, yleft = 1, yright = min(probs, na.rm=TRUE), rule = 2)
+  f<-stats::approxfun(times, probs, method = "linear", yleft = 1, yright = min(probs, na.rm=TRUE), rule = 2)
   sapply(x, function(xi)f(xi))
 }
 
 #' @title survprobMatInterpolator
 #' @description Interpolate a matrix of survival probabilities for new times.
-#' @param probsMat matrix of survival probabilities (rows=observations, cols=times)
-#' @param times vector of times corresponding to columns of probsMat
+#' @param probsMat matrix of survival probabilities (rows=times, cols=observations)
+#' @param times vector of times corresponding to rows of probsMat
 #' @param newtimes vector of new times for interpolation
 #' @return matrix of interpolated survival probabilities (rows=newtimes, cols=observations)
 #' @noRd
-survprobMatInterpolator<-function(probsMat, times, newtimes){
-  # Define a helper function to interpolate a single row (one observation's survival curve)
-  interpolate1<-function(probs_row){
-    # Add time 0 with prob 1 if not present
-    if (!0 %in% times) {
-        times_aug <- c(0, times)
-        probs_row_aug <- c(1, probs_row)
-    } else {
-        times_aug <- times
-        probs_row_aug <- probs_row
-    }
-    # Interpolate using the single-vector function
-    y <- survivalProbsInterpolator(newtimes, probs_row_aug, times_aug)
-    y
-  }
-  # Apply the interpolation function to each row of the probability matrix
-  # Note: apply returns matrix with rows=newtimes, cols=observations
-  probsMat1<-apply(probsMat, 1, interpolate1)
+survprobMatInterpolator <- function(probsMat, times, newtimes) {
+  # Input: probsMat with rows=times, cols=observations
+  # Output: matrix with rows=newtimes, cols=observations
 
-  # Ensure monotonicity (survival probability should be non-increasing)
-  # This step replaces values that increase with the previous minimum value.
-  # Apply this correction column-wise (for each observation)
-  probsMat2<-apply(probsMat1, 2, function(col_probs){
-      # Find the first index where the probability increases compared to the cumulative minimum
-      first_increase_idx <- which(col_probs > cummin(col_probs))[1]
-      # If an increase is found, replace all values up to that point with the minimum value found so far
-      # Also replace any NA values with the minimum
-      if (!is.na(first_increase_idx)) {
-          replace(col_probs, (seq_along(col_probs) <= first_increase_idx) | is.na(col_probs), min(col_probs[1:first_increase_idx], na.rm = TRUE))
-      } else {
-          # If no increase, just replace NAs if any exist (e.g., from extrapolation)
-          replace(col_probs, is.na(col_probs), min(col_probs, na.rm = TRUE))
-      }
-  })
-  # Ensure the result is a matrix, especially if only one newtime is requested
-  if (!is.matrix(probsMat2)) {
-      probsMat2 <- matrix(probsMat2, nrow = length(newtimes), ncol = ncol(probsMat1))
+  # Ensure matrix format
+  if (!is.matrix(probsMat)) {
+    probsMat <- as.matrix(probsMat)
   }
-  probsMat2
+
+  # Add time 0 if not present
+  if (!0 %in% times) {
+    times <- c(0, times)
+    # Add row of 1s at the beginning (S(0) = 1 for all)
+    probsMat <- rbind(rep(1, ncol(probsMat)), probsMat)
+  }
+
+  # Interpolate each observation's survival curve (each column)
+  n_obs <- ncol(probsMat)
+  probs_interp <- matrix(NA, nrow = length(newtimes), ncol = n_obs)
+
+  for (i in seq_len(n_obs)) {
+    # Get survival curve for observation i
+    surv_curve <- probsMat[, i]
+    # Interpolate to new times
+    probs_interp[, i] <- survivalProbsInterpolator(newtimes, surv_curve, times)
+  }
+
+  # Ensure monotonicity (survival should be non-increasing)
+  # Apply to each column (each observation)
+  for (i in seq_len(ncol(probs_interp))) {
+    probs_interp[, i] <- cummin(probs_interp[, i])
+  }
+
+  probs_interp
 }
 
 

@@ -8,7 +8,8 @@
 #' @param timevar character name of time variable in data
 #' @param eventvar character name of event variable in data (needs to be 0/1)
 #' @param models character vector of additional models to fit, chosen from:
-#' "glmnet","coxph","rulefit","xgboost","gam","gbm","ExpSurvReg","WeibSurvReg","bart".
+#' "glmnet" (penalized Cox with elastic net), "coxph" (Cox with backward selection),
+#' "rulefit", "xgboost", "gam", "gbm", "ExpSurvReg", "WeibSurvReg", "bart".
 #' @param ntreeRF number of trees for Random Forest models.
 #' @param nvars number of top variables (based on RF importance) to use for the second RF model and potentially others.
 #' @param ... Additional arguments passed to individual model fitting functions (currently not explicitly handled, consider adding specific args).
@@ -19,7 +20,7 @@
 #'   - ... other fitted model outputs named according to the 'models' input (e.g., glmnet_Model, CPH_Model).
 #'
 #' @export
-RunSurvModels<-function(datatrain, ExpVars, timevar, eventvar, models=c("glmnet","coxph","rulefit","xgboost","gam","gbm","ExpSurvReg","WeibSurvReg","bart"), ntreeRF=300, nvars=20, ...){
+RunSurvModels<-function(datatrain, ExpVars, timevar, eventvar, models=c("glmnet","coxph","rulefit","xgboost","gam","gbm","ExpSurvReg","WeibSurvReg","bart","deepsurv"), ntreeRF=300, nvars=20, ...){
 
   # Ensure event var is 0/1
   datatrain[[eventvar]] <- as.numeric(datatrain[[eventvar]] == 1)
@@ -88,6 +89,12 @@ RunSurvModels<-function(datatrain, ExpVars, timevar, eventvar, models=c("glmnet"
     input2<-c(input2,list(bart_Model=bartout))
   }
 
+  if ("deepsurv"%in% models){
+    # Assuming SurvModel_DeepSurv is loaded/available
+    deepsurv_Model<-fit_model("deepsurv", SurvModel_DeepSurv, data=datatrainFact, expvars=ExpVarsForOthers, timevar=timevar, eventvar=eventvar, size=5, decay=0.01, maxit=500)
+    input2<-c(input2,list(deepsurv_Model=deepsurv_Model))
+  }
+
   if ("ExpSurvReg" %in% models) {
     # Assuming SurvModel_SurvReg is loaded/available
     # Original code had a loop reducing variables if fit failed, keeping similar logic
@@ -123,14 +130,31 @@ RunSurvModels<-function(datatrain, ExpVars, timevar, eventvar, models=c("glmnet"
 
 
   if ("glmnet" %in% models){
-    # Assuming SurvModel_glmnet is loaded/available
-    glmnet_Model<-fit_model("glmnet", SurvModel_glmnet, data=datatrainFact, expvars=ExpVarsForOthers, timevar=timevar, eventvar=eventvar)
-    input2<-c(input2,list(glmnet_Model=glmnet_Model))
+    # Use penalized Cox (elastic net) from SurvModel_Cox
+    glmnet_Model <- fit_model("glmnet",
+                              SurvModel_Cox,
+                              data = datatrainFact,
+                              expvars = ExpVarsForOthers,
+                              timevar = timevar,
+                              eventvar = eventvar,
+                              varsel = "penalized",
+                              alpha = 0.5,  # Elastic net (can be passed via ...)
+                              nfolds = 10,
+                              verbose = FALSE)
+    input2 <- c(input2, list(glmnet_Model = glmnet_Model))
   }
   if ("coxph" %in% models){
-    # Assuming SurvModel_Cox is loaded/available
-    CPH_Model<-fit_model("coxph", SurvModel_Cox, data=datatrainFact, expvars=ExpVarsForOthers, timevar=timevar, eventvar=eventvar)
-    input2<-c(input2,list(CPH_Model=CPH_Model))
+    # Standard Cox with backward selection
+    CPH_Model <- fit_model("coxph",
+                          SurvModel_Cox,
+                          data = datatrainFact,
+                          expvars = ExpVarsForOthers,
+                          timevar = timevar,
+                          eventvar = eventvar,
+                          varsel = "backward",
+                          penalty = "AIC",
+                          verbose = FALSE)
+    input2 <- c(input2, list(CPH_Model = CPH_Model))
   }
   if ("rulefit"%in% models){
     # Assuming SurvModel_rulefit is loaded/available
@@ -224,9 +248,11 @@ PredictSurvModels<-function(models, newdata, newtimes){
   ModelPredictionsList$newprobsrulefit <- predict_and_interp("RuleFit", Predict_SurvModel_rulefit, models$RuleFit_Model)
   ModelPredictionsList$newprobsRF <- predict_and_interp("RF", Predict_SurvModel_RF, models$RF_Model)
   ModelPredictionsList$newprobsRF2 <- predict_and_interp("RF2", Predict_SurvModel_RF, models$RF_Model2)
-  ModelPredictionsList$newprobsglmnet <- predict_and_interp("glmnet", Predict_SurvModel_glmnet, models$glmnet_Model)
+  # Both glmnet and coxph now use Predict_SurvModel_Cox (unified Cox interface)
+  ModelPredictionsList$newprobsglmnet <- predict_and_interp("glmnet", Predict_SurvModel_Cox, models$glmnet_Model)
   ModelPredictionsList$newprobscph <- predict_and_interp("CoxPH", Predict_SurvModel_Cox, models$CPH_Model)
   ModelPredictionsList$newprobsbart_Model <- predict_and_interp("BART", Predict_SurvModel_BART, models$bart_Model)
+  ModelPredictionsList$newprobsdeepsurv_Model <- predict_and_interp("DeepSurv", Predict_SurvModel_DeepSurv, models$deepsurv_Model)
   ModelPredictionsList$newprobsgam_Model <- predict_and_interp("GAM", Predict_SurvModel_GAM, models$gam_Model)
   ModelPredictionsList$newprobsgbm_Model <- predict_and_interp("GBM", Predict_SurvModel_gbm, models$gbm_Model)
   ModelPredictionsList$newprobssurvregexp_Model <- predict_and_interp("ExpSurvReg", Predict_SurvModel_SurvReg, models$survregexp_Model)

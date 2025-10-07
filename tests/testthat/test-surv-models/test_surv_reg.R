@@ -4,7 +4,7 @@ library(here)
 library(survival) # Required for Surv and survreg
 
 # Assuming the functions are available in the environment
-source(here("R/models/surv_reg.R"))
+# source(here("R/models/surv_reg.R"))  # Removed - functions loaded via package
 
 context("Testing surv_reg functions")
 
@@ -21,7 +21,9 @@ surv_data <- data.frame(
   stringsAsFactors = FALSE
 )
 # survreg uses Surv object directly
-surv_formula <- Surv(time, status) ~ x1 + x2 + x3
+time_var <- "time"
+event_var <- "status"
+expvars <- c("x1", "x2", "x3")
 train_indices_surv <- 1:40
 test_indices_surv <- 41:50
 train_data_surv <- surv_data[train_indices_surv, ]
@@ -31,37 +33,54 @@ time_points_surv <- quantile(train_data_surv$time[train_data_surv$status == 1], 
 
 # --- Tests for SurvModel_SurvReg ---
 
-test_that("SurvModel_SurvReg runs and returns a survreg object", {
+test_that("SurvModel_SurvReg runs and returns expected structure", {
   skip_if_not_installed("survival")
 
-  # Assuming default distribution is weibull if not specified
-  model_survreg <- SurvModel_SurvReg(formula = surv_formula, data = train_data_surv)
+  # Test with default distribution (exponential)
+  model_survreg <- SurvModel_SurvReg(
+    data = train_data_surv,
+    expvars = expvars,
+    timevar = time_var,
+    eventvar = event_var
+  )
 
-  # Check output type
-  expect_s3_class(model_survreg, "survreg")
-
-  # Check basic model properties
-  expect_true(!is.null(model_survreg$coefficients))
-  expect_equal(model_survreg$dist, "weibull") # Check default distribution
+  # Check output structure
+  expect_type(model_survreg, "list")
+  expect_named(model_survreg, c("survregOut", "times", "varprof"))
+  expect_s3_class(model_survreg$survregOut, "survreg")
+  expect_type(model_survreg$times, "double")
+  expect_type(model_survreg$varprof, "list")
 })
 
 test_that("SurvModel_SurvReg handles different distributions", {
   skip_if_not_installed("survival")
-  # Test with exponential distribution
-  model_survreg_exp <- SurvModel_SurvReg(formula = surv_formula, data = train_data_surv, dist = "exponential")
-  expect_s3_class(model_survreg_exp, "survreg")
-  expect_equal(model_survreg_exp$dist, "exponential")
+  # Test with weibull distribution
+  model_survreg_weibull <- SurvModel_SurvReg(
+    data = train_data_surv,
+    expvars = expvars,
+    timevar = time_var,
+    eventvar = event_var,
+    dist = "weibull"
+  )
+  expect_s3_class(model_survreg_weibull$survregOut, "survreg")
+  expect_equal(model_survreg_weibull$survregOut$dist, "weibull")
 
   # Test with lognormal
-  model_survreg_lnorm <- SurvModel_SurvReg(formula = surv_formula, data = train_data_surv, dist = "lognormal")
-  expect_s3_class(model_survreg_lnorm, "survreg")
-  expect_equal(model_survreg_lnorm$dist, "lognormal")
+  model_survreg_lnorm <- SurvModel_SurvReg(
+    data = train_data_surv,
+    expvars = expvars,
+    timevar = time_var,
+    eventvar = event_var,
+    dist = "lognormal"
+  )
+  expect_s3_class(model_survreg_lnorm$survregOut, "survreg")
+  expect_equal(model_survreg_lnorm$survregOut$dist, "lognormal")
 })
 
-test_that("SurvModel_SurvReg requires formula and data", {
+test_that("SurvModel_SurvReg requires correct inputs", {
   skip_if_not_installed("survival")
-  expect_error(SurvModel_SurvReg(formula = surv_formula), "argument \"data\" is missing")
-  expect_error(SurvModel_SurvReg(data = train_data_surv), "argument \"formula\" is missing")
+  expect_error(SurvModel_SurvReg(data = train_data_surv, expvars = expvars, timevar = time_var), "argument \"eventvar\" is missing")
+  expect_error(SurvModel_SurvReg(expvars = expvars, timevar = time_var, eventvar = event_var), "argument \"data\" is missing")
 })
 
 
@@ -70,45 +89,65 @@ test_that("SurvModel_SurvReg requires formula and data", {
 test_that("Predict_SurvModel_SurvReg returns predictions in correct format", {
   skip_if_not_installed("survival")
 
-  model_survreg <- SurvModel_SurvReg(formula = surv_formula, data = train_data_surv)
-  # Prediction involves predict(..., type="quantile", p=...) and transforming to survival probability
-  # Assuming Predict_SurvModel_SurvReg handles this.
-  predictions <- Predict_SurvModel_SurvReg(model = model_survreg, data = test_data_surv, times = time_points_surv)
+  model_survreg <- SurvModel_SurvReg(
+    data = train_data_surv,
+    expvars = expvars,
+    timevar = time_var,
+    eventvar = event_var
+  )
+  predictions <- Predict_SurvModel_SurvReg(
+    modelout = model_survreg,
+    newdata = test_data_surv,
+    times = time_points_surv
+  )
 
-  # Check output structure (should be a matrix of survival probabilities)
-  expect_true(is.matrix(predictions))
+  # Check output structure
+  expect_type(predictions, "list")
+  expect_named(predictions, c("Probs", "Times"))
+  expect_true(is.matrix(predictions$Probs))
+  expect_type(predictions$Times, "double")
 
   # Check dimensions
-  # Rows = number of test observations, Cols = number of time points
-  expect_equal(nrow(predictions), nrow(test_data_surv))
-  expect_equal(ncol(predictions), length(time_points_surv))
+  expect_equal(nrow(predictions$Probs), length(predictions$Times))
+  expect_equal(ncol(predictions$Probs), nrow(test_data_surv))
 
   # Check values are probabilities (between 0 and 1)
-  expect_true(all(predictions >= 0 & predictions <= 1, na.rm = TRUE))
+  expect_true(all(predictions$Probs >= 0 & predictions$Probs <= 1, na.rm = TRUE))
 
   # Check that survival probabilities are non-increasing over time for each subject
-  if (length(time_points_surv) > 1) {
-    all_non_increasing <- all(apply(predictions, 1, function(row) all(diff(row) <= 1e-9))) # Allow for small tolerance
+  if (length(predictions$Times) > 1) {
+    all_non_increasing <- all(apply(predictions$Probs, 2, function(col) all(diff(col) <= 1e-9)))
     expect_true(all_non_increasing)
   }
 })
 
-test_that("Predict_SurvModel_SurvReg handles single time point", {
+test_that("Predict_SurvModel_SurvReg handles default times", {
   skip_if_not_installed("survival")
 
-  model_survreg <- SurvModel_SurvReg(formula = surv_formula, data = train_data_surv)
-  single_time <- median(train_data_surv$time[train_data_surv$status == 1])
-  predictions <- Predict_SurvModel_SurvReg(model = model_survreg, data = test_data_surv, times = single_time)
+  model_survreg <- SurvModel_SurvReg(
+    data = train_data_surv,
+    expvars = expvars,
+    timevar = time_var,
+    eventvar = event_var
+  )
+  predictions <- Predict_SurvModel_SurvReg(
+    modelout = model_survreg,
+    newdata = test_data_surv
+  )
 
-  expect_true(is.matrix(predictions))
-  expect_equal(ncol(predictions), 1) # Should have 1 column
-  expect_equal(nrow(predictions), nrow(test_data_surv))
+  expect_type(predictions, "list")
+  expect_named(predictions, c("Probs", "Times"))
+  expect_true(length(predictions$Times) > 0)
 })
 
-test_that("Predict_SurvModel_SurvReg requires model, data, and times", {
+test_that("Predict_SurvModel_SurvReg requires correct inputs", {
   skip_if_not_installed("survival")
-  model_survreg <- SurvModel_SurvReg(formula = surv_formula, data = train_data_surv)
-  expect_error(Predict_SurvModel_SurvReg(data = test_data_surv, times = time_points_surv), "argument \"model\" is missing")
-  expect_error(Predict_SurvModel_SurvReg(model = model_survreg, times = time_points_surv), "argument \"data\" is missing")
-  expect_error(Predict_SurvModel_SurvReg(model = model_survreg, data = test_data_surv), "argument \"times\" is missing")
+  model_survreg <- SurvModel_SurvReg(
+    data = train_data_surv,
+    expvars = expvars,
+    timevar = time_var,
+    eventvar = event_var
+  )
+  expect_error(Predict_SurvModel_SurvReg(newdata = test_data_surv), "argument \"modelout\" is missing")
+  expect_error(Predict_SurvModel_SurvReg(modelout = model_survreg), "argument \"newdata\" is missing")
 })

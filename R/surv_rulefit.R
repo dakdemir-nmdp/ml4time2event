@@ -1,32 +1,55 @@
-#' @title SurvModel_rulefit
+#' @title (Helper) Extract Rules from a party Object
 #'
-#' @description Fit a rulefit model for survival outcomes
+#' @description This helper function traverses a party tree
+#' and extracts the decision rules for each terminal node.
+#' @param x A party object.
+#' @return A named character vector where names are the node IDs and values are the rules.
+#' @keywords internal
+extract_rules_from_party <- function(x) {
+  if (is.null(x) || is.null(x$node)) return(list())
+  # Get rule definitions from partykit's internal functions
+  rule_strings <- partykit:::.list.rules.party(x)
+  # Get the ID of the terminal node for each rule
+  node_ids <- names(partykit::nodeids(x, terminal = TRUE))
+  # Name the rules by their terminal node ID
+  names(rule_strings) <- node_ids
+  return(rule_strings)
+}
+
+#' @title Fit a RuleFit Model for Survival Outcomes
 #'
-#' @param data data frame with explanatory and outcome variables
-#' @param expvars character vector of names of explanatory variables in data
-#' @param timevar character name of time variable in data
-#' @param eventvar character name of event variable in data
-#' @param ntree number of trees to fit to extract rules
-#' @param nsample number of samples for each tree
-#' @param keepvars these variables will be used in each bagging iteration
-#' @param cuttimes these cut times are used for calculating pseudo observation
+#' @description Implements the RuleFit algorithm by generating rules from an ensemble of
+#' decision trees and fitting a penalized Cox model (via glmnet) on the original
+#' features plus the derived rules.
 #'
-#' @return a list object with the following: datasamp: a sample of data,
-#' varprof: profile of explanatory variables,
-#' ruleslist: list of the fitted rules,
-#' TrainMat: fitted rules matrix (combined with original features),
-#' ctreelist: list of tree models,
-#' yTrain: survival object for outcome variables,
-#' cv.fitRules: fitted glmnet survival models for a range of shrinkage parameters,
-#' timesTrain: unique times in the outcome variable from survfit object
-#' expvars: explanatory variables used in the model
+#' @param data A data frame with explanatory and outcome variables.
+#' @param expvars Character vector of names of explanatory variables in `data`.
+#' @param timevar Character name of the time-to-event variable in `data`.
+#' @param eventvar Character name of the event indicator variable in `data`.
+#' @param ntree Integer, the number of trees to generate for rule extraction.
+#' @param nsample Integer, the number of samples to draw (with replacement) for training each tree.
+#' @param keepvars Character vector of variable names to be included in every tree's bagging iteration.
+#' @param cuttimes Numeric vector of time points used to create binary outcomes for classification trees.
+#'   If NULL, quantiles of the time variable are used.
+#' @param alpha Numeric, the elastic net mixing parameter (default: 0.5).
+#' @param maxit Integer, maximum number of iterations for glmnet (default: 2000).
+#' @param ... Additional parameters passed to glmnet::cv.glmnet.
+#'
+#' @return A list with the following components:
+#' \item{model}{The fitted RuleFit model object containing all components.}
+#' \item{times}{Unique event times observed in the training data.}
+#' \item{varprof}{A profile of the explanatory variables.}
+#' \item{expvars}{The names of the original explanatory variables.}
+#' \item{factor_levels}{A list containing factor levels for each variable to ensure consistent prediction.}
 #'
 #' @importFrom rpart rpart rpart.control
 #' @importFrom partykit as.party
 #' @importFrom glmnet cv.glmnet
-#' @importFrom stats as.formula model.matrix quantile rpois runif
+#' @importFrom stats as.formula model.matrix quantile rpois runif coef
 #' @importFrom survival Surv survfit
+#'
 #' @export
+#' @family RuleFit Survival Modeling
 SurvModel_rulefit <- function(data,
                               expvars,
                               timevar,
@@ -34,229 +57,251 @@ SurvModel_rulefit <- function(data,
                               ntree = 300,
                               nsample = 300,
                               keepvars = NULL,
-                              cuttimes= NULL) {
-  # Assuming VariableProfile and listrules are loaded/available
-  varprof<-VariableProfile(data, expvars) # Placeholder if not loaded
+                              cuttimes = NULL,
+                              alpha = 0.5,
+                              maxit = 2000,
+                              ...) {
 
-  if (is.null(cuttimes)){
-    x<-data[,timevar]
-    cuttimes<-stats::quantile(x, c(.1,.25,.50,.70,.90))
+  if (missing(data)) stop("argument \"data\" is missing")
+  if (missing(expvars)) stop("argument \"expvars\" is missing")
+  if (missing(timevar)) stop("argument \"timevar\" is missing")
+  if (missing(eventvar)) stop("argument \"eventvar\" is missing")
+
+  # --- 1. Initial Setup ---
+  varprof <- VariableProfile(data, expvars)
+
+  # Store factor levels for prediction
+  factor_levels <- lapply(data[, expvars, drop=FALSE], function(x) {
+    if (is.factor(x)) levels(x) else NULL
+  })
+
+  if (is.null(cuttimes)) {
+    x <- data[[timevar]]
+    cuttimes <- stats::quantile(x, c(.1, .25, .50, .70, .90), na.rm = TRUE)
   }
-  formRF1 <-
-    stats::as.formula(paste("survival::Surv(", timevar, ",", eventvar, ") ~.", collapse = ""))
-  formRF2 <- stats::as.formula(paste("ClassVar ~.", collapse = ""))
 
-  ctreelist <- lapply(1:ntree, function(repi) {
-    sampcols <-
-      union(keepvars, sample(expvars, min(length(expvars), sample(c(
-        1:10
-      ), 1))))
-    selmodel <- sample(c(1, 1, 1, 1, 1, 1, 2), 1) # Favor survival trees
-    formRF <- list(formRF1, formRF2)[[selmodel]]
-    if (selmodel == 1) { # Survival Tree
-      usevars <- c(timevar, eventvar, sampcols)
-      samprows <- sample(1:nrow(data), nsample, replace = T)
-      datasampl <- data[samprows, colnames(data) %in% usevars]
-      rpcontrol <-
-        rpart::rpart.control(
-          minsplit = stats::rpois(1,1)+1,
-          minbucket = stats::rpois(1,30)+1,
-          cp = 0.01 * stats::runif(1),
-          maxcompete = stats::rpois(1,30)+1,
-          maxsurrogate = stats::rpois(1,3) +1,
-          usesurrogate = 2,
-          xval = 10,
-          surrogatestyle = 0,
-          maxdepth = stats::rpois(1,2)+1
-        )
-      rpartmodel <- rpart::rpart(formRF,
-                                 data = datasampl,
-                                 control = rpcontrol,
-                                 model = TRUE)
-    } else { # Classification Tree
-      usevars <- c(timevar, eventvar, sampcols)
-      samprows <- sample(1:nrow(data), nsample, replace = T)
-      datasampl <- data[samprows, colnames(data) %in% usevars]
-      datasampl$ClassVar <-
-        as.character(datasampl[, colnames(datasampl) %in% timevar] < sample(cuttimes, 1) &
-                       datasampl[, colnames(datasampl) %in% eventvar] == 1)
-      datasampl <-
-        datasampl[, !colnames(datasampl) %in% c(timevar, eventvar)]
-      rpcontrol <-
-        rpart::rpart.control(
-          minsplit = stats::rpois(1,1)+1,
-          minbucket = stats::rpois(1,30)+1,
-          cp = 0.01 * stats::runif(1),
-          maxcompete = stats::rpois(1,30)+1,
-          maxsurrogate = stats::rpois(1,3) +1,
-          usesurrogate = 2,
-          xval = 10,
-          surrogatestyle = 0,
-          maxdepth = stats::rpois(1,2)+1
-        )
-      rpartmodel <- rpart::rpart(formRF,
-                                 data = datasampl,
-                                 control = rpcontrol,
-                                 model = TRUE)
+  # Define model formulas
+  formRF1 <- stats::as.formula(paste("survival::Surv(", timevar, ",", eventvar, ") ~ ."))
+  formRF2 <- stats::as.formula("ClassVar ~ .")
+
+
+  # --- 2. Generate Ensemble of Trees ---
+  # This loop generates a diverse set of shallow trees by randomizing hyperparameters.
+  # Both survival and classification trees are used to capture different patterns.
+  ctreelist <- lapply(1:ntree, function(i) {
+    # Bagging: sample columns and rows
+    sampcols <- union(keepvars, sample(expvars, min(length(expvars), sample(1:10, 1))))
+    samprows <- sample(seq_len(nrow(data)), nsample, replace = TRUE)
+
+    # Randomly choose between a survival tree (favored) and a classification tree
+    selmodel <- sample(c(1, 1, 1, 1, 2), 1)
+    formRF <- if (selmodel == 1) formRF1 else formRF2
+
+    usevars <- c(timevar, eventvar, sampcols)
+    datasampl <- data[samprows, usevars, drop = FALSE]
+
+    # For classification trees, create a binary outcome based on a random cut time
+    if (selmodel == 2) {
+      datasampl$ClassVar <- as.factor(
+        datasampl[[timevar]] < sample(cuttimes, 1) & datasampl[[eventvar]] == 1
+      )
+      datasampl <- datasampl[, !colnames(datasampl) %in% c(timevar, eventvar)]
     }
-    return(rpartmodel)
+
+    # Randomized hyperparameters to foster tree diversity
+    rpcontrol <- rpart::rpart.control(
+      minsplit = stats::rpois(1, 2) + 1,
+      minbucket = stats::rpois(1, 20) + 5,
+      cp = 0.01 * stats::runif(1),
+      maxdepth = stats::rpois(1, 2) + 1,
+      usesurrogate = 0, # Turn off surrogates for simplicity and speed
+      xval = 0 # No cross-validation needed for individual trees
+    )
+
+    rpart::rpart(formRF, data = datasampl, control = rpcontrol, model = TRUE)
   })
 
-  # Extract rules
+
+  # --- 3. Extract Rules and Create Rule Matrix ---
   ruleslist <- lapply(ctreelist, function(x) {
-      tryCatch(listrules(partykit::as.party(x)), error = function(e) list()) # Placeholder
+    tryCatch(extract_rules_from_party(partykit::as.party(x)), error = function(e) list())
   })
 
-  # Create rule matrix for training data
-  RulesTrain <-
-    lapply(ctreelist, function(x)
-      predict(partykit::as.party(x), newdata = data, type = "node"))
-  RulesTrainMatList <- lapply(1:length(RulesTrain), function(x) {
-    Train <- RulesTrain[[x]]
-    rules <- ruleslist[[x]]
-    if (length(rules) > 0 && length(unique(names(rules))) > 0) {
-        Train <- factor(as.character(Train), levels = names(rules))
-        if (length(unique(names(rules))) > 1) {
-          MM <- stats::model.matrix(~ -1 + Train)
-          colnames(MM) <-
-            paste(paste(x, 1:length(rules), sep = "_"), rules, sep = "***")
-          MM
-        } else { NULL }
-    } else { NULL }
+  RulesTrainMatList <- lapply(seq_along(ctreelist), function(i) {
+    tree <- ctreelist[[i]]
+    rules <- ruleslist[[i]]
+    if (length(rules) == 0 || length(unique(names(rules))) <= 1) {
+      return(NULL)
+    }
+
+    # Get terminal node predictions and one-hot encode them to form the rule matrix
+    node_preds <- predict(partykit::as.party(tree), newdata = data, type = "node")
+    train_factor <- factor(as.character(node_preds), levels = names(rules))
+
+    MM <- stats::model.matrix(~ -1 + train_factor)
+    colnames(MM) <- paste(paste(i, seq_along(rules), sep = "_"), rules, sep = "***")
+    MM
   })
   RulesTrainMatList <- Filter(Negate(is.null), RulesTrainMatList)
 
-  # Combine original features and rules
-  TrainMatOrig <- stats::model.matrix(~.-1, data=data[,expvars])
+
+  # --- 4. Combine Original Features and Rules ---
+  TrainMatOrig <- stats::model.matrix(~ . - 1, data = data[, expvars, drop = FALSE])
+
   if (length(RulesTrainMatList) > 0) {
-      TrainMatRules <- Reduce("cbind", RulesTrainMatList)
-      TrainMat <- cbind(TrainMatOrig, TrainMatRules)
+    TrainMatRules <- Reduce("cbind", RulesTrainMatList)
+    TrainMat <- cbind(TrainMatOrig, TrainMatRules)
   } else {
-      TrainMat <- TrainMatOrig
+    TrainMat <- TrainMatOrig
   }
 
-  # Prepare outcome for glmnet
-  yTrain = survival::Surv(data[, colnames(data) == timevar], as.numeric(data[, colnames(data) == eventvar] == 1))
 
-  # Fit penalized Cox model (glmnet)
-  cv.fitRules = glmnet::cv.glmnet(
-      x = TrainMat,
-      y = yTrain,
-      alpha = .5, # Elastic Net
-      family = "cox",
-      maxit = 1000
-    )
-  # est.coefRules = stats::coef(cv.fitRules, s = cv.fitRules$lambda.1se) # Not returned but could be useful
+  # --- 5. Fit Penalized Cox Model ---
+  yTrain <- survival::Surv(data[[timevar]], data[[eventvar]] == 1)
 
-  # Get survival fit for training data (needed for prediction times)
-  sfitTrainRules <-
-      survival::survfit(
-        cv.fitRules,
-        s = cv.fitRules$lambda.1se, # Or lambda.min
-        x = TrainMat,
-        y = yTrain,
-        newx = TrainMat # Predict on training data itself
-      )
-  timesTrain <- sfitTrainRules$time
+  cv.fitRules <- glmnet::cv.glmnet(
+    x = TrainMat,
+    y = yTrain,
+    alpha = alpha, # User-provided Elastic Net penalty
+    family = "cox",
+    maxit = maxit, # User-provided max iterations
+    ...
+  )
 
-  # Sample data for prediction consistency
-  nrowforsample<-min(c(nrow(data),500))
+  # Get unique event times from the training data for prediction horizon
+  sfitTrain <- survival::survfit(yTrain ~ 1)
+  timesTrain <- sfitTrain$time
 
-  return(
-      list(
-        datasamp=data[1:nrowforsample,expvars], # Sample of original predictors
-        varprof=varprof,
-        ruleslist = ruleslist,
-        TrainMat = TrainMat[1:nrowforsample,], # Sample of combined matrix (for prediction structure)
-        ctreelist = ctreelist,
-        yTrain = yTrain[1:nrowforsample,], # Sample of outcome (for prediction structure)
-        cv.fitRules = cv.fitRules,
-        timesTrain = timesTrain,
-        expvars=expvars # Original predictor names
-        )
-    )
+
+  # --- 6. Prepare and Return Model Object ---
+  # Sample of original data is kept to ensure factor levels are consistent during prediction
+  nrowforsample <- min(c(nrow(data), 500))
+  datasamp <- data[sample(nrow(data), nrowforsample), expvars, drop = FALSE]
+
+  model_output <- list(
+    datasamp = datasamp,
+    varprof = varprof,
+    ruleslist = ruleslist,
+    ctreelist = ctreelist,
+    TrainMat = TrainMat, # Return the full matrix for correct prediction
+    yTrain = yTrain,     # Return the full outcome vector for correct prediction
+    cv.fitRules = cv.fitRules,
+    timesTrain = timesTrain,
+    expvars = expvars
+  )
+
+  # Return standardized output
+  list(model = model_output, times = timesTrain, varprof = varprof, expvars = expvars, factor_levels = factor_levels)
 }
 
 
-#' @title Predict_SurvModel_rulefit
+#' @title Predict Survival Probabilities from a RuleFit Model
 #'
-#' @description Get predictions from a rulefit model for a test dataset
+#' @description Generates survival probability predictions for new data using a
+#' previously trained RuleFit model.
 #'
-#' @param modelout the output from 'SurvModel_rulefit'
-#' @param newdata the data for which the predictions are to be calculated
+#' @param modelout The output from `SurvModel_rulefit` (a list containing 'model', 'times', 'varprof', 'expvars', 'factor_levels').
+#' @param newdata A new data frame for which to generate predictions. It must contain
+#'   all variables specified in `modelout$expvars`.
 #'
-#' @return a list object with three items. Probs: survival probability predictions matrix (rows=times, cols=observations),
-#' Times: the times of the returned probabilities, sfitTestRules: prediction object from survfit
+#' @return A list with two items:
+#' \item{Probs}{A matrix of survival probability predictions, where rows are time points and columns are observations.}
+#' \item{Times}{The vector of time points corresponding to the rows of `Probs`.}
 #'
 #' @importFrom partykit as.party
 #' @importFrom stats model.matrix
 #' @importFrom survival survfit
+#'
 #' @export
 Predict_SurvModel_rulefit <- function(modelout, newdata) {
 
-  # Create rule matrix for test data
-  RulesTest <-
-    lapply(modelout$ctreelist, function(x)
-      predict(partykit::as.party(x), newdata = newdata, type = "node"))
-  RulesTestMatList <- lapply(1:length(RulesTest), function(x) {
-    Test <- RulesTest[[x]]
-    rules <- modelout$ruleslist[[x]]
-    if (length(rules) > 0 && length(unique(names(rules))) > 0) {
-        Test <- factor(as.character(Test), levels = names(rules))
-        if (length(unique(names(rules))) > 1) {
-          MM <- stats::model.matrix(~ -1 + Test)
-          colnames(MM) <-
-            paste(paste(x, 1:length(rules), sep = "_"), rules, sep = "***")
-          MM
-        } else { NULL }
-    } else { NULL }
+  if (missing(modelout)) stop("argument \"modelout\" is missing")
+  if (missing(newdata)) stop("argument \"newdata\" is missing")
+
+  # Prepare newdata: ensure factors have same levels as training data
+  data_test <- newdata[, modelout$expvars, drop=FALSE]
+  for (vari in modelout$expvars){
+    if (!is.null(modelout$factor_levels[[vari]])) { # Check if var was factor in training
+        train_levels <- modelout$factor_levels[[vari]]
+        # Ensure the column exists in newdata before attempting to modify
+        if (vari %in% colnames(data_test)) {
+            # Convert to character first to handle potential new levels, then factor
+            data_test[[vari]] <- factor(as.character(data_test[[vari]]), levels = train_levels)
+        }
+    }
+  }
+
+  # --- 1. Create Rule Matrix for New Data ---
+  RulesTestMatList <- lapply(seq_along(modelout$model$ctreelist), function(i) {
+    tree <- modelout$model$ctreelist[[i]]
+    rules <- modelout$model$ruleslist[[i]]
+    if (length(rules) == 0 || length(unique(names(rules))) <= 1) {
+      return(NULL)
+    }
+
+    node_preds <- predict(partykit::as.party(tree), newdata = data_test, type = "node")
+    test_factor <- factor(as.character(node_preds), levels = names(rules))
+
+    MM <- stats::model.matrix(~ -1 + test_factor)
+    colnames(MM) <- paste(paste(i, seq_along(rules), sep = "_"), rules, sep = "***")
+    MM
   })
   RulesTestMatList <- Filter(Negate(is.null), RulesTestMatList)
 
-  # Combine original features and rules for test data
-  # Ensure factor levels match training sample using rbind trick
-  MM_orig_test <- stats::model.matrix(~.-1, data=rbind(modelout$datasamp, newdata[,modelout$expvars]))
-  MM_orig_test <- MM_orig_test[-c(1:nrow(modelout$datasamp)), , drop = FALSE]
 
+  # --- 2. Create Original Feature Matrix for New Data ---
+  # The rbind trick ensures that factor levels in newdata are handled identically
+  # to the training data.
+  full_data <- rbind(modelout$model$datasamp, data_test)
+  MM_orig_full <- stats::model.matrix(~ . - 1, data = full_data)
+  MM_orig_test <- MM_orig_full[-seq_len(nrow(modelout$model$datasamp)), , drop = FALSE]
+
+
+  # --- 3. Combine and Align Feature Matrices ---
   if (length(RulesTestMatList) > 0) {
-      TestMatRules <- Reduce("cbind", RulesTestMatList)
-      TestMat <- cbind(MM_orig_test, TestMatRules)
+    TestMatRules <- Reduce("cbind", RulesTestMatList)
+    TestMat <- cbind(MM_orig_test, TestMatRules)
   } else {
-      TestMat <- MM_orig_test
+    TestMat <- MM_orig_test
   }
 
-  # Ensure TestMat has the same columns as the training matrix used in cv.glmnet
-  train_cols <- colnames(modelout$TrainMat) # Use colnames from the saved TrainMat sample
-  missing_cols <- setdiff(train_cols, colnames(TestMat))
-  for(col in missing_cols){
-      TestMat[[col]] <- 0 # Add missing rule columns with 0
+  # Ensure the new data matrix has exactly the same columns in the same order
+  # as the training matrix. Add missing columns (rules not triggered by new data)
+  # and remove extra columns (should not happen but is a safeguard).
+  train_cols <- colnames(modelout$model$TrainMat)
+  test_cols <- colnames(TestMat)
+
+  missing_cols <- setdiff(train_cols, test_cols)
+  for (col in missing_cols) {
+    TestMat <- cbind(TestMat, 0)
+    colnames(TestMat)[ncol(TestMat)] <- col
   }
-  # Ensure correct column order and selection
   TestMat <- TestMat[, train_cols, drop = FALSE]
 
 
-  # Predict using the fitted glmnet model
-  sfitTestRules <-
-      survival::survfit(
-        modelout$cv.fitRules,
-        s = modelout$cv.fitRules$lambda.min, # Use lambda.min for prediction
-        x = modelout$TrainMat, # Provide the training matrix used by cv.glmnet
-        y = modelout$yTrain,   # Provide the training outcome used by cv.glmnet
-        newx = TestMat # Provide the new data matrix
-      )
+  # --- 4. Predict Survival Curves ---
+  # It is CRITICAL to provide the original training data (x and y) to survfit.
+  # This is because it needs them to compute the baseline hazard function, which
+  # is then adjusted for each new observation based on its predictor values.
+  sfitTestRules <- survival::survfit(
+    modelout$model$cv.fitRules$glmnet.fit,
+    s = modelout$model$cv.fitRules$lambda.min,
+    x = modelout$model$TrainMat, # Full training matrix
+    y = modelout$model$yTrain,   # Full training outcome
+    newx = TestMat        # New data matrix for prediction
+  )
+
   predSurvsTestRules <- sfitTestRules$surv
   timesTest <- sfitTestRules$time
 
-  # Add time 0 with probability 1 if missing
-  if (sum(timesTest==0)==0){
-      timesTest<-c(0,timesTest)
-      predSurvsTestRules<-rbind(rep(1, ncol(predSurvsTestRules)),predSurvsTestRules)
+  # Ensure time 0 with probability 1 is included for complete curves
+  if (sum(timesTest == 0) == 0) {
+    timesTest <- c(0, timesTest)
+    predSurvsTestRules <- rbind(rep(1, ncol(predSurvsTestRules)), predSurvsTestRules)
   }
-  return(
-      list(
-        Probs = predSurvsTestRules, # Rows=times, Cols=observations
-        Times = timesTest,
-        sfitTestRules=sfitTestRules
-      )
-    )
+
+  return(list(
+    Probs = predSurvsTestRules,
+    Times = timesTest
+  ))
 }

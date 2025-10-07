@@ -88,7 +88,7 @@ CalculateExpectedTimeLost<-function(PredictedCurves, modeltypes, times, UL, LL=0
       pred_output <- PredictedCurves[[i]]
       model_type <- toupper(modeltypes[i])
 
-      if (is.null(pred_output) || is.na(pred_output) || is.null(pred_output$NewProbs)) {
+      if (is.null(pred_output) || (is.atomic(pred_output) && length(pred_output) == 1 && is.na(pred_output)) || is.null(pred_output$NewProbs)) {
           warning("Invalid prediction output or missing 'NewProbs' at index ", i, ". Cannot calculate time lost.")
           return(NA) # Or perhaps NULL or vector of NAs?
       }

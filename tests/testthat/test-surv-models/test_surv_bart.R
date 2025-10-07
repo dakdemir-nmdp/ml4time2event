@@ -5,6 +5,8 @@ library(survival) # For Surv object
 # library(dbarts) # Required for the functions being tested - load if needed, or skip
 
 # Assuming the functions are available in the environment
+source("/Users/dakdemir/Library/CloudStorage/OneDrive-NMDP/Year2025/Github/ml4time2event/R/general_utils.R")
+source("/Users/dakdemir/Library/CloudStorage/OneDrive-NMDP/Year2025/Github/ml4time2event/R/surv_interpolation.R")
 source("/Users/dakdemir/Library/CloudStorage/OneDrive-NMDP/Year2025/Github/ml4time2event/R/data_summary.R")
 source("/Users/dakdemir/Library/CloudStorage/OneDrive-NMDP/Year2025/Github/ml4time2event/R/surv_bart.R")
 
@@ -33,21 +35,20 @@ time_points_surv <- quantile(train_data_surv$time[train_data_surv$status == 1], 
 # --- Tests for SurvModel_BART ---
 
 test_that("SurvModel_BART runs and returns a model object", {
-  skip_if_not_installed("dbarts") # Or relevant BART package
+  skip_if_not_installed("BART")
 
   # Assuming the wrapper fits a standard BART survival model
   model_bart_surv <- SurvModel_BART(data = train_data_surv, expvars = c("x1", "x2", "x3"), timevar = "time", eventvar = "status")
 
-  # Check output type - what class does the BART package return for survival?
-  # dbarts might return a list or a custom object. Assuming a list containing a 'bart' object.
+  # Check output type
   expect_type(model_bart_surv, "list")
-  # Check for expected elements within the BART model object (e.g., 'fit', 'call')
-  expect_true(!is.null(model_bart_surv$post)) # Example check for dbarts object structure
+  # Check for expected elements within the BART model object
+  expect_true(!is.null(model_bart_surv$model)) # BART returns model object
   expect_true(!is.null(model_bart_surv$expvars))
 })
 
 test_that("SurvModel_BART handles additional parameters (if applicable)", {
-  skip_if_not_installed("dbarts")
+  skip_if_not_installed("BART")
   # Example: if the wrapper allowed passing 'ntree'
   model_bart_params <- SurvModel_BART(data = train_data_surv, expvars = c("x1", "x2", "x3"), timevar = "time", eventvar = "status", ntree = 10)
   expect_type(model_bart_params, "list")
@@ -60,7 +61,7 @@ test_that("SurvModel_BART handles additional parameters (if applicable)", {
 })
 
 test_that("SurvModel_BART requires data, expvars, timevar, and eventvar", {
-  skip_if_not_installed("dbarts")
+  skip_if_not_installed("BART")
   expect_error(SurvModel_BART(), "argument \"data\" is missing")
   expect_error(SurvModel_BART(data = train_data_surv), "argument \"expvars\" is missing")
   expect_error(SurvModel_BART(data = train_data_surv, expvars = c("x1", "x2", "x3")), "argument \"timevar\" is missing")
@@ -71,20 +72,20 @@ test_that("SurvModel_BART requires data, expvars, timevar, and eventvar", {
 # --- Tests for Predict_SurvModel_BART ---
 
 test_that("Predict_SurvModel_BART returns predictions in correct format", {
-  skip_if_not_installed("dbarts")
+  skip_if_not_installed("BART")
 
   model_bart_surv <- SurvModel_BART(data = train_data_surv, expvars = c("x1", "x2", "x3"), timevar = "time", eventvar = "status")
   # Prediction for BART survival models might involve predict() on the fitted object
   # and potentially custom logic to get survival probabilities at specific times.
   # Assuming Predict_SurvModel_BART handles this.
-  predictions <- Predict_SurvModel_BART(modelout = model_bart_surv, newdata = test_data_surv, times = time_points_surv)
+  predictions <- Predict_SurvModel_BART(modelout = model_bart_surv, newdata = test_data_surv, newtimes = time_points_surv)
 
   # Check output structure
   expect_type(predictions, "list")
 
   # Check dimensions
-  # Rows = number of test observations, Cols = number of time points
-  expect_equal(nrow(predictions$Probs), length(time_points_surv) + 1)
+  # Rows = number of time points, Cols = number of test observations
+  expect_equal(nrow(predictions$Probs), length(time_points_surv))
   expect_equal(ncol(predictions$Probs), nrow(test_data_surv))
 
   # Check values are probabilities (between 0 and 1)
@@ -92,28 +93,28 @@ test_that("Predict_SurvModel_BART returns predictions in correct format", {
 
   # Check that survival probabilities are non-increasing over time for each subject
   if (length(time_points_surv) > 1) {
-    all_non_increasing <- all(apply(predictions$Probs[-1, , drop = FALSE], 2, function(col) all(diff(col) <= 1e-9))) # Allow for small tolerance
+    all_non_increasing <- all(apply(predictions$Probs, 2, function(col) all(diff(col) <= 1e-9))) # Allow for small tolerance
     expect_true(all_non_increasing)
   }
 })
 
 test_that("Predict_SurvModel_BART handles single time point", {
-  skip_if_not_installed("dbarts")
+  skip_if_not_installed("BART")
 
   model_bart_surv <- SurvModel_BART(data = train_data_surv, expvars = c("x1", "x2", "x3"), timevar = "time", eventvar = "status")
   single_time <- median(train_data_surv$time[train_data_surv$status == 1])
-  predictions <- Predict_SurvModel_BART(modelout = model_bart_surv, newdata = test_data_surv, times = single_time)
+  predictions <- Predict_SurvModel_BART(modelout = model_bart_surv, newdata = test_data_surv, newtimes = single_time)
 
   expect_type(predictions, "list")
   expect_true(is.matrix(predictions$Probs))
-  expect_equal(ncol(predictions$Probs), nrow(test_data_surv)) # Should have 1 column
-  expect_equal(nrow(predictions$Probs), 2)
+  expect_equal(ncol(predictions$Probs), nrow(test_data_surv))
+  expect_equal(nrow(predictions$Probs), 1) # Single time point
 })
 
-test_that("Predict_SurvModel_BART requires model, data, and times", {
-  skip_if_not_installed("dbarts")
+test_that("Predict_SurvModel_BART requires model and data", {
+  skip_if_not_installed("BART")
   model_bart_surv <- SurvModel_BART(data = train_data_surv, expvars = c("x1", "x2", "x3"), timevar = "time", eventvar = "status")
-  expect_error(Predict_SurvModel_BART(newdata = test_data_surv, times = time_points_surv), "argument \"modelout\" is missing")
-  expect_error(Predict_SurvModel_BART(modelout = model_bart_surv, times = time_points_surv), "argument \"newdata\" is missing")
-  expect_error(Predict_SurvModel_BART(modelout = model_bart_surv, newdata = test_data_surv), "argument \"times\" is missing")
+  expect_error(Predict_SurvModel_BART(newdata = test_data_surv), "argument \"modelout\" is missing")
+  expect_error(Predict_SurvModel_BART(modelout = model_bart_surv), "argument \"newdata\" is missing")
+  # newtimes is optional, so no error expected when omitted
 })
