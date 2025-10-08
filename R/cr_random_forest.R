@@ -145,7 +145,7 @@ CRModel_RF <- function(data, expvars, timevar, eventvar, failcode = 1,
 #'
 #' @importFrom randomForestSRC predict.rfsrc
 #' @export
-Predict_CRModel_RF <- function(modelout, newdata, newtimes = NULL) {
+Predict_CRModel_RF <- function(modelout, newdata, newtimes = NULL, failcode = NULL) {
 
   # ============================================================================
   # Input Validation

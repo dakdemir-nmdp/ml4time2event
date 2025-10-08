@@ -379,7 +379,7 @@ CRModel_DeepSurv <- function(data, expvars, timevar, eventvar, failcode = 1,
 #'
 #' @importFrom stats model.matrix
 #' @export
-Predict_CRModel_DeepSurv <- function(modelout, newdata, newtimes = NULL) {
+Predict_CRModel_DeepSurv <- function(modelout, newdata, newtimes = NULL, failcode = NULL) {
 
   # ============================================================================
   # Input Validation

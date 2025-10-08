@@ -61,7 +61,7 @@ test_that("CRModel_xgboost fits basic model", {
 
   # Check output structure
   expect_type(model, "list")
-  expect_named(model, c("xgb_model", "times", "varprof", "model_type",
+  expect_named(model, c("xgb_model", "xgb_models_all_causes", "all_event_types", "times", "varprof", "model_type",
                        "expvars", "timevar", "eventvar", "failcode", "time_range", "feature_names"))
 
   # Check model type
@@ -438,9 +438,9 @@ test_that("CR XGBoost has similar interface to other CR models", {
   )
 
   # Both should have similar output structure
-  expect_named(xgb_model, c("xgb_model", "times", "varprof", "model_type",
+  expect_named(xgb_model, c("xgb_model", "xgb_models_all_causes", "all_event_types", "times", "varprof", "model_type",
                            "expvars", "timevar", "eventvar", "failcode", "time_range", "feature_names"))
-  expect_named(gam_model, c("gam_model", "times", "varprof", "model_type",
+  expect_named(gam_model, c("gam_model", "gam_models_all_causes", "all_event_types", "times", "varprof", "model_type", 
                            "expvars", "timevar", "eventvar", "failcode", "time_range"))
 
   # Both should produce valid predictions
@@ -451,4 +451,43 @@ test_that("CR XGBoost has similar interface to other CR models", {
   expect_true(is.matrix(gam_preds$CIFs))
   expect_true(all(xgb_preds$CIFs >= 0 & xgb_preds$CIFs <= 1))
   expect_true(all(gam_preds$CIFs >= 0 & gam_preds$CIFs <= 1))
+})
+
+# ==============================================================================
+# Tests for failcode parameter
+# ==============================================================================
+
+test_that("Predict_CRModel_xgboost works with different failcode values", {
+  skip_if_not_installed("xgboost")
+  
+  # Fit model (should fit models for all event types)
+  model <- CRModel_xgboost(
+    data = train_data,
+    expvars = expvars_numeric,
+    timevar = "time",
+    eventvar = "event",
+    failcode = 1,
+    nrounds = 10
+  )
+  
+  # Test prediction for different event types
+  preds_event1 <- Predict_CRModel_xgboost(model, test_data, failcode = 1)
+  preds_event2 <- Predict_CRModel_xgboost(model, test_data, failcode = 2)
+  
+  # Should return different CIFs for different events
+  expect_false(identical(preds_event1$CIFs, preds_event2$CIFs))
+  
+  # Both should be properly bounded
+  expect_true(all(preds_event1$CIFs >= 0 & preds_event1$CIFs <= 1))
+  expect_true(all(preds_event2$CIFs >= 0 & preds_event2$CIFs <= 1))
+  
+  # Test invalid failcode
+  expect_error(
+    Predict_CRModel_xgboost(model, test_data, failcode = 99),
+    "failcode 99 was not present in training data"
+  )
+  
+  # Test that default uses model's failcode
+  preds_default <- Predict_CRModel_xgboost(model, test_data)
+  expect_identical(preds_default$CIFs, preds_event1$CIFs)
 })

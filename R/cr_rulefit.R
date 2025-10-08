@@ -242,7 +242,7 @@ CRModel_rulefit <- function(data, expvars, timevar, eventvar, failcode = 1,
 #' @importFrom partykit as.party
 #' @importFrom stats model.matrix
 #' @export
-Predict_CRModel_rulefit <- function(modelout, newdata, newtimes = NULL) {
+Predict_CRModel_rulefit <- function(modelout, newdata, newtimes = NULL, failcode = NULL) {
 
   # ============================================================================
   # Input Validation

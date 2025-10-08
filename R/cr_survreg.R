@@ -75,127 +75,185 @@ CRModel_SurvReg <- function(data, expvars, timevar, eventvar, failcode = 1,
     stop("Insufficient data after removing missing values. Need at least 10 observations.")
   }
 
-  # ============================================================================
-  # Cause-Specific Data Preparation
-  # ============================================================================
-  # Create cause-specific outcome: 1 for event of interest, 0 for censored/other events
-  XYTrain_cs <- XYTrain
-  XYTrain_cs$status_cs <- ifelse(XYTrain[[eventvar]] == failcode, 1,
-                                ifelse(XYTrain[[eventvar]] == 0, 0, 0))
+  # Get unique event times for the event of interest
+  event_times <- XYTrain[[timevar]][XYTrain[[eventvar]] == failcode]
+  if (length(event_times) == 0) {
+    stop("No events of type ", failcode, " in training data. Cannot fit competing risks model.")
+  }
 
-  # Get time range for the event of interest
-  event_times <- XYTrain_cs[[timevar]][XYTrain_cs$status_cs == 1]
+  # Store event time range for reference
   time_range <- c(0, max(event_times))
 
   # ============================================================================
-  # Forward Selection with AIC (adapted for cause-specific modeling)
+  # Model Fitting - Cause-Specific SurvReg Models for ALL Competing Events
   # ============================================================================
-  if (verbose) cat("Performing forward selection with AIC...\n")
+  # Identify all unique event types (excluding censoring = 0)
+  all_event_types <- sort(unique(XYTrain[[eventvar]][XYTrain[[eventvar]] != 0]))
 
-  selected_vars <- c()
-  candidate_vars <- expvars
+  if (verbose) {
+    cat("Fitting cause-specific SurvReg models for all event types:", paste(all_event_types, collapse = ", "), "\n")
+  }
 
-  # Start with intercept-only model AIC
-  null_formula <- stats::as.formula(paste("survival::Surv(", timevar, ", status_cs) ~ 1"))
-  null_model <- tryCatch(
-    survival::survreg(null_formula, data = XYTrain_cs, dist = dist, x = FALSE, y = FALSE),
-    error = function(e) {
-      if (verbose) warning("Failed to fit null model: ", e$message)
-      NULL
+  # Store models for all event types
+  survreg_models_all_causes <- vector("list", length(all_event_types))
+  names(survreg_models_all_causes) <- as.character(all_event_types)
+
+  # Fit a separate SurvReg model for each event type
+  for (cause in all_event_types) {
+    if (verbose) cat("Fitting SurvReg model for event type", cause, "...\n")
+
+    # Create cause-specific data: event = 1 if this cause, 0 otherwise (censored or competing)
+    XYTrain_cause <- XYTrain
+    XYTrain_cause$status_cs <- ifelse(XYTrain[[eventvar]] == cause, 1, 0)
+
+    if (sum(XYTrain_cause$status_cs) < 5) {
+      warning("Fewer than 5 events of type ", cause, ". Skipping this cause.")
+      survreg_models_all_causes[[as.character(cause)]] <- NULL
+      next
     }
-  )
-  if (is.null(null_model)) stop("Failed to fit intercept-only model.")
-  best_aic <- stats::AIC(null_model)
-  if (verbose) print(paste("Initial AIC (Intercept only):", round(best_aic, 2)))
 
-  while (length(candidate_vars) > 0) {
-    aic_values <- numeric(length(candidate_vars))
-    names(aic_values) <- candidate_vars
+    # ============================================================================
+    # Forward Selection with AIC (adapted for cause-specific modeling)
+    # ============================================================================
+    if (verbose && cause == failcode) cat("Performing forward selection with AIC for event", cause, "...\n")
 
-    for (i in seq_along(candidate_vars)) {
-      var <- candidate_vars[i]
-      current_vars <- c(selected_vars, var)
-      formula_str <- paste("survival::Surv(", timevar, ", status_cs) ~", paste(current_vars, collapse = "+"))
-      formula <- stats::as.formula(formula_str)
+    selected_vars <- c()
+    candidate_vars <- expvars
 
-      model <- tryCatch(
-        survival::survreg(formula, data = XYTrain_cs, dist = dist, x = FALSE, y = FALSE),
+    # Start with intercept-only model AIC
+    null_formula <- stats::as.formula(paste("survival::Surv(", timevar, ", status_cs) ~ 1"))
+    null_model <- tryCatch(
+      survival::survreg(null_formula, data = XYTrain_cause, dist = dist, x = FALSE, y = FALSE),
+      error = function(e) {
+        if (verbose) warning("Failed to fit null model for cause ", cause, ": ", e$message)
+        NULL
+      }
+    )
+    
+    if (is.null(null_model)) {
+      warning("Failed to fit intercept-only model for cause ", cause, ". Skipping.")
+      next
+    }
+    
+    best_aic <- stats::AIC(null_model)
+    if (verbose && cause == failcode) print(paste("Initial AIC (Intercept only):", round(best_aic, 2)))
+
+    # Only do variable selection for the main event to save time
+    if (cause == failcode) {
+      while (length(candidate_vars) > 0) {
+        aic_values <- numeric(length(candidate_vars))
+        names(aic_values) <- candidate_vars
+
+        for (i in seq_along(candidate_vars)) {
+          var <- candidate_vars[i]
+          current_vars <- c(selected_vars, var)
+          formula_str <- paste("survival::Surv(", timevar, ", status_cs) ~", paste(current_vars, collapse = "+"))
+          formula <- stats::as.formula(formula_str)
+
+          model <- tryCatch(
+            survival::survreg(formula, data = XYTrain_cause, dist = dist, x = FALSE, y = FALSE),
+            error = function(e) {
+              if (verbose) warning("Failed to fit model with var ", var, ": ", e$message)
+              NULL
+            }
+          )
+
+          if (!is.null(model)) {
+            aic_values[i] <- stats::AIC(model)
+          } else {
+            aic_values[i] <- Inf # Penalize models that fail to fit
+          }
+        }
+
+        best_candidate_idx <- which.min(aic_values)
+        best_candidate_aic <- aic_values[best_candidate_idx]
+        best_candidate_var <- candidate_vars[best_candidate_idx]
+
+        # Add variable if it improves AIC
+        if (best_candidate_aic < best_aic) {
+          if (verbose) print(paste("Adding", best_candidate_var, "AIC:", round(best_candidate_aic, 2),
+                                  "(Improvement:", round(best_aic - best_candidate_aic, 2), ")"))
+          selected_vars <- c(selected_vars, best_candidate_var)
+          candidate_vars <- setdiff(candidate_vars, best_candidate_var)
+          best_aic <- best_candidate_aic
+        } else {
+          if (verbose) print(paste("No improvement adding remaining variables. Best AIC:", round(best_aic, 2)))
+          break # Stop if no variable improves AIC
+        }
+      } # End while loop
+    } else {
+      # For other causes, use all variables to save time
+      selected_vars <- expvars
+    }
+
+    # ============================================================================
+    # Fit the Final Selected Model
+    # ============================================================================
+    if (length(selected_vars) > 0) {
+      final_formula_str <- paste("survival::Surv(", timevar, ", status_cs) ~", paste(selected_vars, collapse = "+"))
+      final_model_cause <- tryCatch(
+        survival::survreg(stats::as.formula(final_formula_str), data = XYTrain_cause,
+                         dist = dist, x = TRUE, y = TRUE),
         error = function(e) {
-          if (verbose) warning("Failed to fit model with var ", var, ": ", e$message)
+          warning("Failed to fit SurvReg model for cause ", cause, ": ", e$message)
           NULL
         }
       )
-
-      if (!is.null(model)) {
-        aic_values[i] <- stats::AIC(model)
-      } else {
-        aic_values[i] <- Inf # Penalize models that fail to fit
-      }
-    }
-
-    best_candidate_idx <- which.min(aic_values)
-    best_candidate_aic <- aic_values[best_candidate_idx]
-    best_candidate_var <- candidate_vars[best_candidate_idx]
-
-    # Add variable if it improves AIC
-    if (best_candidate_aic < best_aic) {
-      if (verbose) print(paste("Adding", best_candidate_var, "AIC:", round(best_candidate_aic, 2),
-                              "(Improvement:", round(best_aic - best_candidate_aic, 2), ")"))
-      selected_vars <- c(selected_vars, best_candidate_var)
-      candidate_vars <- setdiff(candidate_vars, best_candidate_var)
-      best_aic <- best_candidate_aic
     } else {
-      if (verbose) print(paste("No improvement adding remaining variables. Best AIC:", round(best_aic, 2)))
-      break # Stop if no variable improves AIC
+      # If no variables selected, use the intercept-only model
+      if (verbose && cause == failcode) warning("No variables selected by forward selection. Using intercept-only model.")
+      final_model_cause <- tryCatch(
+        survival::survreg(null_formula, data = XYTrain_cause, dist = dist, x = TRUE, y = TRUE),
+        error = function(e) {
+          warning("Failed to fit intercept-only model for cause ", cause, ": ", e$message)
+          NULL
+        }
+      )
     }
-  } # End while loop
 
-  # ============================================================================
-  # Fit the Final Selected Model
-  # ============================================================================
-  if (length(selected_vars) > 0) {
-    final_formula_str <- paste("survival::Surv(", timevar, ", status_cs) ~", paste(selected_vars, collapse = "+"))
-    final_model <- survival::survreg(stats::as.formula(final_formula_str), data = XYTrain_cs,
-                                     dist = dist, x = TRUE, y = TRUE)
-  } else {
-    # If no variables selected, use the intercept-only model
-    if (verbose) warning("No variables selected by forward selection. Using intercept-only model.")
-    final_model <- survival::survreg(null_formula, data = XYTrain_cs, dist = dist, x = TRUE, y = TRUE)
-    selected_vars <- character(0)
+    if (is.null(final_model_cause)) {
+      warning("Failed to fit any model for cause ", cause, ". Skipping.")
+      next
+    }
+
+    # ============================================================================
+    # Create Baseline Model for Prediction
+    # ============================================================================
+    # Get linear predictors for training data
+    train_linear_preds <- predict(final_model_cause, type = "linear")
+
+    # IMPORTANT: Convert linear predictors to risk scores (negate for proper direction)
+    # In survival models, higher linear predictors mean longer survival (lower risk)
+    # But for CIF, we want higher risk scores to give higher CIF
+    train_risk_scores <- -train_linear_preds
+
+    # Create survival data for the cause-specific case
+    train_survival_data <- data.frame(
+      time = XYTrain_cause[[timevar]],
+      event = XYTrain_cause$status_cs
+    )
+
+    # Use score2proba to create baseline hazard model
+    baseline_info <- score2proba(
+      datasurv = train_survival_data,
+      score = train_risk_scores,
+      conf.int = 0.95,
+      which.est = "point"
+    )
+
+    # Store baseline model in the survreg model object
+    final_model_cause$baseline_model <- baseline_info$model
+    final_model_cause$baseline_sf <- baseline_info$sf
+
+    survreg_models_all_causes[[as.character(cause)]] <- final_model_cause
   }
+
+  # The main model for the event of interest
+  final_model <- survreg_models_all_causes[[as.character(failcode)]]
 
   if (is.null(final_model)) {
-    stop("No valid model could be fit even after selection. Please check the data and variables.")
+    stop("Failed to fit SurvReg model for the event of interest (failcode = ", failcode, ")")
   }
-
-  # ============================================================================
-  # Create Baseline Model for Prediction
-  # ============================================================================
-  # Get linear predictors for training data
-  train_linear_preds <- predict(final_model, type = "linear")
-
-  # IMPORTANT: Convert linear predictors to risk scores (negate for proper direction)
-  # In survival models, higher linear predictors mean longer survival (lower risk)
-  # But for CIF, we want higher risk scores to give higher CIF
-  train_risk_scores <- -train_linear_preds
-
-  # Create survival data for the cause-specific case
-  train_survival_data <- data.frame(
-    time = XYTrain_cs[[timevar]],
-    event = XYTrain_cs$status_cs
-  )
-
-  # Use score2proba to create baseline hazard model
-  baseline_info <- score2proba(
-    datasurv = train_survival_data,
-    score = train_risk_scores,
-    conf.int = 0.95,
-    which.est = "point"
-  )
-
-  # Store baseline model in the survreg model object
-  final_model$baseline_model <- baseline_info$model
-  final_model$baseline_sf <- baseline_info$sf
 
   # ============================================================================
   # Return Results
@@ -204,7 +262,9 @@ CRModel_SurvReg <- function(data, expvars, timevar, eventvar, failcode = 1,
 
   result <- list(
     survreg_model = final_model,
-    times = sort(unique(XYTrain_cs[[timevar]][XYTrain_cs$status_cs == 1])),
+    survreg_models_all_causes = survreg_models_all_causes,  # All cause-specific models for Aalen-Johansen
+    all_event_types = all_event_types,  # Event type codes
+    times = sort(unique(event_times)),
     varprof = varprof,
     model_type = "cr_survreg",
     expvars = expvars,
@@ -228,6 +288,8 @@ CRModel_SurvReg <- function(data, expvars, timevar, eventvar, failcode = 1,
 #' @param newtimes optional numeric vector of time points for prediction.
 #'   If NULL (default), uses the times from the training data.
 #'   Can be any positive values - interpolation handles all time points.
+#' @param failcode integer, the code for the event of interest for CIF prediction.
+#'   If NULL (default), uses the failcode from the model training.
 #'
 #' @return a list containing:
 #'   \item{CIFs}{predicted cumulative incidence function matrix
@@ -236,7 +298,7 @@ CRModel_SurvReg <- function(data, expvars, timevar, eventvar, failcode = 1,
 #'
 #' @importFrom stats predict
 #' @export
-Predict_CRModel_SurvReg <- function(modelout, newdata, newtimes = NULL) {
+Predict_CRModel_SurvReg <- function(modelout, newdata, newtimes = NULL, failcode = NULL) {
 
   # ============================================================================
   # Input Validation
@@ -253,6 +315,19 @@ Predict_CRModel_SurvReg <- function(modelout, newdata, newtimes = NULL) {
   if (length(missing_vars) > 0) {
     stop("The following variables missing in newdata: ",
          paste(missing_vars, collapse = ", "))
+  }
+
+  # Handle failcode parameter
+  if (is.null(failcode)) {
+    failcode <- modelout$failcode  # Use the failcode from training
+  } else {
+    if (!is.numeric(failcode) || length(failcode) != 1 || failcode < 1) {
+      stop("'failcode' must be a positive integer")
+    }
+    if (!failcode %in% modelout$all_event_types) {
+      stop("failcode ", failcode, " was not present in training data. Available event types: ",
+           paste(modelout$all_event_types, collapse = ", "))
+    }
   }
 
   # Generate default times if not specified
@@ -304,50 +379,85 @@ Predict_CRModel_SurvReg <- function(modelout, newdata, newtimes = NULL) {
   }
 
   # ============================================================================
-  # Make Predictions
+  # Make Predictions using Aalen-Johansen Estimator
   # ============================================================================
-  # Get linear predictors from the parametric model
-  linear_preds <- stats::predict(modelout$survreg_model,
-                                 newdata = newdata_prepared,
-                                 type = "linear")
+  # Get survival predictions from ALL cause-specific SurvReg models
+  cause_specific_survs <- vector("list", length(modelout$all_event_types))
+  names(cause_specific_survs) <- as.character(modelout$all_event_types)
 
-  # IMPORTANT: In survival models, higher linear predictors usually mean LONGER survival (lower risk)
-  # But for competing risks CIF, we want higher risk scores to give higher CIF
-  # So we need to negate the linear predictors to get proper risk scores
-  risk_scores <- -linear_preds
+  # Predict survival for each cause
+  for (cause in modelout$all_event_types) {
+    cause_char <- as.character(cause)
 
-  # Use the stored baseline hazard from the training fit
-  # and the new scores (risk_scores) to get survival probabilities for the new data
-  sf <- survival::survfit(
-    modelout$survreg_model$baseline_model, # Use the stored Cox model
-    newdata = data.frame("score" = risk_scores),
-    conf.int = .95
-  )
+    if (is.null(modelout$survreg_models_all_causes[[cause_char]])) {
+      # If model wasn't fitted for this cause, assume no events (S(t) = 1)
+      warning("No model available for cause ", cause, ". Assuming S(t) = 1 for all times.")
+      # We'll handle this in aalenJohansenCIF by providing a matrix of 1s
+      next
+    }
 
-  # Extract survival probabilities
-  surv_probs <- sf$surv # Matrix: rows=times, cols=observations
-  surv_times <- sf$time
+    # Get linear predictors from the SurvReg model for this cause
+    linear_preds_cause <- stats::predict(modelout$survreg_models_all_causes[[cause_char]],
+                                         newdata = newdata_prepared,
+                                         type = "linear")
 
-  # Ensure matrix format
-  if (!is.matrix(surv_probs)) {
-    surv_probs <- matrix(surv_probs, ncol = 1)
+    # IMPORTANT: In survival models, higher linear predictors usually mean LONGER survival (lower risk)
+    # But for competing risks CIF, we want higher risk scores to give higher CIF
+    # So we need to negate the linear predictors to get proper risk scores
+    risk_scores_cause <- -linear_preds_cause
+
+    # Use the stored baseline hazard from the training fit
+    sf_cause <- tryCatch(
+      survival::survfit(
+        modelout$survreg_models_all_causes[[cause_char]]$baseline_model,
+        newdata = data.frame("score" = risk_scores_cause),
+        conf.int = 0.95
+      ),
+      error = function(e) {
+        warning("Prediction failed for cause ", cause, ": ", e$message)
+        NULL
+      }
+    )
+
+    if (is.null(sf_cause)) {
+      next
+    }
+
+    # Extract survival probabilities
+    surv_probs_cause <- sf_cause$surv
+    surv_times_cause <- sf_cause$time
+
+    # Ensure matrix format
+    if (!is.matrix(surv_probs_cause)) {
+      surv_probs_cause <- matrix(surv_probs_cause, ncol = 1)
+    }
+
+    # Store in the list (rows = times, cols = observations)
+    cause_specific_survs[[cause_char]] <- surv_probs_cause
   }
 
-  # For cause-specific model, CIF is approximately 1 - S(t)
-  # where S(t) is the cause-specific survival function
-  cif_matrix <- 1 - surv_probs
+  # Remove NULL entries
+  cause_specific_survs <- cause_specific_survs[!sapply(cause_specific_survs, is.null)]
 
-  # Ensure CIFs are properly bounded [0,1]
-  cif_matrix <- pmin(pmax(cif_matrix, 0), 1)
+  if (length(cause_specific_survs) == 0) {
+    stop("No valid cause-specific survival predictions could be generated")
+  }
 
+  # Get the time grid from the first model (they should all have similar times)
+  surv_times <- sf_cause$time
+
+  # Use Aalen-Johansen estimator to calculate proper CIF
+  cif_matrix <- aalenJohansenCIF(
+    cause_specific_survs = cause_specific_survs,
+    times = surv_times,
+    event_of_interest = failcode
+  )
+
+  # ============================================================================
   # ============================================================================
   # Apply Interpolation
   # ============================================================================
-  if (is.null(newtimes)) {
-    # Return predictions in native time grid: [times, observations]
-    result_cifs <- cif_matrix  # cif_matrix is already [times, observations]
-    result_times <- surv_times
-  } else {
+  if (!is.null(newtimes)) {
     # Interpolate to new time points
     if (!is.numeric(newtimes) || any(newtimes < 0)) {
       stop("'newtimes' must be a numeric vector of non-negative values")
@@ -364,6 +474,10 @@ Predict_CRModel_SurvReg <- function(modelout, newdata, newtimes = NULL) {
     # cifMatInterpolaltor returns [newtimes, observations], keep as [times, observations]
     result_cifs <- pred_cifs
     result_times <- newtimes
+  } else {
+    # Return predictions in native time grid: [times, observations]
+    result_cifs <- cif_matrix  # cif_matrix is already [times, observations]
+    result_times <- surv_times
   }
 
   # ============================================================================

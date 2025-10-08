@@ -60,7 +60,7 @@ test_that("CRModel_GAM fits basic model", {
 
   # Check output structure
   expect_type(model, "list")
-  expect_named(model, c("gam_model", "times", "varprof", "model_type",
+  expect_named(model, c("gam_model", "gam_models_all_causes", "all_event_types", "times", "varprof", "model_type",
                        "expvars", "timevar", "eventvar", "failcode", "time_range"))
 
   # Check model type

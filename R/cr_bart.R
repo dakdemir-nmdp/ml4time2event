@@ -152,7 +152,7 @@ CRModel_BART <- function(data, expvars, timevar, eventvar, failcode = 1,
 #' @importFrom BART crisk.pre.bart bartModelMatrix
 #' @importFrom stats model.matrix
 #' @export
-Predict_CRModel_BART <- function(modelout, newdata, newtimes = NULL) {
+Predict_CRModel_BART <- function(modelout, newdata, newtimes = NULL, failcode = NULL) {
 
   # ============================================================================
   # Input Validation
@@ -169,6 +169,20 @@ Predict_CRModel_BART <- function(modelout, newdata, newtimes = NULL) {
   if (length(missing_vars) > 0) {
     stop("The following variables missing in newdata: ",
          paste(missing_vars, collapse = ", "))
+  }
+
+  # Handle failcode parameter
+  if (is.null(failcode)) {
+    failcode <- modelout$failcode  # Use the failcode from training
+  } else {
+    if (!is.numeric(failcode) || length(failcode) != 1 || failcode < 1) {
+      stop("'failcode' must be a positive integer")
+    }
+    # Note: BART models can only predict for the event type they were trained on
+    if (failcode != modelout$failcode) {
+      stop("BART models can only predict for the event they were trained on (failcode = ", 
+           modelout$failcode, "). Requested failcode: ", failcode)
+    }
   }
 
   # ============================================================================

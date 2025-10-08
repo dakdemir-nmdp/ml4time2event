@@ -110,72 +110,97 @@ CRModel_Cox <- function(data, expvars, timevar, eventvar, failcode = 1,
   time_range <- c(0, max(event_times))
 
   # ============================================================================
-  # Model Fitting - Cause-Specific Cox Model
+  # Model Fitting - Cause-Specific Cox Models for ALL Competing Events
   # ============================================================================
-  if (verbose) cat("Fitting cause-specific Cox model for event type", failcode, "...\n")
+  # Identify all unique event types (excluding censoring = 0)
+  all_event_types <- sort(unique(XYTrain[[eventvar]][XYTrain[[eventvar]] != 0]))
 
-  # Create cause-specific data: event = 1 if failcode, 0 if censored, NA if other competing event
-  XYTrain$status_cs <- ifelse(XYTrain[[eventvar]] == 0, 0,  # censored
-                              ifelse(XYTrain[[eventvar]] == failcode, 1, NA))  # event of interest or competing
-
-  # Remove competing events (treat as censored for this cause-specific model)
-  XYTrain_cs <- XYTrain[!is.na(XYTrain$status_cs), , drop = FALSE]
-
-  if (nrow(XYTrain_cs) < 10) {
-    stop("Insufficient data after removing competing events. Need at least 10 observations.")
+  if (verbose) {
+    cat("Fitting cause-specific Cox models for all event types:", paste(all_event_types, collapse = ", "), "\n")
   }
 
-  # Define formula
-  form <- stats::as.formula(
-    paste0("survival::Surv(", timevar, ", status_cs) ~ ",
-           paste(expvars, collapse = " + "))
-  )
+  # Store models for all event types
+  cph_models_all_causes <- vector("list", length(all_event_types))
+  names(cph_models_all_causes) <- as.character(all_event_types)
 
-  if (verbose) cat("Fitting Cox model...\n")
+  # Fit a separate Cox model for each event type
+  for (cause in all_event_types) {
+    if (verbose) cat("Fitting Cox model for event type", cause, "...\n")
 
-  # Fit initial Cox model
-  cph_model <- tryCatch(
-    survival::coxph(form, data = XYTrain_cs, x = TRUE, y = TRUE),
-    error = function(e) {
-      stop("Failed to fit cause-specific Cox model: ", e$message)
-    }
-  )
+    # Create cause-specific data: event = 1 if this cause, 0 otherwise (censored or competing)
+    XYTrain_cause <- XYTrain
+    XYTrain_cause$status_cs <- ifelse(XYTrain[[eventvar]] == cause, 1, 0)
 
-  # Variable selection
-  if (varsel != "none") {
-    if (verbose) cat("Performing variable selection (", varsel, ", ", penalty, ")...\n", sep="")
-
-    # Set penalty parameter k for step()
-    k_penalty <- switch(penalty, "AIC" = 2, "BIC" = log(nrow(XYTrain_cs)))
-
-    # Define scope for forward/both methods
-    if (varsel %in% c("forward", "both")) {
-      null_formula <- stats::as.formula(
-        paste0("survival::Surv(", timevar, ", status_cs) ~ 1")
-      )
-      null_model <- survival::coxph(null_formula, data = XYTrain_cs, x = TRUE, y = TRUE)
-      lower_scope <- null_formula
-      upper_scope <- form
+    if (sum(XYTrain_cause$status_cs) < 5) {
+      warning("Fewer than 5 events of type ", cause, ". Skipping this cause.")
+      cph_models_all_causes[[as.character(cause)]] <- NULL
+      next
     }
 
-    # Perform stepwise selection
-    cph_model <- tryCatch(
-      {
-        if (varsel == "backward") {
-          stats::step(cph_model, direction = "backward", k = k_penalty, trace = as.numeric(verbose))
-        } else if (varsel == "forward") {
-          stats::step(null_model, direction = "forward", scope = list(lower = lower_scope, upper = upper_scope),
-                     k = k_penalty, trace = as.numeric(verbose))
-        } else if (varsel == "both") {
-          stats::step(null_model, direction = "both", scope = list(lower = lower_scope, upper = upper_scope),
-                     k = k_penalty, trace = as.numeric(verbose))
-        }
-      },
+    # Define formula
+    form <- stats::as.formula(
+      paste0("survival::Surv(", timevar, ", status_cs) ~ ",
+             paste(expvars, collapse = " + "))
+    )
+
+    # Fit initial Cox model
+    cph_model_cause <- tryCatch(
+      survival::coxph(form, data = XYTrain_cause, x = TRUE, y = TRUE),
       error = function(e) {
-        warning("Variable selection failed: ", e$message, ". Using full model.")
-        cph_model # Return original full model
+        warning("Failed to fit Cox model for cause ", cause, ": ", e$message)
+        NULL
       }
     )
+
+    if (is.null(cph_model_cause)) {
+      next
+    }
+
+    # Variable selection (only for the event of interest to save time)
+    if (varsel != "none" && cause == failcode) {
+      if (verbose) cat("Performing variable selection (", varsel, ", ", penalty, ")...\n", sep="")
+
+      # Set penalty parameter k for step()
+      k_penalty <- switch(penalty, "AIC" = 2, "BIC" = log(nrow(XYTrain_cause)))
+
+      # Define scope for forward/both methods
+      if (varsel %in% c("forward", "both")) {
+        null_formula <- stats::as.formula(
+          paste0("survival::Surv(", timevar, ", status_cs) ~ 1")
+        )
+        null_model <- survival::coxph(null_formula, data = XYTrain_cause, x = TRUE, y = TRUE)
+        lower_scope <- null_formula
+        upper_scope <- form
+      }
+
+      # Perform stepwise selection
+      cph_model_cause <- tryCatch(
+        {
+          if (varsel == "backward") {
+            stats::step(cph_model_cause, direction = "backward", k = k_penalty, trace = as.numeric(verbose))
+          } else if (varsel == "forward") {
+            stats::step(null_model, direction = "forward", scope = list(lower = lower_scope, upper = upper_scope),
+                       k = k_penalty, trace = as.numeric(verbose))
+          } else if (varsel == "both") {
+            stats::step(null_model, direction = "both", scope = list(lower = lower_scope, upper = upper_scope),
+                       k = k_penalty, trace = as.numeric(verbose))
+          }
+        },
+        error = function(e) {
+          warning("Variable selection failed for cause ", cause, ": ", e$message, ". Using full model.")
+          cph_model_cause # Return original full model
+        }
+      )
+    }
+
+    cph_models_all_causes[[as.character(cause)]] <- cph_model_cause
+  }
+
+  # The main model for the event of interest
+  cph_model <- cph_models_all_causes[[as.character(failcode)]]
+
+  if (is.null(cph_model)) {
+    stop("Failed to fit Cox model for the event of interest (failcode = ", failcode, ")")
   }
 
   # ============================================================================
@@ -185,7 +210,9 @@ CRModel_Cox <- function(data, expvars, timevar, eventvar, failcode = 1,
 
   result <- list(
     cph_model = cph_model,
-    times = sort(unique(XYTrain_cs[[timevar]][XYTrain_cs$status_cs == 1])),
+    cph_models_all_causes = cph_models_all_causes,  # All cause-specific models for Aalen-Johansen
+    all_event_types = all_event_types,  # Event type codes
+    times = sort(unique(event_times)),
     varprof = varprof,
     model_type = "cr_cox",
     expvars = expvars,
@@ -209,9 +236,10 @@ CRModel_Cox <- function(data, expvars, timevar, eventvar, failcode = 1,
 #' @param newtimes optional numeric vector of time points for prediction.
 #'   If NULL (default), uses the times from the training data.
 #'   Can be any positive values - interpolation handles all time points.
+#' @param failcode integer, the code for the event of interest for CIF prediction.
+#'   If NULL (default), uses the failcode from the model training.
 #'
 #' @return a list containing:
-#'   \item{cph_modelTestPredict}{the raw survfit object from prediction}
 #'   \item{CIFs}{predicted cumulative incidence function matrix
 #'     (rows=times, cols=observations)}
 #'   \item{Times}{the times at which CIFs are calculated}
@@ -232,7 +260,7 @@ CRModel_Cox <- function(data, expvars, timevar, eventvar, failcode = 1,
 #' preds_custom <- Predict_CRModel_Cox(model, test_data,
 #'                                    newtimes = c(30, 60, 90, 180, 365))
 #' }
-Predict_CRModel_Cox <- function(modelout, newdata, newtimes = NULL) {
+Predict_CRModel_Cox <- function(modelout, newdata, newtimes = NULL, failcode = NULL) {
 
   # ============================================================================
   # Input Validation
@@ -249,6 +277,19 @@ Predict_CRModel_Cox <- function(modelout, newdata, newtimes = NULL) {
   if (length(missing_vars) > 0) {
     stop("The following variables missing in newdata: ",
          paste(missing_vars, collapse = ", "))
+  }
+
+  # Handle failcode parameter
+  if (is.null(failcode)) {
+    failcode <- modelout$failcode  # Use the failcode from training
+  } else {
+    if (!is.numeric(failcode) || length(failcode) != 1 || failcode < 1) {
+      stop("'failcode' must be a positive integer")
+    }
+    if (!failcode %in% modelout$all_event_types) {
+      stop("failcode ", failcode, " was not present in training data. Available event types: ",
+           paste(modelout$all_event_types, collapse = ", "))
+    }
   }
 
   # Generate default times if not specified
@@ -300,30 +341,64 @@ Predict_CRModel_Cox <- function(modelout, newdata, newtimes = NULL) {
   }
 
   # ============================================================================
-  # Make Predictions
+  # Make Predictions using Aalen-Johansen Estimator
   # ============================================================================
-  # Get survival predictions from the cause-specific Cox model
-  cph_modelTestPredict <- tryCatch(
-    survival::survfit(modelout$cph_model, newdata = newdata_prepared),
-    error = function(e) {
-      stop("Prediction failed: ", e$message)
+  # Get survival predictions from ALL cause-specific Cox models
+  cause_specific_survs <- vector("list", length(modelout$all_event_types))
+  names(cause_specific_survs) <- as.character(modelout$all_event_types)
+
+  # Predict survival for each cause
+  for (cause in modelout$all_event_types) {
+    cause_char <- as.character(cause)
+
+    if (is.null(modelout$cph_models_all_causes[[cause_char]])) {
+      # If model wasn't fitted for this cause, assume no events (S(t) = 1)
+      warning("No model available for cause ", cause, ". Assuming S(t) = 1 for all times.")
+      # We'll handle this in aalenJohansenCIF by providing a matrix of 1s
+      next
     }
-  )
 
-  # Extract survival probabilities
-  surv_probs <- cph_modelTestPredict$surv
-  surv_times <- cph_modelTestPredict$time
+    cph_predict <- tryCatch(
+      survival::survfit(modelout$cph_models_all_causes[[cause_char]], newdata = newdata_prepared),
+      error = function(e) {
+        warning("Prediction failed for cause ", cause, ": ", e$message)
+        NULL
+      }
+    )
 
-  # Ensure matrix format
-  if (!is.matrix(surv_probs)) {
-    surv_probs <- matrix(surv_probs, ncol = 1)
+    if (is.null(cph_predict)) {
+      next
+    }
+
+    # Extract survival probabilities
+    surv_probs_cause <- cph_predict$surv
+    surv_times_cause <- cph_predict$time
+
+    # Ensure matrix format
+    if (!is.matrix(surv_probs_cause)) {
+      surv_probs_cause <- matrix(surv_probs_cause, ncol = 1)
+    }
+
+    # Store in the list (rows = times, cols = observations)
+    cause_specific_survs[[cause_char]] <- surv_probs_cause
   }
 
-  # For cause-specific Cox model, the CIF is approximately 1 - S(t)
-  # where S(t) is the cause-specific survival function
-  # This is a simplification; in practice, competing risks CIFs require
-  # more complex calculation accounting for all causes
-  cif_matrix <- 1 - surv_probs
+  # Remove NULL entries
+  cause_specific_survs <- cause_specific_survs[!sapply(cause_specific_survs, is.null)]
+
+  if (length(cause_specific_survs) == 0) {
+    stop("No valid cause-specific survival predictions could be generated")
+  }
+
+  # Get the time grid from the first model (they should all have similar times)
+  surv_times <- cph_predict$time
+
+  # Use Aalen-Johansen estimator to calculate proper CIF
+  cif_matrix <- aalenJohansenCIF(
+    cause_specific_survs = cause_specific_survs,
+    times = surv_times,
+    event_of_interest = failcode
+  )
 
   # ============================================================================
   # Apply Interpolation
@@ -355,7 +430,6 @@ Predict_CRModel_Cox <- function(modelout, newdata, newtimes = NULL) {
   # Return Results
   # ============================================================================
   result <- list(
-    cph_modelTestPredict = cph_modelTestPredict,
     CIFs = result_cifs,
     Times = result_times
   )

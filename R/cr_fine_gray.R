@@ -152,6 +152,9 @@ CRModel_FineGray <- function(data, expvars, timevar, eventvar, failcode = 1,
 #' @param newtimes optional numeric vector of time points for prediction.
 #'   If NULL (default), generates 50 equally-spaced points from 0 to max observed time.
 #'   Can be any positive values - interpolation handles all time points.
+#' @param failcode integer, the code for the event of interest for CIF prediction.
+#'   If NULL (default), uses the failcode from the model training.
+#'   Note: Fine-Gray models can only predict for the event they were trained on.
 #'
 #' @return a list containing:
 #'   \item{CIFs}{predicted cumulative incidence function matrix
@@ -175,7 +178,7 @@ CRModel_FineGray <- function(data, expvars, timevar, eventvar, failcode = 1,
 #' preds_custom <- Predict_CRModel_FineGray(model, test_data,
 #'                                         newtimes = c(30, 60, 90, 180, 365))
 #' }
-Predict_CRModel_FineGray <- function(modelout, newdata, newtimes = NULL) {
+Predict_CRModel_FineGray <- function(modelout, newdata, newtimes = NULL, failcode = NULL) {
 
   # ============================================================================
   # Input Validation
@@ -192,6 +195,20 @@ Predict_CRModel_FineGray <- function(modelout, newdata, newtimes = NULL) {
   if (length(missing_vars) > 0) {
     stop("The following variables missing in newdata: ",
          paste(missing_vars, collapse = ", "))
+  }
+
+  # Handle failcode parameter
+  if (is.null(failcode)) {
+    failcode <- modelout$failcode  # Use the failcode from training
+  } else {
+    if (!is.numeric(failcode) || length(failcode) != 1 || failcode < 1) {
+      stop("'failcode' must be a positive integer")
+    }
+    # Note: Fine-Gray models can only predict for the event type they were trained on
+    if (failcode != modelout$failcode) {
+      stop("Fine-Gray models can only predict for the event they were trained on (failcode = ", 
+           modelout$failcode, "). Requested failcode: ", failcode)
+    }
   }
 
   # Generate default times if not specified

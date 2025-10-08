@@ -79,81 +79,126 @@ CRModel_xgboost <- function(data, expvars, timevar, eventvar, failcode = 1,
     stop("Insufficient data after removing missing values. Need at least 10 observations.")
   }
 
-  # ============================================================================
-  # Cause-Specific Data Preparation
-  # ============================================================================
-  # Create cause-specific outcome: 1 for event of interest, 0 for censored/other events
-  XYTrain_cs <- XYTrain
-  XYTrain_cs$status_cs <- ifelse(XYTrain[[eventvar]] == failcode, 1,
-                                ifelse(XYTrain[[eventvar]] == 0, 0, 0))
+  # Get unique event times for the event of interest
+  event_times <- XYTrain[[timevar]][XYTrain[[eventvar]] == failcode]
+  if (length(event_times) == 0) {
+    stop("No events of type ", failcode, " in training data. Cannot fit competing risks model.")
+  }
 
-  # Get time range for the event of interest
-  event_times <- XYTrain_cs[[timevar]][XYTrain_cs$status_cs == 1]
+  # Store event time range for reference
   time_range <- c(0, max(event_times))
 
   # ============================================================================
-  # Prepare Data Matrix for XGBoost
+  # Model Fitting - Cause-Specific XGBoost Models for ALL Competing Events
   # ============================================================================
-  # Prepare data matrix (handle factors using model.matrix)
-  X <- stats::model.matrix(~-1+., XYTrain_cs[, expvars, drop = FALSE])
-  feature_names <- colnames(X)
+  # Identify all unique event types (excluding censoring = 0)
+  all_event_types <- sort(unique(XYTrain[[eventvar]][XYTrain[[eventvar]] != 0]))
 
-  # Prepare labels for XGBoost: negative time for censored, positive time for event
-  ytimes <- XYTrain_cs[[timevar]]
-  yevents <- XYTrain_cs$status_cs
-  yTrain <- ytimes
-  yTrain[yevents == 0] <- (-yTrain[yevents == 0])
+  if (verbose) {
+    cat("Fitting cause-specific XGBoost models for all event types:", paste(all_event_types, collapse = ", "), "\n")
+  }
 
-  # ============================================================================
-  # XGBoost Parameters
-  # ============================================================================
-  params <- list(
-    objective = 'survival:cox',
-    eval_metric = "cox-nloglik",
-    eta = eta,
-    max_depth = max_depth,
-    ...
-  )
+  # Store models for all event types
+  xgb_models_all_causes <- vector("list", length(all_event_types))
+  names(xgb_models_all_causes) <- as.character(all_event_types)
 
-  # ============================================================================
-  # Train XGBoost Model
-  # ============================================================================
-  if (verbose) cat("Training cause-specific XGBoost model...\n")
+  # Fit a separate XGBoost model for each event type
+  for (cause in all_event_types) {
+    if (verbose) cat("Fitting XGBoost model for event type", cause, "...\n")
 
-  # Create DMatrix
-  dtrain <- xgboost::xgb.DMatrix(data = X, label = yTrain)
+    # Create cause-specific data: event = 1 if this cause, 0 otherwise (censored or competing)
+    XYTrain_cause <- XYTrain
+    XYTrain_cause$status_cs <- ifelse(XYTrain[[eventvar]] == cause, 1, 0)
 
-  # Train the model
-  xgb_model <- xgboost::xgb.train(
-    params = params,
-    data = dtrain,
-    nrounds = nrounds,
-    verbose = ifelse(verbose, 1, 0)
-  )
+    if (sum(XYTrain_cause$status_cs) < 5) {
+      warning("Fewer than 5 events of type ", cause, ". Skipping this cause.")
+      xgb_models_all_causes[[as.character(cause)]] <- NULL
+      next
+    }
 
-  # ============================================================================
-  # Create Baseline Model for Prediction
-  # ============================================================================
-  # Get linear predictors for training data
-  train_linear_preds <- predict(xgb_model, X)
+    # ============================================================================
+    # Prepare Data Matrix for XGBoost
+    # ============================================================================
+    # Prepare data matrix (handle factors using model.matrix)
+    X <- stats::model.matrix(~-1+., XYTrain_cause[, expvars, drop = FALSE])
+    if (cause == all_event_types[1]) {
+      feature_names <- colnames(X)  # Store feature names from first model
+    }
 
-  # Create survival data for the cause-specific case
-  train_survival_data <- data.frame(
-    time = XYTrain_cs[[timevar]],
-    event = XYTrain_cs$status_cs
-  )
+    # Prepare labels for XGBoost: negative time for censored, positive time for event
+    ytimes <- XYTrain_cause[[timevar]]
+    yevents <- XYTrain_cause$status_cs
+    yTrain <- ytimes
+    yTrain[yevents == 0] <- (-yTrain[yevents == 0])
 
-  # Use score2proba to create baseline hazard model
-  baseline_info <- score2proba(
-    datasurv = train_survival_data,
-    score = train_linear_preds,
-    conf.int = 0.95,
-    which.est = "point"
-  )
+    # ============================================================================
+    # XGBoost Parameters
+    # ============================================================================
+    params <- list(
+      objective = 'survival:cox',
+      eval_metric = "cox-nloglik",
+      eta = eta,
+      max_depth = max_depth,
+      ...
+    )
 
-  # Store baseline model in the XGBoost model object
-  xgb_model$baseline_model <- baseline_info$model
-  xgb_model$baseline_sf <- baseline_info$sf
+    # ============================================================================
+    # Train XGBoost Model
+    # ============================================================================
+    # Create DMatrix
+    dtrain <- xgboost::xgb.DMatrix(data = X, label = yTrain)
+
+    # Train the model
+    xgb_model_cause <- tryCatch(
+      xgboost::xgb.train(
+        params = params,
+        data = dtrain,
+        nrounds = nrounds,
+        verbose = ifelse(verbose, 1, 0)
+      ),
+      error = function(e) {
+        warning("Failed to fit XGBoost model for cause ", cause, ": ", e$message)
+        NULL
+      }
+    )
+
+    if (is.null(xgb_model_cause)) {
+      next
+    }
+
+    # ============================================================================
+    # Create Baseline Model for Prediction
+    # ============================================================================
+    # Get linear predictors for training data
+    train_linear_preds <- predict(xgb_model_cause, X)
+
+    # Create survival data for the cause-specific case
+    train_survival_data <- data.frame(
+      time = XYTrain_cause[[timevar]],
+      event = XYTrain_cause$status_cs
+    )
+
+    # Use score2proba to create baseline hazard model
+    baseline_info <- score2proba(
+      datasurv = train_survival_data,
+      score = train_linear_preds,
+      conf.int = 0.95,
+      which.est = "point"
+    )
+
+    # Store baseline model in the XGBoost model object
+    xgb_model_cause$baseline_model <- baseline_info$model
+    xgb_model_cause$baseline_sf <- baseline_info$sf
+
+    xgb_models_all_causes[[as.character(cause)]] <- xgb_model_cause
+  }
+
+  # The main model for the event of interest
+  xgb_model <- xgb_models_all_causes[[as.character(failcode)]]
+
+  if (is.null(xgb_model)) {
+    stop("Failed to fit XGBoost model for the event of interest (failcode = ", failcode, ")")
+  }
 
   # ============================================================================
   # Return Results
@@ -162,7 +207,9 @@ CRModel_xgboost <- function(data, expvars, timevar, eventvar, failcode = 1,
 
   result <- list(
     xgb_model = xgb_model,
-    times = sort(unique(XYTrain_cs[[timevar]][XYTrain_cs$status_cs == 1])),
+    xgb_models_all_causes = xgb_models_all_causes,  # All cause-specific models for Aalen-Johansen
+    all_event_types = all_event_types,  # Event type codes
+    times = sort(unique(event_times)),
     varprof = varprof,
     model_type = "cr_xgboost",
     expvars = expvars,
@@ -186,6 +233,8 @@ CRModel_xgboost <- function(data, expvars, timevar, eventvar, failcode = 1,
 #' @param newtimes optional numeric vector of time points for prediction.
 #'   If NULL (default), uses the times from the training data.
 #'   Can be any positive values - interpolation handles all time points.
+#' @param failcode integer, the code for the event of interest for CIF prediction.
+#'   If NULL (default), uses the failcode from the model training.
 #'
 #' @return a list containing:
 #'   \item{CIFs}{predicted cumulative incidence function matrix
@@ -195,7 +244,7 @@ CRModel_xgboost <- function(data, expvars, timevar, eventvar, failcode = 1,
 #' @importFrom stats model.matrix
 #' @importFrom xgboost xgb.DMatrix
 #' @export
-Predict_CRModel_xgboost <- function(modelout, newdata, newtimes = NULL) {
+Predict_CRModel_xgboost <- function(modelout, newdata, newtimes = NULL, failcode = NULL) {
 
   # ============================================================================
   # Input Validation
@@ -212,6 +261,19 @@ Predict_CRModel_xgboost <- function(modelout, newdata, newtimes = NULL) {
   if (length(missing_vars) > 0) {
     stop("The following variables missing in newdata: ",
          paste(missing_vars, collapse = ", "))
+  }
+
+  # Handle failcode parameter
+  if (is.null(failcode)) {
+    failcode <- modelout$failcode  # Use the failcode from training
+  } else {
+    if (!is.numeric(failcode) || length(failcode) != 1 || failcode < 1) {
+      stop("'failcode' must be a positive integer")
+    }
+    if (!failcode %in% modelout$all_event_types) {
+      stop("failcode ", failcode, " was not present in training data. Available event types: ",
+           paste(modelout$all_event_types, collapse = ", "))
+    }
   }
 
   # Generate default times if not specified
@@ -245,43 +307,78 @@ Predict_CRModel_xgboost <- function(modelout, newdata, newtimes = NULL) {
   X_new <- X_new[, modelout$feature_names, drop = FALSE]
 
   # ============================================================================
-  # Make Predictions
+  # Make Predictions using Aalen-Johansen Estimator
   # ============================================================================
-  # Get linear predictors from the XGBoost model
-  linear_preds <- predict(modelout$xgb_model, X_new)
+  # Get survival predictions from ALL cause-specific XGBoost models
+  cause_specific_survs <- vector("list", length(modelout$all_event_types))
+  names(cause_specific_survs) <- as.character(modelout$all_event_types)
 
-  # Use the stored baseline hazard from the training fit
-  # and the new scores (linear_preds) to get survival probabilities for the new data
-  sf <- survival::survfit(
-    modelout$xgb_model$baseline_model, # Use the stored Cox model
-    newdata = data.frame("score" = linear_preds),
-    conf.int = 0.95
-  )
+  # Predict survival for each cause
+  for (cause in modelout$all_event_types) {
+    cause_char <- as.character(cause)
 
-  # Extract survival probabilities
-  surv_probs <- sf$surv # Matrix: rows=times, cols=observations
-  surv_times <- sf$time
+    if (is.null(modelout$xgb_models_all_causes[[cause_char]])) {
+      # If model wasn't fitted for this cause, assume no events (S(t) = 1)
+      warning("No model available for cause ", cause, ". Assuming S(t) = 1 for all times.")
+      # We'll handle this in aalenJohansenCIF by providing a matrix of 1s
+      next
+    }
 
-  # Ensure matrix format
-  if (!is.matrix(surv_probs)) {
-    surv_probs <- matrix(surv_probs, ncol = 1)
+    # Get linear predictors from the XGBoost model for this cause
+    linear_preds_cause <- predict(modelout$xgb_models_all_causes[[cause_char]], X_new)
+
+    # Use the stored baseline hazard from the training fit
+    sf_cause <- tryCatch(
+      survival::survfit(
+        modelout$xgb_models_all_causes[[cause_char]]$baseline_model,
+        newdata = data.frame("score" = linear_preds_cause),
+        conf.int = 0.95
+      ),
+      error = function(e) {
+        warning("Prediction failed for cause ", cause, ": ", e$message)
+        NULL
+      }
+    )
+
+    if (is.null(sf_cause)) {
+      next
+    }
+
+    # Extract survival probabilities
+    surv_probs_cause <- sf_cause$surv
+    surv_times_cause <- sf_cause$time
+
+    # Ensure matrix format
+    if (!is.matrix(surv_probs_cause)) {
+      surv_probs_cause <- matrix(surv_probs_cause, ncol = 1)
+    }
+
+    # Store in the list (rows = times, cols = observations)
+    cause_specific_survs[[cause_char]] <- surv_probs_cause
   }
 
-  # For cause-specific model, CIF is approximately 1 - S(t)
-  # where S(t) is the cause-specific survival function
-  cif_matrix <- 1 - surv_probs
+  # Remove NULL entries
+  cause_specific_survs <- cause_specific_survs[!sapply(cause_specific_survs, is.null)]
 
-  # Ensure CIFs are properly bounded [0,1]
-  cif_matrix <- pmin(pmax(cif_matrix, 0), 1)
+  if (length(cause_specific_survs) == 0) {
+    stop("No valid cause-specific survival predictions could be generated")
+  }
 
+  # Get the time grid from the first model (they should all have similar times)
+  surv_times <- sf_cause$time
+
+  # Use Aalen-Johansen estimator to calculate proper CIF
+  cif_matrix <- aalenJohansenCIF(
+    cause_specific_survs = cause_specific_survs,
+    times = surv_times,
+    event_of_interest = failcode
+  )
+
+  # ============================================================================
   # ============================================================================
   # Apply Interpolation
   # ============================================================================
-  if (is.null(newtimes)) {
-    # Return predictions in native time grid: [times, observations]
-    result_cifs <- cif_matrix  # cif_matrix is already [times, observations]
-    result_times <- surv_times
-  } else {
+  if (!is.null(newtimes)) {
     # Interpolate to new time points
     if (!is.numeric(newtimes) || any(newtimes < 0)) {
       stop("'newtimes' must be a numeric vector of non-negative values")
@@ -298,6 +395,10 @@ Predict_CRModel_xgboost <- function(modelout, newdata, newtimes = NULL) {
     # cifMatInterpolaltor returns [newtimes, observations], keep as [times, observations]
     result_cifs <- pred_cifs
     result_times <- newtimes
+  } else {
+    # Return predictions in native time grid: [times, observations]
+    result_cifs <- cif_matrix  # cif_matrix is already [times, observations]
+    result_times <- surv_times
   }
 
   # ============================================================================

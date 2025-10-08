@@ -109,117 +109,149 @@ CRModel_GAM <- function(data, expvars, timevar, eventvar, failcode = 1,
   time_range <- c(0, max(event_times))
 
   # ============================================================================
-  # Model Fitting - Cause-Specific GAM Model
+  # Model Fitting - Cause-Specific GAM Models for ALL Competing Events
   # ============================================================================
-  if (verbose) cat("Fitting cause-specific GAM model for event type", failcode, "...\n")
+  # Identify all unique event types (excluding censoring = 0)
+  all_event_types <- sort(unique(XYTrain[[eventvar]][XYTrain[[eventvar]] != 0]))
 
-  # Create cause-specific data: event = 1 if failcode, 0 if censored, NA if other competing event
-  XYTrain$status_cs <- ifelse(XYTrain[[eventvar]] == 0, 0,  # censored
-                              ifelse(XYTrain[[eventvar]] == failcode, 1, NA))  # event of interest or competing
-
-  # Remove competing events (treat as censored for this cause-specific model)
-  XYTrain_cs <- XYTrain[!is.na(XYTrain$status_cs), , drop = FALSE]
-
-  if (nrow(XYTrain_cs) < 10) {
-    stop("Insufficient data after removing competing events. Need at least 10 observations.")
+  if (verbose) {
+    cat("Fitting cause-specific GAM models for all event types:", paste(all_event_types, collapse = ", "), "\n")
   }
 
-  # Identify variable types for GAM formula construction
-  numvars <- expvars[which(sapply(as.data.frame(XYTrain_cs[, expvars, drop=FALSE]), is.numeric))]
-  fctvars <- expvars[which(sapply(as.data.frame(XYTrain_cs[, expvars, drop=FALSE]), function(x) {
-    (is.factor(x) | is.character(x))
-  }))]
+  # Store models for all event types
+  gam_models_all_causes <- vector("list", length(all_event_types))
+  names(gam_models_all_causes) <- as.character(all_event_types)
 
-  # Convert characters to factors
-  for (i in fctvars) {
-    if (is.character(XYTrain_cs[[i]])) {
-      XYTrain_cs[[i]] <- as.factor(XYTrain_cs[[i]])
+  # Fit a separate GAM model for each event type
+  for (cause in all_event_types) {
+    if (verbose) cat("Fitting GAM model for event type", cause, "...\n")
+
+    # Create cause-specific data: event = 1 if this cause, 0 otherwise (censored or competing)
+    XYTrain_cause <- XYTrain
+    XYTrain_cause$status_cs <- ifelse(XYTrain[[eventvar]] == cause, 1, 0)
+
+    if (sum(XYTrain_cause$status_cs) < 5) {
+      warning("Fewer than 5 events of type ", cause, ". Skipping this cause.")
+      gam_models_all_causes[[as.character(cause)]] <- NULL
+      next
     }
-  }
 
-  # Separate variables based on number of levels for smoothing/shrinkage
-  catvarstoshrink <- if (length(fctvars) > 0) {
-    fctvars[which(sapply(as.data.frame(XYTrain_cs[, fctvars, drop=FALSE]), function(x) {
-      length(levels(x)) > shrinkTreshold
+    # Identify variable types for GAM formula construction
+    numvars <- expvars[which(sapply(as.data.frame(XYTrain_cause[, expvars, drop=FALSE]), is.numeric))]
+    fctvars <- expvars[which(sapply(as.data.frame(XYTrain_cause[, expvars, drop=FALSE]), function(x) {
+      (is.factor(x) | is.character(x))
     }))]
-  } else {
-    c()
+
+    # Convert characters to factors
+    for (i in fctvars) {
+      if (is.character(XYTrain_cause[[i]])) {
+        XYTrain_cause[[i]] <- as.factor(XYTrain_cause[[i]])
+      }
+    }
+
+    # Separate variables based on number of levels for smoothing/shrinkage
+    catvarstoshrink <- if (length(fctvars) > 0) {
+      fctvars[which(sapply(as.data.frame(XYTrain_cause[, fctvars, drop=FALSE]), function(x) {
+        length(levels(x)) > shrinkTreshold
+      }))]
+    } else {
+      c()
+    }
+    catvarsnottoshrink <- if (length(fctvars) > 0) {
+      fctvars[which(sapply(as.data.frame(XYTrain_cause[, fctvars, drop=FALSE]), function(x) {
+        length(levels(x)) <= shrinkTreshold
+      }))]
+    } else {
+      c()
+    }
+    numvarstosmooth <- if (length(numvars) > 0) {
+      numvars[which(sapply(as.data.frame(XYTrain_cause[, numvars, drop=FALSE]), function(x) {
+        length(unique(x[!is.na(x)])) > shrinkTreshold
+      }))]
+    } else {
+      c()
+    }
+    numvarsnottosmooth <- if (length(numvars) > 0) {
+      numvars[which(sapply(as.data.frame(XYTrain_cause[, numvars, drop=FALSE]), function(x) {
+        length(unique(x[!is.na(x)])) <= shrinkTreshold
+      }))]
+    } else {
+      c()
+    }
+
+    # Build GAM formula string
+    formGAM_terms <- c()
+    for (vari in catvarstoshrink) {
+      formGAM_terms <- c(formGAM_terms, paste0("s(", vari, ", bs='re')")) # Random effect smooth for high-cardinality factors
+    }
+    for (vari in numvarstosmooth) {
+      formGAM_terms <- c(formGAM_terms, paste0("s(", vari, ")")) # Default smooth for numerics
+    }
+    # Add linear terms for remaining variables
+    formGAM_terms <- c(formGAM_terms, numvarsnottosmooth, catvarsnottoshrink)
+
+    # Combine terms into formula
+    if (length(formGAM_terms) > 0) {
+      formGAM_rhs <- paste(formGAM_terms, collapse = "+")
+    } else {
+      formGAM_rhs <- "1" # Intercept only if no predictors
+    }
+
+    formGAM <- stats::as.formula(paste(timevar, "~", formGAM_rhs))
+    if (verbose) print(formGAM)
+
+    # Fit the GAM model with Cox PH family for cause-specific modeling
+    gam_model_cause <- tryCatch(
+      mgcv::gam(
+        formGAM,
+        family = mgcv::cox.ph(),
+        data = XYTrain_cause,
+        weights = XYTrain_cause$status_cs, # Use cause-specific event indicator as weights
+        select = TRUE # Enable shrinkage via double penalty approach
+      ),
+      error = function(e) {
+        warning("Failed to fit GAM model for cause ", cause, ": ", e$message)
+        NULL
+      }
+    )
+
+    if (is.null(gam_model_cause)) {
+      next
+    }
+
+    # Create baseline model for prediction using score2proba approach
+    # Get linear predictors for training data
+    train_linear_preds <- stats::predict(gam_model_cause,
+                                         newdata = XYTrain_cause,
+                                         type = "link")
+
+    # Create survival data for the cause-specific case
+    train_survival_data <- data.frame(
+      time = XYTrain_cause[[timevar]],
+      event = XYTrain_cause$status_cs
+    )
+
+    # Use score2proba to create baseline hazard model
+    baseline_info <- score2proba(
+      datasurv = train_survival_data,
+      score = train_linear_preds,
+      conf.int = 0.95,
+      which.est = "point"
+    )
+
+    # Store baseline model in the GAM model object
+    gam_model_cause$baseline_model <- baseline_info$model
+    gam_model_cause$baseline_sf <- baseline_info$sf
+
+    gam_models_all_causes[[as.character(cause)]] <- gam_model_cause
   }
-  catvarsnottoshrink <- if (length(fctvars) > 0) {
-    fctvars[which(sapply(as.data.frame(XYTrain_cs[, fctvars, drop=FALSE]), function(x) {
-      length(levels(x)) <= shrinkTreshold
-    }))]
-  } else {
-    c()
+
+  # The main model for the event of interest
+  gam_model <- gam_models_all_causes[[as.character(failcode)]]
+
+  if (is.null(gam_model)) {
+    stop("Failed to fit GAM model for the event of interest (failcode = ", failcode, ")")
   }
-  numvarstosmooth <- if (length(numvars) > 0) {
-    numvars[which(sapply(as.data.frame(XYTrain_cs[, numvars, drop=FALSE]), function(x) {
-      length(unique(x[!is.na(x)])) > shrinkTreshold
-    }))]
-  } else {
-    c()
-  }
-  numvarsnottosmooth <- if (length(numvars) > 0) {
-    numvars[which(sapply(as.data.frame(XYTrain_cs[, numvars, drop=FALSE]), function(x) {
-      length(unique(x[!is.na(x)])) <= shrinkTreshold
-    }))]
-  } else {
-    c()
-  }
-
-  # Build GAM formula string
-  formGAM_terms <- c()
-  for (vari in catvarstoshrink) {
-    formGAM_terms <- c(formGAM_terms, paste0("s(", vari, ", bs='re')")) # Random effect smooth for high-cardinality factors
-  }
-  for (vari in numvarstosmooth) {
-    formGAM_terms <- c(formGAM_terms, paste0("s(", vari, ")")) # Default smooth for numerics
-  }
-  # Add linear terms for remaining variables
-  formGAM_terms <- c(formGAM_terms, numvarsnottosmooth, catvarsnottoshrink)
-
-  # Combine terms into formula
-  if (length(formGAM_terms) > 0) {
-    formGAM_rhs <- paste(formGAM_terms, collapse = "+")
-  } else {
-    formGAM_rhs <- "1" # Intercept only if no predictors
-  }
-
-  formGAM <- stats::as.formula(paste(timevar, "~", formGAM_rhs))
-  if (verbose) print(formGAM)
-
-  # Fit the GAM model with Cox PH family for cause-specific modeling
-  gam_model <- mgcv::gam(
-    formGAM,
-    family = mgcv::cox.ph(),
-    data = XYTrain_cs,
-    weights = XYTrain_cs$status_cs, # Use cause-specific event indicator as weights
-    select = TRUE # Enable shrinkage via double penalty approach
-  )
-
-  # Create baseline model for prediction using score2proba approach
-  # Get linear predictors for training data
-  train_linear_preds <- stats::predict(gam_model,
-                                       newdata = XYTrain_cs,
-                                       type = "link")
-
-  # Create survival data for the cause-specific case
-  train_survival_data <- data.frame(
-    time = XYTrain_cs[[timevar]],
-    event = XYTrain_cs$status_cs
-  )
-
-  # Use score2proba to create baseline hazard model
-  baseline_info <- score2proba(
-    datasurv = train_survival_data,
-    score = train_linear_preds,
-    conf.int = 0.95,
-    which.est = "point"
-  )
-
-  # Store baseline model in the GAM model object
-  gam_model$baseline_model <- baseline_info$model
-  gam_model$baseline_sf <- baseline_info$sf
 
   # ============================================================================
   # Return Results
@@ -228,7 +260,9 @@ CRModel_GAM <- function(data, expvars, timevar, eventvar, failcode = 1,
 
   result <- list(
     gam_model = gam_model,
-    times = sort(unique(XYTrain_cs[[timevar]][XYTrain_cs$status_cs == 1])),
+    gam_models_all_causes = gam_models_all_causes,  # All cause-specific models for Aalen-Johansen
+    all_event_types = all_event_types,  # Event type codes
+    times = sort(unique(event_times)),
     varprof = varprof,
     model_type = "cr_gam",
     expvars = expvars,
@@ -251,6 +285,8 @@ CRModel_GAM <- function(data, expvars, timevar, eventvar, failcode = 1,
 #' @param newtimes optional numeric vector of time points for prediction.
 #'   If NULL (default), uses the times from the training data.
 #'   Can be any positive values - interpolation handles all time points.
+#' @param failcode integer, the code for the event of interest for CIF prediction.
+#'   If NULL (default), uses the failcode from the model training.
 #'
 #' @return a list containing:
 #'   \item{CIFs}{predicted cumulative incidence function matrix
@@ -259,7 +295,7 @@ CRModel_GAM <- function(data, expvars, timevar, eventvar, failcode = 1,
 #'
 #' @importFrom stats predict
 #' @export
-Predict_CRModel_GAM <- function(modelout, newdata, newtimes = NULL) {
+Predict_CRModel_GAM <- function(modelout, newdata, newtimes = NULL, failcode = NULL) {
 
   # ============================================================================
   # Input Validation
@@ -276,6 +312,19 @@ Predict_CRModel_GAM <- function(modelout, newdata, newtimes = NULL) {
   if (length(missing_vars) > 0) {
     stop("The following variables missing in newdata: ",
          paste(missing_vars, collapse = ", "))
+  }
+
+  # Handle failcode parameter
+  if (is.null(failcode)) {
+    failcode <- modelout$failcode  # Use the failcode from training
+  } else {
+    if (!is.numeric(failcode) || length(failcode) != 1 || failcode < 1) {
+      stop("'failcode' must be a positive integer")
+    }
+    if (!failcode %in% modelout$all_event_types) {
+      stop("failcode ", failcode, " was not present in training data. Available event types: ",
+           paste(modelout$all_event_types, collapse = ", "))
+    }
   }
 
   # Generate default times if not specified
@@ -327,37 +376,82 @@ Predict_CRModel_GAM <- function(modelout, newdata, newtimes = NULL) {
   }
 
   # ============================================================================
-  # Make Predictions
+  # Make Predictions using Aalen-Johansen Estimator
   # ============================================================================
-  # Get linear predictors from the GAM model
-  linear_preds <- stats::predict(modelout$gam_model,
-                                 newdata = newdata_prepared,
-                                 type = "link", # Get linear predictor
-                                 se.fit = TRUE)
+  # Get survival predictions from ALL cause-specific GAM models
+  cause_specific_survs <- vector("list", length(modelout$all_event_types))
+  names(cause_specific_survs) <- as.character(modelout$all_event_types)
 
-  # Use the stored baseline hazard from the training fit
-  # and the new scores (linear_preds$fit) to get survival probabilities for the new data
-  sf <- survival::survfit(
-    modelout$gam_model$baseline_model, # Use the stored Cox model
-    newdata = data.frame("score" = linear_preds$fit),
-    conf.int = .95
-  )
-  
-  # Extract survival probabilities
-  surv_probs <- sf$surv # Matrix: rows=times, cols=observations
-  surv_times <- sf$time
+  # Predict survival for each cause
+  for (cause in modelout$all_event_types) {
+    cause_char <- as.character(cause)
 
-  # Ensure matrix format
-  if (!is.matrix(surv_probs)) {
-    surv_probs <- matrix(surv_probs, ncol = 1)
+    if (is.null(modelout$gam_models_all_causes[[cause_char]])) {
+      warning("No model available for cause ", cause, ". Assuming S(t) = 1 for all times.")
+      next
+    }
+
+    # Get linear predictors from the GAM model
+    linear_preds <- tryCatch(
+      stats::predict(modelout$gam_models_all_causes[[cause_char]],
+                     newdata = newdata_prepared,
+                     type = "link"),
+      error = function(e) {
+        warning("Prediction failed for cause ", cause, ": ", e$message)
+        NULL
+      }
+    )
+
+    if (is.null(linear_preds)) {
+      next
+    }
+
+    # Use the stored baseline hazard to get survival probabilities
+    sf <- tryCatch(
+      survival::survfit(
+        modelout$gam_models_all_causes[[cause_char]]$baseline_model,
+        newdata = data.frame("score" = linear_preds),
+        conf.int = 0.95
+      ),
+      error = function(e) {
+        warning("survfit failed for cause ", cause, ": ", e$message)
+        NULL
+      }
+    )
+
+    if (is.null(sf)) {
+      next
+    }
+
+    # Extract survival probabilities
+    surv_probs_cause <- sf$surv
+    surv_times_cause <- sf$time
+
+    # Ensure matrix format
+    if (!is.matrix(surv_probs_cause)) {
+      surv_probs_cause <- matrix(surv_probs_cause, ncol = 1)
+    }
+
+    # Store in the list (rows = times, cols = observations)
+    cause_specific_survs[[cause_char]] <- surv_probs_cause
   }
 
-  # For cause-specific model, CIF is approximately 1 - S(t)
-  # where S(t) is the cause-specific survival function
-  cif_matrix <- 1 - surv_probs
+  # Remove NULL entries
+  cause_specific_survs <- cause_specific_survs[!sapply(cause_specific_survs, is.null)]
 
-  # Ensure CIFs are properly bounded [0,1]
-  cif_matrix <- pmin(pmax(cif_matrix, 0), 1)
+  if (length(cause_specific_survs) == 0) {
+    stop("No valid cause-specific survival predictions could be generated")
+  }
+
+  # Get the time grid from the first model
+  surv_times <- sf$time
+
+  # Use Aalen-Johansen estimator to calculate proper CIF
+  cif_matrix <- aalenJohansenCIF(
+    cause_specific_survs = cause_specific_survs,
+    times = surv_times,
+    event_of_interest = failcode
+  )
 
   # ============================================================================
   # Apply Interpolation

@@ -59,7 +59,8 @@ test_that("CRModel_Cox fits basic model", {
 
   # Check output structure
   expect_type(model, "list")
-  expect_named(model, c("cph_model", "times", "varprof", "model_type",
+  expect_named(model, c("cph_model", "cph_models_all_causes", "all_event_types",
+                       "times", "varprof", "model_type",
                        "expvars", "timevar", "eventvar", "failcode", "varsel_method", "time_range"))
 
   # Check model type
@@ -108,9 +109,9 @@ test_that("Predict_CRModel_Cox returns correct output structure", {
 
   preds <- Predict_CRModel_Cox(model, test_data)
 
-  # Check output structure
+  # Check output structure (no longer returns cph_modelTestPredict)
   expect_type(preds, "list")
-  expect_named(preds, c("cph_modelTestPredict", "CIFs", "Times"))
+  expect_named(preds, c("CIFs", "Times"))
 
   # Check CIFs matrix
   expect_true(is.matrix(preds$CIFs))
@@ -122,9 +123,6 @@ test_that("Predict_CRModel_Cox returns correct output structure", {
 
   # Check CIF values (should be between 0 and 1)
   expect_true(all(preds$CIFs >= 0 & preds$CIFs <= 1, na.rm = TRUE))
-
-  # Check survfit object
-  expect_s3_class(preds$cph_modelTestPredict, "survfit")
 })
 
 test_that("Predict_CRModel_Cox CIFs are monotonically non-decreasing", {
@@ -304,9 +302,9 @@ test_that("Predict_CRModel_Cox returns predictions in correct format", {
   # Get predictions
   predictions <- Predict_CRModel_Cox(modelout = model_cox, newdata = test_data)
 
-  # Check output structure
+  # Check output structure (no longer returns cph_modelTestPredict)
   expect_type(predictions, "list")
-  expect_named(predictions, c("cph_modelTestPredict", "CIFs", "Times"))
+  expect_named(predictions, c("CIFs", "Times"))
 
   # Check CIFs matrix
   expect_true(is.matrix(predictions$CIFs))

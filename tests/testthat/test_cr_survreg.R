@@ -60,7 +60,7 @@ test_that("CRModel_SurvReg fits basic model", {
 
   # Check output structure
   expect_type(model, "list")
-  expect_named(model, c("survreg_model", "times", "varprof", "model_type",
+  expect_named(model, c("survreg_model", "survreg_models_all_causes", "all_event_types", "times", "varprof", "model_type",
                        "expvars", "timevar", "eventvar", "failcode", "time_range", "dist"))
 
   # Check model type
@@ -396,9 +396,9 @@ test_that("CR SurvReg has similar interface to other CR models", {
   )
 
   # Both should have similar output structure
-  expect_named(survreg_model, c("survreg_model", "times", "varprof", "model_type",
+  expect_named(survreg_model, c("survreg_model", "survreg_models_all_causes", "all_event_types", "times", "varprof", "model_type",
                                "expvars", "timevar", "eventvar", "failcode", "time_range", "dist"))
-  expect_named(gam_model, c("gam_model", "times", "varprof", "model_type",
+  expect_named(gam_model, c("gam_model", "gam_models_all_causes", "all_event_types", "times", "varprof", "model_type",
                            "expvars", "timevar", "eventvar", "failcode", "time_range"))
 
   # Both should produce valid predictions
@@ -409,4 +409,41 @@ test_that("CR SurvReg has similar interface to other CR models", {
   expect_true(is.matrix(gam_preds$CIFs))
   expect_true(all(survreg_preds$CIFs >= 0 & survreg_preds$CIFs <= 1))
   expect_true(all(gam_preds$CIFs >= 0 & gam_preds$CIFs <= 1))
+})
+
+# ==============================================================================
+# Tests for failcode parameter
+# ==============================================================================
+
+test_that("Predict_CRModel_SurvReg works with different failcode values", {
+  # Fit model (should fit models for all event types)
+  model <- CRModel_SurvReg(
+    data = train_data,
+    expvars = expvars_numeric,
+    timevar = "time",
+    eventvar = "event",
+    failcode = 1,
+    dist = "exponential"
+  )
+  
+  # Test prediction for different event types
+  preds_event1 <- Predict_CRModel_SurvReg(model, test_data, failcode = 1)
+  preds_event2 <- Predict_CRModel_SurvReg(model, test_data, failcode = 2)
+  
+  # Should return different CIFs for different events
+  expect_false(identical(preds_event1$CIFs, preds_event2$CIFs))
+  
+  # Both should be properly bounded
+  expect_true(all(preds_event1$CIFs >= 0 & preds_event1$CIFs <= 1))
+  expect_true(all(preds_event2$CIFs >= 0 & preds_event2$CIFs <= 1))
+  
+  # Test invalid failcode
+  expect_error(
+    Predict_CRModel_SurvReg(model, test_data, failcode = 99),
+    "failcode 99 was not present in training data"
+  )
+  
+  # Test that default uses model's failcode
+  preds_default <- Predict_CRModel_SurvReg(model, test_data)
+  expect_identical(preds_default$CIFs, preds_event1$CIFs)
 })
