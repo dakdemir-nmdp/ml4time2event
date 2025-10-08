@@ -25,13 +25,13 @@ RunCRModels(
 1 is the event of interest}
 
 \item{models}{a vector of models to be fitted to be chosen among
-"FG", "rulefit", "bart", "cox". Two random forest models are
+"FG", "rulefit", "bart", "cox", "xgboost", "gam", "survreg". Two random forest models are
 automatically fitted and dont need to be listed here}
 
 \item{ntreeRF}{number of trees for Random Forest models}
 
 \item{varsel}{logical indicating whether variable selection to be
-applied before fitting models "FG", "rulefit", "bart", "cox"}
+applied before fitting models "FG", "rulefit", "bart", "cox", "xgboost", "gam", "survreg"}
 }
 \value{
 a list of two items. First is a list containing ExpVars: all of the explanatory vars,

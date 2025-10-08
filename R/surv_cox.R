@@ -33,7 +33,7 @@
 #'   No fixed time grid is stored in the model.
 #'
 #' @importFrom survival coxph Surv survfit
-#' @importFrom stats step as.formula model.matrix coef
+#' @importFrom stats as.formula model.matrix coef
 #' @importFrom glmnet cv.glmnet
 #' @export
 #'

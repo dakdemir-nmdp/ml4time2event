@@ -288,8 +288,8 @@ Predict_CRModel_FineGray <- function(modelout, newdata, newtimes = NULL) {
   # Apply Interpolation
   # ============================================================================
   if (is.null(newtimes)) {
-    # Return predictions in native time grid: [observations, times]
-    result_cifs <- t(cif_matrix)  # cif_matrix is [times+1, observations], transpose to [observations, times+1]
+    # Return predictions in native time grid: [times, observations]
+    result_cifs <- cif_matrix  # cif_matrix is already [times+1, observations]
     result_times <- c(0, baseline_times)
   } else {
     # Interpolate to new time points
@@ -305,8 +305,8 @@ Predict_CRModel_FineGray <- function(modelout, newdata, newtimes = NULL) {
       newtimes = newtimes
     )
 
-    # cifMatInterpolaltor returns [newtimes, observations], transpose to [observations, newtimes]
-    result_cifs <- t(pred_cifs)
+    # cifMatInterpolaltor returns [newtimes, observations], keep as [times, observations]
+    result_cifs <- pred_cifs
     result_times <- newtimes
   }
 

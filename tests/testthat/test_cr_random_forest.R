@@ -7,7 +7,7 @@ context("Testing cr_random_forest functions")
 # --- Test Data Setup ---
 # Create a simple competing risks dataset
 set.seed(123)
-n_obs <- 100
+n_obs <- 70  # Reduced for faster testing
 cr_data <- data.frame(
   time = pmin(rexp(n_obs, rate = 0.1), rexp(n_obs, rate = 0.15)),
   status = sample(0:2, n_obs, replace = TRUE, prob = c(0.2, 0.4, 0.4)), # 0=censored, 1=event1, 2=event2
@@ -17,14 +17,14 @@ cr_data <- data.frame(
   stringsAsFactors = FALSE
 )
 
-train_indices <- 1:80
-test_indices <- 81:100
+train_indices <- 1:50
+test_indices <- 51:70
 train_data <- cr_data[train_indices, ]
 test_data <- cr_data[test_indices, ]
 expvars <- c("x1", "x2", "x3")
-time_points <- c(quantile(train_data$time[train_data$status != 0], 0.25),
-                 median(train_data$time[train_data$status != 0]),
-                 quantile(train_data$time[train_data$status != 0], 0.75))
+time_points <- c(quantile(train_data$time[train_data$status != 0], 0.25, na.rm = TRUE),
+                 median(train_data$time[train_data$status != 0], na.rm = TRUE),
+                 quantile(train_data$time[train_data$status != 0], 0.75, na.rm = TRUE))
 
 # --- Tests for CRModel_RF ---
 

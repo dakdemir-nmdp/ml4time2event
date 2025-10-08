@@ -174,6 +174,11 @@ CRModel_SurvReg <- function(data, expvars, timevar, eventvar, failcode = 1,
   # Get linear predictors for training data
   train_linear_preds <- predict(final_model, type = "linear")
 
+  # IMPORTANT: Convert linear predictors to risk scores (negate for proper direction)
+  # In survival models, higher linear predictors mean longer survival (lower risk)
+  # But for CIF, we want higher risk scores to give higher CIF
+  train_risk_scores <- -train_linear_preds
+
   # Create survival data for the cause-specific case
   train_survival_data <- data.frame(
     time = XYTrain_cs[[timevar]],
@@ -183,7 +188,7 @@ CRModel_SurvReg <- function(data, expvars, timevar, eventvar, failcode = 1,
   # Use score2proba to create baseline hazard model
   baseline_info <- score2proba(
     datasurv = train_survival_data,
-    score = train_linear_preds,
+    score = train_risk_scores,
     conf.int = 0.95,
     which.est = "point"
   )
@@ -306,11 +311,16 @@ Predict_CRModel_SurvReg <- function(modelout, newdata, newtimes = NULL) {
                                  newdata = newdata_prepared,
                                  type = "linear")
 
+  # IMPORTANT: In survival models, higher linear predictors usually mean LONGER survival (lower risk)
+  # But for competing risks CIF, we want higher risk scores to give higher CIF
+  # So we need to negate the linear predictors to get proper risk scores
+  risk_scores <- -linear_preds
+
   # Use the stored baseline hazard from the training fit
-  # and the new scores (linear_preds) to get survival probabilities for the new data
+  # and the new scores (risk_scores) to get survival probabilities for the new data
   sf <- survival::survfit(
     modelout$survreg_model$baseline_model, # Use the stored Cox model
-    newdata = data.frame("score" = linear_preds),
+    newdata = data.frame("score" = risk_scores),
     conf.int = .95
   )
 
@@ -334,8 +344,8 @@ Predict_CRModel_SurvReg <- function(modelout, newdata, newtimes = NULL) {
   # Apply Interpolation
   # ============================================================================
   if (is.null(newtimes)) {
-    # Return predictions in native time grid: [observations, times]
-    result_cifs <- t(cif_matrix)  # cif_matrix is [times, observations], transpose to [observations, times]
+    # Return predictions in native time grid: [times, observations]
+    result_cifs <- cif_matrix  # cif_matrix is already [times, observations]
     result_times <- surv_times
   } else {
     # Interpolate to new time points
@@ -351,8 +361,8 @@ Predict_CRModel_SurvReg <- function(modelout, newdata, newtimes = NULL) {
       newtimes = newtimes
     )
 
-    # cifMatInterpolaltor returns [newtimes, observations], transpose to [observations, newtimes]
-    result_cifs <- t(pred_cifs)
+    # cifMatInterpolaltor returns [newtimes, observations], keep as [times, observations]
+    result_cifs <- pred_cifs
     result_times <- newtimes
   }
 

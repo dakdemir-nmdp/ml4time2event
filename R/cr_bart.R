@@ -248,8 +248,8 @@ Predict_CRModel_BART <- function(modelout, newdata, newtimes = NULL) {
   # Apply Interpolation if needed
   # ============================================================================
   if (is.null(newtimes)) {
-    # Use model's native time points
-    result_cifs <- cif_with_t0  # Keep as [observations, times]
+    # Use model's native time points: [times, observations]
+    result_cifs <- t(cif_with_t0)  # Transpose to [times, observations]
     result_times <- times_with_t0
   } else {
     # Interpolate to new time points
@@ -264,8 +264,8 @@ Predict_CRModel_BART <- function(modelout, newdata, newtimes = NULL) {
       times = times_with_t0,
       newtimes = newtimes
     )
-    # cifMatInterpolaltor returns [newtimes, observations], transpose to [observations, newtimes]
-    result_cifs <- t(result_cifs)
+    # cifMatInterpolaltor returns [newtimes, observations], keep as [times, observations]
+    result_cifs <- result_cifs
     result_times <- newtimes
   }
 

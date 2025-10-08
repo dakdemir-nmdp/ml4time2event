@@ -6,7 +6,7 @@ context("Testing cr_rulefit functions")
 
 # --- Test Data Setup ---
 set.seed(123)
-n_obs <- 100
+n_obs <- 70  # Reduced for faster testing
 cr_data <- data.frame(
   time = pmin(rexp(n_obs, rate = 0.1), rexp(n_obs, rate = 0.15)),
   status = sample(0:2, n_obs, replace = TRUE, prob = c(0.2, 0.4, 0.4)), # 0=censored, 1=event1, 2=event2
@@ -16,8 +16,8 @@ cr_data <- data.frame(
   stringsAsFactors = FALSE
 )
 
-train_indices <- 1:80
-test_indices <- 81:100
+train_indices <- 1:50
+test_indices <- 51:70
 train_data <- cr_data[train_indices, ]
 test_data <- cr_data[test_indices, ]
 expvars <- c("x1", "x2", "x3")

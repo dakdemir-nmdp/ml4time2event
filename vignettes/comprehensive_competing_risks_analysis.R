@@ -1,0 +1,967 @@
+# Comprehensive Competing# --- 2. Data Loading and Initial Exploration ---peline with ml4time2event
+# Using Bone Marrow Transplant (BMT) Dataset
+#
+# This vignette demonstrates a complete competing risks analysis workflow including:
+# - Data loading and preprocessing with competing risks data
+# - Multiple competing risks models (Cox, Fine-Gray, Random Forest, XGBoost, etc.)
+# - Ensemble prediction methods for competing risks
+# - Cumulative Incidence Function (CIF) visualization
+# - Expected Time Lost (ETL) for competing risks
+# - Competing risks-specific metrics and evaluation
+# - Model persistence (saving/loading)
+
+# --- 1. Setup and Load Libraries ---
+# Load the package during development
+devtools::load_all()
+
+library(survival)
+library(dplyr)
+library(ggplot2)
+library(gridExtra)
+
+# Additional packages for competing risks
+if (!require("cmprsk", quietly = TRUE)) install.packages("cmprsk")
+library(cmprsk)
+
+cat("=== STEP 1: DATA LOADING ===\n")
+
+# Load the BMT competing risks dataset
+data_path <- system.file("extdata", "bmtcrr_competing_risks.csv", package = "ml4time2event")
+if (data_path == "") {
+  # Fallback for development - direct path
+  data_path <- "inst/extdata/bmtcrr_competing_risks.csv"
+}
+
+# Read the data
+bmt_data <- read.csv(data_path)
+
+# Display basic information about the dataset
+cat("Dataset dimensions:", nrow(bmt_data), "rows,", ncol(bmt_data), "columns\n")
+cat("Column names:", paste(names(bmt_data), collapse = ", "), "\n")
+cat("First few rows:\n")
+print(head(bmt_data))
+
+# Check event status distribution
+cat("\n=== Event Status Distribution ===\n")
+cat("Event variable coding:\n")
+cat("  0 = Censored (event-free)\n")
+cat("  1 = Relapse (event of interest)\n")
+cat("  2 = Treatment-Related Mortality (TRM) - competing risk\n\n")
+
+status_table <- table(bmt_data$Status)
+print(status_table)
+cat("\nEvent rates:\n")
+cat("  Censored:", status_table["0"], "(", round(100 * status_table["0"] / nrow(bmt_data), 1), "%)\n")
+cat("  Relapse:", status_table["1"], "(", round(100 * status_table["1"] / nrow(bmt_data), 1), "%)\n")
+cat("  TRM:", status_table["2"], "(", round(100 * status_table["2"] / nrow(bmt_data), 1), "%)\n")
+
+# --- 3. Data Preprocessing ---
+cat("\n=== STEP 2: DATA PREPROCESSING ===\n")
+
+# Ensure categorical variables are factors
+bmt_data$Sex <- factor(bmt_data$Sex)
+bmt_data$D <- factor(bmt_data$D)
+bmt_data$Phase <- factor(bmt_data$Phase)
+bmt_data$Source <- factor(bmt_data$Source)
+
+# Display variable summary
+cat("\nVariable types:\n")
+print(str(bmt_data))
+
+# Check time variable
+cat("\nTime range (ftime in months):", range(bmt_data$ftime), "\n")
+
+# Define variables for modeling
+timevar <- "ftime"
+eventvar <- "Status"
+expvars <- c("Sex", "D", "Phase", "Age", "Source")
+
+# Variable profiling
+var_profile <- VariableProfile(bmt_data, expvars)
+cat("\nVariable Profile Summary:\n")
+print(var_profile$Summary)
+
+# --- 4. Initial Competing Risks Exploration ---
+cat("\n=== STEP 3: CUMULATIVE INCIDENCE EXPLORATION ===\n")
+
+# Calculate Cumulative Incidence Functions by disease phase
+cat("Calculating CIF by disease phase...\n")
+cif_phase <- cuminc(ftime = bmt_data$ftime,
+                    fstatus = bmt_data$Status,
+                    group = bmt_data$Phase)
+
+# Display cumulative incidence at key time points
+cat("\nCumulative Incidence at 12 months by Phase:\n")
+timepoint_12mo <- 12
+
+# Extract CIF values at 12 months for each phase and event type
+for (phase_name in levels(bmt_data$Phase)) {
+  # Get CIF for relapse (event 1)
+  cif_name_relapse <- paste(phase_name, "1", sep = " ")
+  if (cif_name_relapse %in% names(cif_phase)) {
+    cif_obj <- cif_phase[[cif_name_relapse]]
+    idx <- which.min(abs(cif_obj$time - timepoint_12mo))
+    if (length(idx) > 0) {
+      ci_relapse <- cif_obj$est[idx]
+      cat(sprintf("  %s - Relapse: %.3f\n", phase_name, ci_relapse))
+    }
+  }
+}
+
+# --- 5. Data Splitting ---
+cat("\n=== STEP 4: DATA SPLITTING ===\n")
+
+set.seed(123) # For reproducibility
+
+# Create training/test split (70/30)
+train_indices <- sample(nrow(bmt_data), floor(0.7 * nrow(bmt_data)))
+train_data <- bmt_data[train_indices, ]
+test_data <- bmt_data[-train_indices, ]
+
+cat("Training set size:", nrow(train_data), "\n")
+cat("Test set size:", nrow(test_data), "\n")
+
+# Check event distribution in training set
+train_status_table <- table(train_data$Status)
+cat("\nTraining set event distribution:\n")
+print(train_status_table)
+
+# --- 6. Model Training ---
+cat("\n=== STEP 5: COMPETING RISKS MODEL TRAINING ===\n")
+
+cat("Explanatory variables:", paste(expvars, collapse = ", "), "\n")
+cat("Time variable:", timevar, "\n")
+cat("Event variable:", eventvar, "\n")
+cat("Event of interest (failcode): 1 (Relapse)\n")
+cat("Competing risk: 2 (TRM)\n\n")
+
+# Initialize model storage
+models <- list()
+model_names <- c()
+
+# 6.1 Cause-Specific Cox Model
+cat("Training Cause-Specific Cox model...\n")
+tryCatch({
+  cox_model <- CRModel_Cox(
+    data = train_data,
+    expvars = expvars,
+    timevar = timevar,
+    eventvar = eventvar,
+    failcode = 1
+  )
+  models[["Cox"]] <- cox_model
+  model_names <- c(model_names, "Cox")
+  cat("✓ Cox model trained successfully\n")
+}, error = function(e) {
+  cat("✗ Cox model failed:", e$message, "\n")
+})
+
+# 6.2 Fine-Gray Subdistribution Hazard Model
+cat("\nTraining Fine-Gray model...\n")
+tryCatch({
+  fg_model <- CRModel_FineGray(
+    data = train_data,
+    expvars = expvars,
+    timevar = timevar,
+    eventvar = eventvar,
+    failcode = 1
+  )
+  models[["FineGray"]] <- fg_model
+  model_names <- c(model_names, "FineGray")
+  cat("✓ Fine-Gray model trained successfully\n")
+}, error = function(e) {
+  cat("✗ Fine-Gray model failed:", e$message, "\n")
+})
+
+# 6.3 Random Forest for Competing Risks
+cat("\nTraining Random Forest competing risks model...\n")
+tryCatch({
+  rf_model <- CRModel_RF(
+    data = train_data,
+    expvars = expvars,
+    timevar = timevar,
+    eventvar = eventvar,
+    ntree = 200,
+    samplesize = min(50, nrow(train_data))
+  )
+  models[["RF"]] <- rf_model
+  model_names <- c(model_names, "RF")
+  cat("✓ Random Forest model trained successfully\n")
+}, error = function(e) {
+  cat("✗ Random Forest model failed:", e$message, "\n")
+})
+
+# 6.4 XGBoost for Competing Risks
+cat("\nTraining XGBoost competing risks model...\n")
+tryCatch({
+  xgb_model <- CRModel_xgboost(
+    data = train_data,
+    expvars = expvars,
+    timevar = timevar,
+    eventvar = eventvar,
+    failcode = 1,
+    nrounds = 100,
+    eta = 0.1,
+    max_depth = 3
+  )
+  models[["XGBoost"]] <- xgb_model
+  model_names <- c(model_names, "XGBoost")
+  cat("✓ XGBoost model trained successfully\n")
+}, error = function(e) {
+  cat("✗ XGBoost model failed:", e$message, "\n")
+})
+
+# 6.5 GAM for Competing Risks
+cat("\nTraining GAM competing risks model...\n")
+tryCatch({
+  gam_model <- CRModel_GAM(
+    data = train_data,
+    expvars = expvars,
+    timevar = timevar,
+    eventvar = eventvar,
+    failcode = 1
+  )
+  models[["GAM"]] <- gam_model
+  model_names <- c(model_names, "GAM")
+  cat("✓ GAM model trained successfully\n")
+}, error = function(e) {
+  cat("✗ GAM model failed:", e$message, "\n")
+})
+
+# 6.6 BART for Competing Risks
+cat("\nTraining BART competing risks model...\n")
+tryCatch({
+  bart_model <- CRModel_BART(
+    data = train_data,
+    expvars = expvars,
+    timevar = timevar,
+    eventvar = eventvar,
+    failcode = 1,
+    ntree = 50,  # Smaller for speed
+    ndpost = 200,  # Smaller for speed
+    nskip = 50,   # Smaller for speed
+    keepevery = 5
+  )
+  models[["BART"]] <- bart_model
+  model_names <- c(model_names, "BART")
+  cat("✓ BART model trained successfully\n")
+}, error = function(e) {
+  cat("✗ BART model failed:", e$message, "\n")
+})
+
+# 6.7 DeepSurv for Competing Risks
+cat("\nTraining DeepSurv competing risks model...\n")
+tryCatch({
+  deepsurv_model <- CRModel_DeepSurv(
+    data = train_data,
+    expvars = expvars,
+    timevar = timevar,
+    eventvar = eventvar,
+    failcode = 1,
+    size = 5,  # Hidden layer size
+    decay = 0.01,  # L2 regularization
+    maxit = 100  # Maximum iterations (smaller for speed)
+  )
+  models[["DeepSurv"]] <- deepsurv_model
+  model_names <- c(model_names, "DeepSurv")
+  cat("✓ DeepSurv model trained successfully\n")
+}, error = function(e) {
+  cat("✗ DeepSurv model failed:", e$message, "\n")
+})
+
+# 6.8 RuleFit for Competing Risks
+cat("\nTraining RuleFit competing risks model...\n")
+tryCatch({
+  rulefit_model <- CRModel_rulefit(
+    data = train_data,
+    expvars = expvars,
+    timevar = timevar,
+    eventvar = eventvar,
+    failcode = 1
+  )
+  models[["RuleFit"]] <- rulefit_model
+  model_names <- c(model_names, "RuleFit")
+  cat("✓ RuleFit model trained successfully\n")
+}, error = function(e) {
+  cat("✗ RuleFit model failed:", e$message, "\n")
+})
+
+# 6.9 SurvReg for Competing Risks
+cat("\nTraining SurvReg competing risks model...\n")
+tryCatch({
+  survreg_model <- CRModel_SurvReg(
+    data = train_data,
+    expvars = expvars,
+    timevar = timevar,
+    eventvar = eventvar,
+    failcode = 1
+  )
+  models[["SurvReg"]] <- survreg_model
+  model_names <- c(model_names, "SurvReg")
+  cat("✓ SurvReg model trained successfully\n")
+}, error = function(e) {
+  cat("✗ SurvReg model failed:", e$message, "\n")
+})
+
+cat("\nTotal models trained successfully:", length(models), "\n")
+cat("Successful models:", paste(model_names, collapse = ", "), "\n")
+
+# --- 7. Model Predictions ---
+cat("\n=== STEP 6: COMPETING RISKS MODEL PREDICTIONS ===\n")
+
+# Generate predictions for all trained models
+predictions <- list()
+
+# Define prediction functions mapping
+predict_functions <- list(
+  "Cox" = Predict_CRModel_Cox,
+  "FineGray" = Predict_CRModel_FineGray,
+  "RF" = Predict_CRModel_RF,
+  "XGBoost" = Predict_CRModel_xgboost,
+  "GAM" = Predict_CRModel_GAM,
+  "BART" = Predict_CRModel_BART,
+  "DeepSurv" = Predict_CRModel_DeepSurv,
+  "RuleFit" = Predict_CRModel_rulefit,
+  "SurvReg" = Predict_CRModel_SurvReg
+)
+
+for (model_name in model_names) {
+  if (model_name %in% names(predict_functions)) {
+    cat("Generating", model_name, "predictions...\n")
+    tryCatch({
+      pred <- predict_functions[[model_name]](models[[model_name]], test_data)
+      predictions[[model_name]] <- pred
+      cat(model_name, "predictions - Times length:", length(pred$Times),
+          "CIF dimensions:", dim(pred$CIF), "\n")
+    }, error = function(e) {
+      cat(model_name, "prediction failed:", e$message, "\n")
+    })
+  }
+}
+
+# --- 8. Model Evaluation ---
+cat("\n=== STEP 7: COMPETING RISKS MODEL EVALUATION ===\n")
+
+# Prepare actual survival data for evaluation
+actual_times <- test_data[[timevar]]
+actual_events <- test_data[[eventvar]]
+
+# Create survival object for competing risks
+surv_obj <- Surv(actual_times, actual_events, type = "mstate")
+
+# 8.1 Time-dependent Concordance for Competing Risks
+cat("Calculating concordance indices for competing risks...\n")
+
+# Initialize concordance storage
+concordances <- list()
+
+# Evaluation time point (median time to relapse event)
+eval_time <- median(actual_times[actual_events == 1])
+cat("Evaluation time point:", round(eval_time, 2), "months\n\n")
+
+# Calculate concordance for all models
+for (model_name in names(predictions)) {
+  tryCatch({
+    pred <- predictions[[model_name]]
+
+    # Get CIF predictions at evaluation time
+    time_idx <- which.min(abs(pred$Times - eval_time))
+    cif_at_eval <- pred$CIF[time_idx, ]
+
+    # Calculate concordance for competing risks
+    concordance_val <- timedepConcordanceCR(
+      SurvObj = surv_obj,
+      Predictions = matrix(cif_at_eval, ncol = 1),
+      time = eval_time,
+      cause = 1,
+      TestMat = test_data[, expvars]
+    )
+
+    concordances[[model_name]] <- concordance_val
+    cat(model_name, "concordance:", round(concordance_val, 3), "\n")
+  }, error = function(e) {
+    concordances[[model_name]] <- NA
+    cat(model_name, "concordance: NA (failed:", e$message, ")\n")
+  })
+}
+
+# 8.2 Brier Score for Competing Risks
+cat("\nCalculating Brier scores for competing risks...\n")
+
+brier_scores <- list()
+
+for (model_name in names(predictions)) {
+  tryCatch({
+    pred <- predictions[[model_name]]
+
+    # Calculate Brier score at evaluation time
+    time_idx <- which.min(abs(pred$Times - eval_time))
+    cif_at_eval <- pred$CIF[time_idx, ]
+
+    # Binary outcome: did relapse occur by eval_time?
+    observed_outcome <- ifelse(actual_events == 1 & actual_times <= eval_time, 1, 0)
+
+    # Brier score: mean squared error
+    brier_score <- mean((cif_at_eval - observed_outcome)^2)
+    brier_scores[[model_name]] <- brier_score
+
+    cat(model_name, "Brier score:", round(brier_score, 4), "\n")
+  }, error = function(e) {
+    cat(model_name, "Brier score calculation failed:", e$message, "\n")
+  })
+}
+
+# 8.3 Integrated Concordance for Competing Risks (Event 1)
+cat("\nCalculating integrated concordance indices for competing risks (Event 1)...\n")
+
+# Initialize integrated concordance storage
+integrated_concordances <- list()
+
+# Calculate integrated concordance for all models
+for (model_name in names(predictions)) {
+  tryCatch({
+    pred <- predictions[[model_name]]
+
+    # integratedConcordanceCR expects predictions as matrix (rows=observations, cols=times)
+    # pred$CIF is already in this format (times x observations), so we transpose it
+    cif_matrix <- t(pred$CIF)  # Now: observations x times
+
+    # Calculate integrated concordance for competing risks (event 1)
+    integrated_conc <- integratedConcordanceCR(
+      SurvObj = surv_obj,
+      Predictions = cif_matrix,
+      eval.times = pred$Times,
+      cause = 1,
+      TestMat = test_data[, expvars]
+    )
+
+    integrated_concordances[[model_name]] <- integrated_conc
+    cat(model_name, "integrated concordance (Event 1):", round(integrated_conc, 3), "\n")
+  }, error = function(e) {
+    integrated_concordances[[model_name]] <- NA
+    cat(model_name, "integrated concordance (Event 1): NA (failed:", e$message, ")\n")
+  })
+}
+
+# --- 9. Ensemble Predictions ---
+cat("\n=== STEP 8: ENSEMBLE PREDICTIONS FOR COMPETING RISKS ===\n")
+
+# Select top 5 models based on concordance for ensemble
+valid_concordances <- concordances[!is.na(unlist(concordances))]
+if (length(valid_concordances) >= 5) {
+  top_models <- names(sort(unlist(valid_concordances), decreasing = TRUE))[1:5]
+} else if (length(valid_concordances) > 0) {
+  top_models <- names(valid_concordances)
+} else {
+  top_models <- model_names[1:min(5, length(model_names))]
+}
+
+cat("Top models for ensemble:", paste(top_models, collapse = ", "), "\n")
+
+# Create ensemble by averaging CIF predictions from top models
+# First, collect all time points from selected models
+all_times <- c()
+for (model_name in top_models) {
+  if (model_name %in% names(predictions)) {
+    all_times <- c(all_times, predictions[[model_name]]$Times)
+  }
+}
+
+# Create common time grid
+common_times <- sort(unique(all_times))
+common_times <- common_times[common_times <= max(all_times) & common_times > 0]
+
+# If only one model, use it directly as ensemble
+if (length(top_models) == 1) {
+  model_name <- top_models[1]
+  pred <- predictions[[model_name]]
+  ensemble_cif <- t(pred$CIF)  # Transpose to times x observations format
+  common_times <- pred$Times
+  cat("Ensemble uses single model:", model_name, "\n")
+} else {
+  # Interpolate CIF predictions to common time grid for ensemble models
+  ensemble_matrices <- list()
+
+  for (model_name in top_models) {
+    if (model_name %in% names(predictions)) {
+      pred <- predictions[[model_name]]
+      model_interp <- matrix(NA, nrow = length(common_times), ncol = ncol(pred$CIF))
+
+      for (j in seq_len(ncol(pred$CIF))) {
+        tryCatch({
+          model_interp[, j] <- approx(pred$Times, pred$CIF[, j],
+                                       xout = common_times, method = "linear",
+                                       rule = 2)$y
+        }, error = function(e) {
+          # Fallback: use nearest neighbor interpolation
+          model_interp[, j] <- sapply(common_times, function(t) {
+            idx <- which.min(abs(pred$Times - t))
+            pred$CIF[idx, j]
+          })
+        })
+      }
+      ensemble_matrices[[model_name]] <- model_interp
+    }
+  }
+
+  # Create ensemble by averaging CIF predictions
+  if (length(ensemble_matrices) > 1) {
+    ensemble_cif <- Reduce("+", ensemble_matrices) / length(ensemble_matrices)
+  } else {
+    ensemble_cif <- ensemble_matrices[[1]]
+  }
+}
+
+# Ensure CIF values are between 0 and 1
+ensemble_cif[ensemble_cif < 0] <- 0
+ensemble_cif[ensemble_cif > 1] <- 1
+
+cat("Ensemble predictions created for", ncol(ensemble_cif), "subjects using",
+    length(top_models), "models\n")
+
+# Evaluate ensemble
+ensemble_time_idx <- which.min(abs(common_times - eval_time))
+ensemble_cif_at_eval <- ensemble_cif[ensemble_time_idx, ]
+
+ensemble_concordance <- timedepConcordanceCR(
+  SurvObj = surv_obj,
+  Predictions = matrix(ensemble_cif_at_eval, ncol = 1),
+  time = eval_time,
+  cause = 1,
+  TestMat = test_data[, expvars]
+)
+
+observed_outcome_ensemble <- ifelse(actual_events == 1 & actual_times <= eval_time, 1, 0)
+ensemble_brier <- mean((ensemble_cif_at_eval - observed_outcome_ensemble)^2)
+
+cat("Ensemble concordance:", round(ensemble_concordance, 3), "\n")
+cat("Ensemble Brier score:", round(ensemble_brier, 4), "\n")
+
+# Calculate integrated concordance for ensemble
+cat("\nCalculating integrated concordance for ensemble (Event 1)...\n")
+tryCatch({
+  # ensemble_cif is in format: times x observations, so transpose for integratedConcordanceCR
+  ensemble_cif_matrix <- t(ensemble_cif)  # Now: observations x times
+
+  ensemble_integrated_conc <- integratedConcordanceCR(
+    SurvObj = surv_obj,
+    Predictions = ensemble_cif_matrix,
+    eval.times = common_times,
+    cause = 1,
+    TestMat = test_data[, expvars]
+  )
+
+  integrated_concordances[["Ensemble"]] <- ensemble_integrated_conc
+  cat("Ensemble integrated concordance (Event 1):", round(ensemble_integrated_conc, 3), "\n")
+}, error = function(e) {
+  cat("Ensemble integrated concordance calculation failed:", e$message, "\n")
+})
+
+# --- 10. Expected Time Lost (ETL) Calculation ---
+cat("\n=== STEP 9: EXPECTED TIME LOST ANALYSIS ===\n")
+
+# Calculate expected time lost for competing risks
+# ETL = integral from 0 to UL of CIF(t) dt
+max_time <- max(actual_times)
+cat("Maximum follow-up time:", round(max_time, 2), "months\n")
+
+# Calculate ETL for all models
+etl_results <- list()
+
+for (model_name in names(predictions)) {
+  tryCatch({
+    pred <- predictions[[model_name]]
+
+    # Calculate ETL for each subject by integrating CIF
+    etl_values <- numeric(nrow(pred$CIF))
+    for (j in seq_len(nrow(pred$CIF))) {
+      # Numerical integration of CIF from 0 to max_time
+      cif_curve <- pred$CIF[j, ]
+      time_grid <- pred$Times
+
+      # Use trapezoidal rule for integration
+      # ETL = integral of CIF(t) from 0 to max_time
+      # This represents the expected time spent in the "at risk for relapse" state
+
+      # Filter times up to max_time
+      valid_idx <- time_grid <= max_time
+      times_valid <- time_grid[valid_idx]
+      cif_valid <- cif_curve[valid_idx]
+
+      if (length(times_valid) > 1) {
+        etl <- sum(diff(times_valid) * (cif_valid[-1] + cif_valid[-length(cif_valid)])) / 2
+        etl_values[j] <- etl
+      } else {
+        etl_values[j] <- 0
+      }
+    }
+
+    etl_results[[model_name]] <- etl_values
+    cat(model_name, "ETL - mean:", round(mean(etl_values, na.rm = TRUE), 2),
+        "range:", paste(round(range(etl_values, na.rm = TRUE), 2), collapse = "-"), "\n")
+  }, error = function(e) {
+    cat(model_name, "ETL calculation failed:", e$message, "\n")
+  })
+}
+
+# Ensemble ETL
+ensemble_etl <- numeric(ncol(ensemble_cif))
+for (j in seq_len(ncol(ensemble_cif))) {
+  cif_curve <- ensemble_cif[, j]
+  time_grid <- common_times
+
+  valid_idx <- time_grid <= max_time
+  times_valid <- time_grid[valid_idx]
+  cif_valid <- cif_curve[valid_idx]
+
+  if (length(times_valid) > 1) {
+    etl <- sum(diff(times_valid) * (cif_valid[-1] + cif_valid[-length(cif_valid)])) / 2
+    ensemble_etl[j] <- etl
+  } else {
+    ensemble_etl[j] <- 0
+  }
+}
+etl_results[["Ensemble"]] <- ensemble_etl
+cat("Ensemble ETL - mean:", round(mean(ensemble_etl), 2),
+    "range:", paste(round(range(ensemble_etl), 2), collapse = "-"), "\n")
+
+# --- 11. Visualization ---
+cat("\n=== STEP 10: COMPETING RISKS VISUALIZATION ===\n")
+
+# 11.1 Model Performance Comparison
+performance_df <- data.frame(
+  Model = names(concordances),
+  Concordance = unlist(concordances),
+  Integrated_Concordance = unlist(integrated_concordances[names(concordances)]),
+  Brier_Score = unlist(brier_scores[names(concordances)]),
+  stringsAsFactors = FALSE
+)
+
+# Add ensemble
+performance_df <- rbind(performance_df,
+                        data.frame(Model = "Ensemble",
+                                   Concordance = ensemble_concordance,
+                                   Integrated_Concordance = ensemble_integrated_conc,
+                                   Brier_Score = ensemble_brier,
+                                   stringsAsFactors = FALSE))
+
+# Remove rows with NA concordance
+performance_df <- performance_df[!is.na(performance_df$Concordance), ]
+
+cat("\nModel Performance Summary:\n")
+print(performance_df)
+
+# 11.2 Cumulative Incidence Curves for Selected Patients
+cat("\nCreating CIF plots for first 3 test patients...\n")
+
+plot_patients <- seq_len(min(3, nrow(test_data)))
+cif_plot_data <- data.frame()
+
+for (patient in plot_patients) {
+  # Add predictions from all models
+  for (model_name in names(predictions)) {
+    pred <- predictions[[model_name]]
+    model_data <- data.frame(
+      Time = pred$Times,
+      CIF = pred$CIFs[, patient],  # Fixed: CIFs matrix is [times, observations]
+      Model = model_name,
+      Patient = paste("Patient", patient),
+      stringsAsFactors = FALSE
+    )
+    cif_plot_data <- rbind(cif_plot_data, model_data)
+  }
+
+  # Ensemble
+  ensemble_data <- data.frame(
+    Time = common_times,
+    CIF = ensemble_cif[, patient],
+    Model = "Ensemble",
+    Patient = paste("Patient", patient),
+    stringsAsFactors = FALSE
+  )
+  cif_plot_data <- rbind(cif_plot_data, ensemble_data)
+}
+
+# Create color palette with ensemble in BLACK
+unique_models <- unique(cif_plot_data$Model)
+model_colors <- rainbow(length(unique_models) - 1)  # -1 for ensemble
+names(model_colors) <- setdiff(unique_models, "Ensemble")
+model_colors["Ensemble"] <- "black"
+
+cat("✓ Color palette created - Ensemble is BLACK\n")
+
+# Print CIF values for first 3 patients at key time points
+cat("\n=== CIF VALUES FOR FIRST 3 TEST PATIENTS ===\n")
+key_times <- c(6, 12, 24, 36)  # months
+
+for (patient in 1:3) {
+  cat(sprintf("\n--- PATIENT %d ---\n", patient))
+  cat("Patient characteristics:\n")
+  print(test_data[patient, expvars])
+  cat("\nCIF values at key time points:\n")
+  
+  for (model_name in names(predictions)) {
+    pred <- predictions[[model_name]]
+    cat(sprintf("\n%s model:\n", model_name))
+    
+    for (time_point in key_times) {
+      time_idx <- which.min(abs(pred$Times - time_point))
+      cif_value <- pred$CIFs[time_idx, patient]  # Fixed: CIFs matrix is [times, observations]
+      cat(sprintf("  %2d months: %.4f\n", time_point, cif_value))
+    }
+  }
+  
+  # Ensemble
+  cat("\nEnsemble model:\n")
+  for (time_point in key_times) {
+    time_idx <- which.min(abs(common_times - time_point))
+    cif_value <- ensemble_cif[time_idx, patient]
+    cat(sprintf("  %2d months: %.4f\n", time_point, cif_value))
+  }
+}
+
+cat("\n✓ CIF values displayed for first 3 patients\n")
+
+# 11.3 Create all plots
+
+# Plot 1: CIF curves for 3 patients, all models
+p1 <- ggplot(cif_plot_data, aes(x = Time, y = CIF, color = Model)) +
+  geom_line(aes(size = Model == "Ensemble"), alpha = 0.8) +
+  facet_wrap(~Patient, ncol = 3) +
+  scale_color_manual(values = model_colors) +
+  scale_size_manual(values = c("TRUE" = 1.5, "FALSE" = 0.8), guide = "none") +
+  labs(title = "Predicted Cumulative Incidence Functions (CIF) - All Models",
+       subtitle = paste("Event of Interest: Relapse |",
+                        "Comparing", length(unique_models), "models | Ensemble in BLACK"),
+       x = "Time (months)", y = "Cumulative Incidence of Relapse") +
+  theme_minimal() +
+  theme(legend.position = "bottom",
+        legend.text = element_text(size = 8),
+        plot.title = element_text(face = "bold", size = 14)) +
+  guides(color = guide_legend(ncol = 5, override.aes = list(size = 1)))
+
+# Plot 2: Focused plot for Patient 1
+patient1_data <- cif_plot_data[cif_plot_data$Patient == "Patient 1", ]
+
+p2 <- ggplot(patient1_data, aes(x = Time, y = CIF, color = Model)) +
+  geom_line(aes(size = Model == "Ensemble")) +
+  scale_color_manual(values = model_colors) +
+  scale_size_manual(values = c("TRUE" = 1.5, "FALSE" = 1), guide = "none") +
+  labs(title = "Cumulative Incidence Functions - Patient 1",
+       subtitle = "Probability of Relapse Over Time (Ensemble in BLACK)",
+       x = "Time (months)", y = "Cumulative Incidence") +
+  theme_minimal() +
+  theme(legend.position = "right",
+        plot.title = element_text(face = "bold"))
+
+# Plot 3: Concordance comparison
+p3 <- ggplot(performance_df, aes(x = reorder(Model, Concordance), y = Concordance,
+                                  fill = Model == "Ensemble")) +
+  geom_bar(stat = "identity") +
+  scale_fill_manual(values = c("TRUE" = "black", "FALSE" = "steelblue"), guide = "none") +
+  coord_flip() +
+  labs(title = "Model Performance: Concordance Index",
+       subtitle = "Higher is better | Ensemble in BLACK",
+       x = "Model", y = "Concordance Index") +
+  theme_minimal() +
+  theme(plot.title = element_text(face = "bold"))
+
+# Plot 4: Brier score comparison
+p4 <- ggplot(performance_df, aes(x = reorder(Model, -Brier_Score), y = Brier_Score,
+                                  fill = Model == "Ensemble")) +
+  geom_bar(stat = "identity") +
+  scale_fill_manual(values = c("TRUE" = "black", "FALSE" = "coral"), guide = "none") +
+  coord_flip() +
+  labs(title = "Model Performance: Brier Score",
+       subtitle = "Lower is better | Ensemble in BLACK",
+       x = "Model", y = "Brier Score") +
+  theme_minimal() +
+  theme(plot.title = element_text(face = "bold"))
+
+# Plot 5: Expected Time Lost distribution
+etl_plot_data <- data.frame()
+for (model_name in names(etl_results)) {
+  model_etl_df <- data.frame(
+    ETL = etl_results[[model_name]],
+    Model = model_name,
+    IsEnsemble = model_name == "Ensemble",
+    stringsAsFactors = FALSE
+  )
+  etl_plot_data <- rbind(etl_plot_data, model_etl_df)
+}
+
+p5 <- ggplot(etl_plot_data, aes(x = reorder(Model, ETL, FUN = median), y = ETL,
+                                 fill = IsEnsemble)) +
+  geom_boxplot() +
+  scale_fill_manual(values = c("TRUE" = "black", "FALSE" = "lightblue"), guide = "none") +
+  coord_flip() +
+  labs(title = "Expected Time Lost Distribution by Model",
+       subtitle = "Ensemble in BLACK",
+       x = "Model", y = "Expected Time Lost (months)") +
+  theme_minimal() +
+  theme(plot.title = element_text(face = "bold"))
+
+# Plot 6: Cumulative Incidence by Disease Phase (from test data)
+test_cif_phase <- cuminc(ftime = test_data$ftime,
+                         fstatus = test_data$Status,
+                         group = test_data$Phase)
+
+# Extract CIF data for plotting
+cif_phase_plot_data <- data.frame()
+for (cif_name in names(test_cif_phase)) {
+  if (cif_name %in% c("Tests")) next  # Skip test results
+
+  cif_obj <- test_cif_phase[[cif_name]]
+  parts <- strsplit(cif_name, " ")[[1]]
+
+  if (length(parts) >= 2) {
+    event_type <- as.numeric(parts[length(parts)])
+    phase_name <- paste(parts[1:(length(parts)-1)], collapse = " ")
+
+    cif_data <- data.frame(
+      Time = cif_obj$time,
+      CIF = cif_obj$est,
+      Phase = phase_name,
+      Event = ifelse(event_type == 1, "Relapse", "TRM"),
+      stringsAsFactors = FALSE
+    )
+    cif_phase_plot_data <- rbind(cif_phase_plot_data, cif_data)
+  }
+}
+
+p6 <- ggplot(cif_phase_plot_data[cif_phase_plot_data$Event == "Relapse", ],
+             aes(x = Time, y = CIF, color = Phase)) +
+  geom_line(linewidth = 1.2) +
+  labs(title = "Cumulative Incidence of Relapse by Disease Phase",
+       subtitle = "Test Set Data",
+       x = "Time (months)", y = "Cumulative Incidence of Relapse") +
+  theme_minimal() +
+  theme(plot.title = element_text(face = "bold"))
+
+p7 <- ggplot(cif_phase_plot_data[cif_phase_plot_data$Event == "TRM", ],
+             aes(x = Time, y = CIF, color = Phase)) +
+  geom_line(linewidth = 1.2) +
+  labs(title = "Cumulative Incidence of TRM by Disease Phase",
+       subtitle = "Test Set Data",
+       x = "Time (months)", y = "Cumulative Incidence of TRM") +
+  theme_minimal() +
+  theme(plot.title = element_text(face = "bold"))
+
+# Display plots
+print(p1)  # CIF curves for 3 patients, all models
+print(p2)  # CIF for patient 1
+print(p3)  # Concordance comparison
+print(p4)  # Brier score comparison
+print(p5)  # ETL distribution
+print(p6)  # CIF by phase - Relapse
+print(p7)  # CIF by phase - TRM
+
+# Save comprehensive plot to PDF
+cat("\nSaving plots to PDF...\n")
+pdf("bmt_competing_risks_analysis.pdf", width = 16, height = 20)
+
+# Page 1: CIF curves for 3 patients
+print(p1)
+
+# Page 2: Patient 1 focused + Concordance
+grid.arrange(p2, p3, ncol = 2)
+
+# Page 3: Brier Score + ETL
+grid.arrange(p4, p5, ncol = 2)
+
+# Page 4: CIF by Phase (both events)
+grid.arrange(p6, p7, ncol = 1)
+
+dev.off()
+cat("✓ Plots saved to bmt_competing_risks_analysis.pdf\n")
+
+# --- 12. Model Persistence ---
+cat("\n=== STEP 11: MODEL SAVING AND LOADING ===\n")
+
+# Save all trained models
+saved_models <- c()
+for (model_name in names(models)) {
+  filename <- paste0(tolower(model_name), "_crmodel_bmt.rds")
+  saveRDS(models[[model_name]], filename)
+  saved_models <- c(saved_models, filename)
+}
+
+# Save ensemble components
+ensemble_object <- list(
+  cif = ensemble_cif,
+  times = common_times,
+  concordance = ensemble_concordance,
+  brier_score = ensemble_brier,
+  etl = ensemble_etl,
+  top_models = top_models
+)
+saveRDS(ensemble_object, "ensemble_crmodel_bmt.rds")
+saved_models <- c(saved_models, "ensemble_crmodel_bmt.rds")
+
+cat("Models saved successfully:\n")
+for (filename in saved_models) {
+  cat("-", filename, "\n")
+}
+
+# --- 13. Summary Report ---
+cat("\n=== FINAL SUMMARY ===\n")
+cat("══════════════════════════════════════════════════════════\n")
+cat("Comprehensive Competing Risks Analysis Complete!\n")
+cat("══════════════════════════════════════════════════════════\n\n")
+
+cat("Dataset: Bone Marrow Transplant (BMT) - Competing Risks\n")
+cat("Total observations:", nrow(bmt_data), "\n")
+cat("Training set:", nrow(train_data), "subjects\n")
+cat("Test set:", nrow(test_data), "subjects\n\n")
+
+cat("Event Distribution:\n")
+cat("- Censored:", status_table["0"], "(", round(100 * status_table["0"] / nrow(bmt_data), 1), "%)\n")
+cat("- Relapse (event of interest):", status_table["1"], "(", round(100 * status_table["1"] / nrow(bmt_data), 1), "%)\n")
+cat("- TRM (competing risk):", status_table["2"], "(", round(100 * status_table["2"] / nrow(bmt_data), 1), "%)\n\n")
+
+cat("Models Successfully Trained:", length(models), "\n")
+cat("Models with Predictions:", length(predictions), "\n\n")
+
+cat("Model Performance (Concordance Index):\n")
+for (i in 1:nrow(performance_df)) {
+  prefix <- if (performance_df$Model[i] == "Ensemble") ">>> " else "  - "
+  cat(prefix, performance_df$Model[i], ":", round(performance_df$Concordance[i], 3), "\n")
+}
+
+cat("\nModel Performance (Brier Score):\n")
+for (i in 1:nrow(performance_df)) {
+  prefix <- if (performance_df$Model[i] == "Ensemble") ">>> " else "  - "
+  cat(prefix, performance_df$Model[i], ":", round(performance_df$Brier_Score[i], 4), "\n")
+}
+
+cat("\nExpected Time Lost (Mean, in months):\n")
+for (model_name in names(etl_results)) {
+  prefix <- if (model_name == "Ensemble") ">>> " else "  - "
+  cat(prefix, model_name, ":", round(mean(etl_results[[model_name]]), 2), "\n")
+}
+
+# Show best performing model
+best_model_idx <- which.max(performance_df$Concordance)
+best_model_name <- performance_df$Model[best_model_idx]
+best_concordance <- performance_df$Concordance[best_model_idx]
+
+cat("\n✓ Best Performing Model (by C-index):", best_model_name,
+    "with concordance:", round(best_concordance, 3), "\n\n")
+
+cat("Output Files Generated:\n")
+cat("- Model files:", length(saved_models), "RDS files\n")
+cat("- Visualization: bmt_competing_risks_analysis.pdf (4 pages)\n\n")
+
+cat("This analysis demonstrates:\n")
+cat("✓ Data loading and preprocessing for competing risks\n")
+cat("✓ Multiple competing risks models (Cox, Fine-Gray, RF, XGBoost, GAM)\n")
+cat("✓ Cumulative Incidence Function (CIF) calculations\n")
+cat("✓ Expected Time Lost (ETL) for competing risks\n")
+cat("✓ Model evaluation with CR-specific metrics\n")
+cat("✓ Ensemble methods for competing risks (HIGHLIGHTED IN BLACK)\n")
+cat("✓ Comprehensive CIF and ETL visualization\n")
+cat("✓ Model persistence and reloading\n")
+
+cat("\n══════════════════════════════════════════════════════════\n")
+cat("=== COMPETING RISKS VIGNETTE COMPLETE ===\n")
+cat("══════════════════════════════════════════════════════════\n")

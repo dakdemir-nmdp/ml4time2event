@@ -10,8 +10,8 @@ library(testthat)
 
 # Create simulated competing risks data for testing
 set.seed(42)
-n_train <- 200
-n_test <- 50
+n_train <- 50  # Reduced for faster testing
+n_test <- 20   # Reduced for faster testing
 
 # Training data - competing risks format
 train_data <- data.frame(

@@ -1,0 +1,101 @@
+
+R version 4.4.1 (2024-06-14) -- "Race for Your Life"
+Copyright (C) 2024 The R Foundation for Statistical Computing
+Platform: aarch64-apple-darwin20
+
+R is free software and comes with ABSOLUTELY NO WARRANTY.
+You are welcome to redistribute it under certain conditions.
+Type 'license()' or 'licence()' for distribution details.
+
+  Natural language support but running in an English locale
+
+R is a collaborative project with many contributors.
+Type 'contributors()' for more information and
+'citation()' on how to cite R or R packages in publications.
+
+Type 'demo()' for some demos, 'help()' for on-line help, or
+'help.start()' for an HTML browser interface to help.
+Type 'q()' to quit R.
+
+> source('calculate_integrated_concordance.R')
+ℹ Loading ml4time2event
+
+Attaching package: ‘dplyr’
+
+The following object is masked from ‘package:testthat’:
+
+    matches
+
+The following objects are masked from ‘package:stats’:
+
+    filter, lag
+
+The following objects are masked from ‘package:base’:
+
+    intersect, setdiff, setequal, union
+
+Loading saved competing risks models...
+Loaded 9 individual models + 1 ensemble model
+
+Generating predictions for individual models...
+Generating Cox predictions...
+Cox predictions - Times length: 35 CIF dimensions: 54 35 
+Generating FineGray predictions...
+FineGray predictions - Times length: 50 CIF dimensions: 54 50 
+Generating RF predictions...
+RF predictions - Times length: 80 CIF dimensions: 54 80 
+Generating XGBoost predictions...
+XGBoost predictions - Times length: 35 CIF dimensions: 54 35 
+Generating GAM predictions...
+GAM predictions - Times length: 35 CIF dimensions: 54 35 
+Generating BART predictions...
+*****In main of C++ for bart prediction
+tc (threadcount): 1
+number of bart draws: 200
+number of trees in bart sum: 50
+number of x columns: 9
+from x,np,p: 9, 1080
+***using serial code
+*****In main of C++ for bart prediction
+tc (threadcount): 1
+number of bart draws: 200
+number of trees in bart sum: 50
+number of x columns: 9
+from x,np,p: 9, 1080
+***using serial code
+BART predictions - Times length: 11 CIF dimensions: 54 11 
+Generating DeepSurv predictions...
+DeepSurv predictions - Times length: 35 CIF dimensions: 54 35 
+Generating RuleFit predictions...
+RuleFit predictions - Times length: 50 CIF dimensions: 54 50 
+Generating SurvReg predictions...
+SurvReg predictions - Times length: 35 CIF dimensions: 54 35 
+Ensemble predictions - Times length: 80 CIF dimensions: 54 80 
+
+=== INTEGRATED CONCORDANCE RESULTS (Event 1) ===
+Cox integrated concordance calculation failed: missing value where TRUE/FALSE needed 
+FineGray integrated concordance calculation failed: missing value where TRUE/FALSE needed 
+RF integrated concordance (Event 1): 0.526 
+XGBoost integrated concordance calculation failed: missing value where TRUE/FALSE needed 
+GAM integrated concordance calculation failed: missing value where TRUE/FALSE needed 
+BART integrated concordance calculation failed: missing value where TRUE/FALSE needed 
+DeepSurv integrated concordance calculation failed: missing value where TRUE/FALSE needed 
+RuleFit integrated concordance calculation failed: missing value where TRUE/FALSE needed 
+SurvReg integrated concordance calculation failed: missing value where TRUE/FALSE needed 
+Ensemble integrated concordance (Event 1): 0.526 
+
+=== SUMMARY: INTEGRATED CONCORDANCE INDEX (Event 1) ===
+Test set size: 54 patients
+Time range: 0.1 131.8 months
+Event distribution:
+  Censored (0): 11 ( 20.4 %)
+  Relapse (1): 21 ( 38.9 %)
+  TRM (2): 22 ( 40.7 %)
+
+Integrated Concordance Index Results (higher is better):
+  RF        : 0.526
+  Ensemble  : 0.526
+
+✓ Best performing model: RF with integrated concordance: 0.526 
+> 
+> 

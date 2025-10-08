@@ -232,31 +232,31 @@ PredictCRModels<-function(models, newdata, newtimes){
 
   # Assuming cifMatInterpolaltor is loaded/available
   if (!is.null(models$RF_Model)){
-    newprobsRF<-cifMatInterpolaltor(probsMat=Predict_RF$CIFs,times=Predict_RF$Times, newtimes=newtimes)
+    newprobsRF<-cifMatInterpolaltor(probsMat=t(Predict_RF$CIFs),times=Predict_RF$Times, newtimes=newtimes)
   }
   if (!is.null(models$RF_Model2)){
-    newprobsRF2<-cifMatInterpolaltor(probsMat=Predict_RF2$CIFs,times=Predict_RF2$Times, newtimes=newtimes)
+    newprobsRF2<-cifMatInterpolaltor(probsMat=t(Predict_RF2$CIFs),times=Predict_RF2$Times, newtimes=newtimes)
   }
   if (!is.null(models$FG_Model)){
-    newprobsFG<-cifMatInterpolaltor(probsMat=Predict_FG$CIFs,times=Predict_FG$Times, newtimes=newtimes)
+    newprobsFG<-cifMatInterpolaltor(probsMat=t(Predict_FG$CIFs),times=Predict_FG$Times, newtimes=newtimes)
   }
   if (!is.null(models$BART_Model)){
-    newprobsBART<-cifMatInterpolaltor(probsMat=Predict_BART$CIFs,times=Predict_BART$Times, newtimes=newtimes)
+    newprobsBART<-cifMatInterpolaltor(probsMat=t(Predict_BART$CIFs),times=Predict_BART$Times, newtimes=newtimes)
   }
   if (!is.null(models$Cox_Model)){
-    newprobsCox<-cifMatInterpolaltor(probsMat=Predict_Cox$CIFs,times=Predict_Cox$Times, newtimes=newtimes)
+    newprobsCox<-cifMatInterpolaltor(probsMat=t(Predict_Cox$CIFs),times=Predict_Cox$Times, newtimes=newtimes)
   }
   if (!is.null(models$rulefit_Model)){
-    newprobsrulefit<-cifMatInterpolaltor(probsMat=Predict_rulefit$CIFs,times=Predict_rulefit$Times, newtimes=newtimes)
+    newprobsrulefit<-cifMatInterpolaltor(probsMat=t(Predict_rulefit$CIFs),times=Predict_rulefit$Times, newtimes=newtimes)
   }
   if (!is.null(models$xgboost_Model)){
-    newprobsxgboost<-cifMatInterpolaltor(probsMat=Predict_xgboost$CIFs,times=Predict_xgboost$Times, newtimes=newtimes)
+    newprobsxgboost<-cifMatInterpolaltor(probsMat=t(Predict_xgboost$CIFs),times=Predict_xgboost$Times, newtimes=newtimes)
   }
   if (!is.null(models$gam_Model)){
-    newprobsgam<-cifMatInterpolaltor(probsMat=Predict_gam$CIFs,times=Predict_gam$Times, newtimes=newtimes)
+    newprobsgam<-cifMatInterpolaltor(probsMat=t(Predict_gam$CIFs),times=Predict_gam$Times, newtimes=newtimes)
   }
   if (!is.null(models$survreg_Model)){
-    newprobsurvreg<-cifMatInterpolaltor(probsMat=Predict_survreg$CIFs,times=Predict_survreg$Times, newtimes=newtimes)
+    newprobsurvreg<-cifMatInterpolaltor(probsMat=t(Predict_survreg$CIFs),times=Predict_survreg$Times, newtimes=newtimes)
   }
 
   ModelPredictions<-list()

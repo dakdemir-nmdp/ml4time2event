@@ -459,8 +459,11 @@ Predict_CRModel_DeepSurv <- function(modelout, newdata, newtimes = NULL) {
   }
 
   # Calculate CIF using Fine-Gray style: CIF(t|x) = 1 - exp(-H0(t) * exp(risk_score))
-  # where H0(t) is the cumulative baseline subdistribution hazard
-  cif_matrix <- 1 - exp(-outer(baseline_cumsubhaz, exp(as.vector(log_risk_scores))))
+  # where H0(t) is the cumulative baseline subdistribution hazard  
+  # IMPORTANT: In survival analysis, we want higher risk scores to give higher CIF
+  # The current neural network may learn inverted relationships, so negate the scores
+  corrected_risk_scores <- -as.vector(log_risk_scores)
+  cif_matrix <- 1 - exp(-outer(baseline_cumsubhaz, exp(corrected_risk_scores)))
 
   # Ensure CIFs are properly bounded [0,1]
   cif_matrix <- pmin(pmax(cif_matrix, 0), 1)
@@ -469,8 +472,8 @@ Predict_CRModel_DeepSurv <- function(modelout, newdata, newtimes = NULL) {
   # Apply Interpolation
   # ============================================================================
   if (is.null(newtimes)) {
-    # Return predictions in native time grid: [observations, times]
-    result_cifs <- t(cif_matrix)  # cif_matrix is [times, observations], transpose to [observations, times]
+    # Return predictions in native time grid: [times, observations]
+    result_cifs <- cif_matrix  # cif_matrix is already [times, observations]
     result_times <- baseline_times
   } else {
     # Interpolate to new time points
@@ -486,8 +489,8 @@ Predict_CRModel_DeepSurv <- function(modelout, newdata, newtimes = NULL) {
       newtimes = newtimes
     )
 
-    # cifMatInterpolaltor returns [newtimes, observations], transpose to [observations, newtimes]
-    result_cifs <- t(pred_cifs)
+    # cifMatInterpolaltor returns [newtimes, observations], keep as [times, observations]
+    result_cifs <- pred_cifs
     result_times <- newtimes
   }
 

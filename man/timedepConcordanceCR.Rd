@@ -4,27 +4,21 @@
 \alias{timedepConcordanceCR}
 \title{timedepConcordanceCR}
 \usage{
-timedepConcordanceCR(
-  predCIF,
-  predCIFtimes,
-  obstimes,
-  obsevents,
-  TestMat = NULL
-)
+timedepConcordanceCR(SurvObj, Predictions, time, cause = 1, TestMat = NULL)
 }
 \arguments{
-\item{predCIF}{Predicted matrix of probabilities (CIFs, rows=observations, cols=times)}
+\item{SurvObj}{survival object (Surv(time, status))}
 
-\item{predCIFtimes}{The times for which the probabilities are predicted}
+\item{Predictions}{matrix of predicted CIFs (rows=observations, cols=times) for the cause of interest}
 
-\item{obstimes}{Observed times vector}
+\item{time}{evaluation time point}
 
-\item{obsevents}{Observed event indicator vector (0=censored, 1=event of interest, 2=competing event)}
+\item{cause}{cause of interest (1 or 2)}
 
 \item{TestMat}{test dataset (optional, used if formula needs predictors)}
 }
 \value{
-output from the "pec::cindex' function.
+concordance index value
 }
 \description{
 Get time dependent concordance for competing risk outcomes (only event 1)

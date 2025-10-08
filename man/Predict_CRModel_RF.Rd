@@ -18,7 +18,7 @@ Can be any positive values - interpolation handles all time points.}
 \value{
 a list containing:
   \item{CIFs}{predicted cumulative incidence function matrix
-    (rows=times, cols=observations)}
+    (rows=observations, cols=times)}
   \item{Times}{the times at which CIFs are calculated
     (always includes time 0)}
 }

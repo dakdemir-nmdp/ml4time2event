@@ -1,0 +1,728 @@
+
+R version 4.4.1 (2024-06-14) -- "Race for Your Life"
+Copyright (C) 2024 The R Foundation for Statistical Computing
+Platform: aarch64-apple-darwin20
+
+R is free software and comes with ABSOLUTELY NO WARRANTY.
+You are welcome to redistribute it under certain conditions.
+Type 'license()' or 'licence()' for distribution details.
+
+  Natural language support but running in an English locale
+
+R is a collaborative project with many contributors.
+Type 'contributors()' for more information and
+'citation()' on how to cite R or R packages in publications.
+
+Type 'demo()' for some demos, 'help()' for on-line help, or
+'help.start()' for an HTML browser interface to help.
+Type 'q()' to quit R.
+
+> source('vignettes/comprehensive_competing_risks_analysis.R')
+ℹ Loading ml4time2event
+
+Attaching package: ‘dplyr’
+
+The following object is masked from ‘package:testthat’:
+
+    matches
+
+The following objects are masked from ‘package:stats’:
+
+    filter, lag
+
+The following objects are masked from ‘package:base’:
+
+    intersect, setdiff, setequal, union
+
+
+Attaching package: ‘gridExtra’
+
+The following object is masked from ‘package:dplyr’:
+
+    combine
+
+=== STEP 1: DATA LOADING ===
+Dataset dimensions: 177 rows, 7 columns
+Column names: Sex, D, Phase, Age, Status, Source, ftime 
+First few rows:
+  Sex   D   Phase Age Status Source  ftime
+1   M ALL Relapse  48      2  BM+PB   0.67
+2   F AML     CR2  23      1  BM+PB   9.50
+3   M ALL     CR3   7      0  BM+PB 131.77
+4   F ALL     CR2  26      2  BM+PB  24.03
+5   F ALL     CR2  36      2  BM+PB   1.47
+6   M ALL Relapse  17      2  BM+PB   2.23
+
+=== Event Status Distribution ===
+Event variable coding:
+  0 = Censored (event-free)
+  1 = Relapse (event of interest)
+  2 = Treatment-Related Mortality (TRM) - competing risk
+
+
+ 0  1  2 
+46 56 75 
+
+Event rates:
+  Censored: 46 ( 26 %)
+  Relapse: 56 ( 31.6 %)
+  TRM: 75 ( 42.4 %)
+
+=== STEP 2: DATA PREPROCESSING ===
+
+Variable types:
+'data.frame':	177 obs. of  7 variables:
+ $ Sex   : Factor w/ 2 levels "F","M": 2 1 2 1 1 2 2 1 2 1 ...
+ $ D     : Factor w/ 2 levels "ALL","AML": 1 2 1 1 1 1 1 1 1 1 ...
+ $ Phase : Factor w/ 4 levels "CR1","CR2","CR3",..: 4 2 3 2 2 4 1 1 1 4 ...
+ $ Age   : int  48 23 7 26 36 17 7 17 26 8 ...
+ $ Status: int  2 1 0 2 2 2 0 2 0 1 ...
+ $ Source: Factor w/ 2 levels "BM+PB","PB": 1 1 1 1 1 1 1 1 1 1 ...
+ $ ftime : num  0.67 9.5 131.77 24.03 1.47 ...
+NULL
+
+Time range (ftime in months): 0.13 131.77 
+
+Variable Profile Summary:
+NULL
+
+=== STEP 3: CUMULATIVE INCIDENCE EXPLORATION ===
+Calculating CIF by disease phase...
+
+Cumulative Incidence at 12 months by Phase:
+  CR1 - Relapse: 0.149
+  CR2 - Relapse: 0.133
+  CR3 - Relapse: 0.167
+  Relapse - Relapse: 0.411
+
+=== STEP 4: DATA SPLITTING ===
+Training set size: 123 
+Test set size: 54 
+
+Training set event distribution:
+
+ 0  1  2 
+35 35 53 
+
+=== STEP 5: COMPETING RISKS MODEL TRAINING ===
+Explanatory variables: Sex, D, Phase, Age, Source 
+Time variable: ftime 
+Event variable: Status 
+Event of interest (failcode): 1 (Relapse)
+Competing risk: 2 (TRM)
+
+Training Cause-Specific Cox model...
+✓ Cox model trained successfully
+
+Training Fine-Gray model...
+✓ Fine-Gray model trained successfully
+
+Training Random Forest competing risks model...
+effective sampsize: 50 of 123 
+nodesize =  1  mtry = 4  error = 40.46% 
+Searching left ...
+nodesize = 1  mtry = 3  reps = 1  error = 41.05% 
+nodesize =  1  mtry = 3  error = 41.05% 
+-0.01469086 0.001 
+nodesize = 1  mtry = 2  reps = 1  error = 40.15% 
+nodesize =  1  mtry = 2  error = 40.15% 
+0.007570474 0.001 
+nodesize = 1  mtry = 1  reps = 1  error = 36.94% 
+nodesize =  1  mtry = 1  error = 36.94% 
+0.0799513 0.001 
+Searching right ...
+nodesize = 1  mtry = 5  reps = 1  error = 42.65% 
+nodesize =  1  mtry = 5  error = 42.65% 
+-0.1545601 0.001 
+nodesize =  2  mtry = 4  error = 40.66% 
+Searching left ...
+nodesize = 2  mtry = 3  reps = 1  error = 41.49% 
+nodesize =  2  mtry = 3  error = 41.49% 
+-0.02040857 0.001 
+nodesize = 2  mtry = 2  reps = 1  error = 39.03% 
+nodesize =  2  mtry = 2  error = 39.03% 
+0.04011508 0.001 
+nodesize = 2  mtry = 1  reps = 1  error = 36.54% 
+nodesize =  2  mtry = 1  error = 36.54% 
+0.06370878 0.001 
+Searching right ...
+nodesize = 2  mtry = 5  reps = 1  error = 40.35% 
+nodesize =  2  mtry = 5  error = 40.35% 
+-0.1042566 0.001 
+nodesize =  3  mtry = 4  error = 38.31% 
+Searching left ...
+nodesize = 3  mtry = 3  reps = 1  error = 37.05% 
+nodesize =  3  mtry = 3  error = 37.05% 
+0.03278787 0.001 
+nodesize = 3  mtry = 2  reps = 1  error = 37.31% 
+nodesize =  3  mtry = 2  error = 37.31% 
+-0.007004804 0.001 
+nodesize = 3  mtry = 1  reps = 1  error = 34.29% 
+nodesize =  3  mtry = 1  error = 34.29% 
+0.0745467 0.001 
+Searching right ...
+nodesize = 3  mtry = 5  reps = 1  error = 36.67% 
+nodesize =  3  mtry = 5  error = 36.67% 
+-0.06933673 0.001 
+nodesize =  4  mtry = 4  error = 35.37% 
+Searching left ...
+nodesize = 4  mtry = 3  reps = 1  error = 37.37% 
+nodesize =  4  mtry = 3  error = 37.37% 
+-0.05653297 0.001 
+nodesize = 4  mtry = 2  reps = 1  error = 38.55% 
+nodesize =  4  mtry = 2  error = 38.55% 
+-0.08995737 0.001 
+nodesize = 4  mtry = 1  reps = 1  error = 34.1% 
+nodesize =  4  mtry = 1  error = 34.1% 
+0.03596625 0.001 
+Searching right ...
+nodesize = 4  mtry = 5  reps = 1  error = 34.4% 
+nodesize =  4  mtry = 5  error = 34.4% 
+-0.008833846 0.001 
+nodesize =  5  mtry = 4  error = 35.39% 
+Searching left ...
+nodesize = 5  mtry = 3  reps = 1  error = 34.45% 
+nodesize =  5  mtry = 3  error = 34.45% 
+0.02670721 0.001 
+nodesize = 5  mtry = 2  reps = 1  error = 35.7% 
+nodesize =  5  mtry = 2  error = 35.7% 
+-0.03618354 0.001 
+nodesize = 5  mtry = 1  reps = 1  error = 34.96% 
+nodesize =  5  mtry = 1  error = 34.96% 
+-0.01479153 0.001 
+Searching right ...
+nodesize = 5  mtry = 5  reps = 1  error = 33.33% 
+nodesize =  5  mtry = 5  error = 33.33% 
+0.03236422 0.001 
+nodesize =  6  mtry = 4  error = 35.46% 
+Searching left ...
+nodesize = 6  mtry = 3  reps = 1  error = 34.31% 
+nodesize =  6  mtry = 3  error = 34.31% 
+0.0325749 0.001 
+nodesize = 6  mtry = 2  reps = 1  error = 34.1% 
+nodesize =  6  mtry = 2  error = 34.1% 
+0.006073446 0.001 
+nodesize = 6  mtry = 1  reps = 1  error = 36.15% 
+nodesize =  6  mtry = 1  error = 36.15% 
+-0.06014329 0.001 
+Searching right ...
+nodesize = 6  mtry = 5  reps = 1  error = 33.03% 
+nodesize =  6  mtry = 5  error = 33.03% 
+0.03138998 0.001 
+nodesize =  7  mtry = 4  error = 32.74% 
+Searching left ...
+nodesize = 7  mtry = 3  reps = 1  error = 33.53% 
+nodesize =  7  mtry = 3  error = 33.53% 
+-0.02407115 0.001 
+nodesize = 7  mtry = 2  reps = 1  error = 31.79% 
+nodesize =  7  mtry = 2  error = 31.79% 
+0.02916197 0.001 
+nodesize = 7  mtry = 1  reps = 1  error = 32.44% 
+nodesize =  7  mtry = 1  error = 32.44% 
+-0.0205156 0.001 
+Searching right ...
+nodesize = 7  mtry = 5  reps = 1  error = 36.76% 
+nodesize =  7  mtry = 5  error = 36.76% 
+-0.1563985 0.001 
+nodesize =  8  mtry = 4  error = 32.97% 
+Searching left ...
+nodesize = 8  mtry = 3  reps = 1  error = 33.98% 
+nodesize =  8  mtry = 3  error = 33.98% 
+-0.03075859 0.001 
+nodesize = 8  mtry = 2  reps = 1  error = 32.9% 
+nodesize =  8  mtry = 2  error = 32.9% 
+0.001995501 0.001 
+nodesize = 8  mtry = 1  reps = 1  error = 33.81% 
+nodesize =  8  mtry = 1  error = 33.81% 
+-0.02766379 0.001 
+Searching right ...
+nodesize = 8  mtry = 5  reps = 1  error = 34.52% 
+nodesize =  8  mtry = 5  error = 34.52% 
+-0.04908477 0.001 
+nodesize =  9  mtry = 4  error = 33.6% 
+Searching left ...
+nodesize = 9  mtry = 3  reps = 1  error = 34.11% 
+nodesize =  9  mtry = 3  error = 34.11% 
+-0.01496858 0.001 
+nodesize = 9  mtry = 2  reps = 1  error = 33.4% 
+nodesize =  9  mtry = 2  error = 33.4% 
+0.00596107 0.001 
+nodesize = 9  mtry = 1  reps = 1  error = 34.22% 
+nodesize =  9  mtry = 1  error = 34.22% 
+-0.02455699 0.001 
+Searching right ...
+nodesize = 9  mtry = 5  reps = 1  error = 34.45% 
+nodesize =  9  mtry = 5  error = 34.45% 
+-0.03131999 0.001 
+nodesize =  10  mtry = 4  error = 34.32% 
+Searching left ...
+nodesize = 10  mtry = 3  reps = 1  error = 37.86% 
+nodesize =  10  mtry = 3  error = 37.86% 
+-0.1031773 0.001 
+nodesize = 10  mtry = 2  reps = 1  error = 34.06% 
+nodesize =  10  mtry = 2  error = 34.06% 
+0.007563081 0.001 
+nodesize = 10  mtry = 1  reps = 1  error = 34.51% 
+nodesize =  10  mtry = 1  error = 34.51% 
+-0.01345909 0.001 
+Searching right ...
+nodesize = 10  mtry = 5  reps = 1  error = 35.23% 
+nodesize =  10  mtry = 5  error = 35.23% 
+-0.03438957 0.001 
+nodesize =  15  mtry = 4  error = 35.38% 
+Searching left ...
+nodesize = 15  mtry = 3  reps = 1  error = 34.17% 
+nodesize =  15  mtry = 3  error = 34.17% 
+0.03405676 0.001 
+nodesize = 15  mtry = 2  reps = 1  error = 33.15% 
+nodesize =  15  mtry = 2  error = 33.15% 
+0.02986615 0.001 
+nodesize = 15  mtry = 1  reps = 1  error = 33.55% 
+nodesize =  15  mtry = 1  error = 33.55% 
+-0.01188668 0.001 
+Searching right ...
+nodesize = 15  mtry = 5  reps = 1  error = 35.83% 
+nodesize =  15  mtry = 5  error = 35.83% 
+-0.08080168 0.001 
+nodesize =  20  mtry = 4  error = 35.4% 
+Searching left ...
+nodesize = 20  mtry = 3  reps = 1  error = 36.05% 
+nodesize =  20  mtry = 3  error = 36.05% 
+-0.01823481 0.001 
+nodesize = 20  mtry = 2  reps = 1  error = 33.8% 
+nodesize =  20  mtry = 2  error = 33.8% 
+0.04512132 0.001 
+nodesize = 20  mtry = 1  reps = 1  error = 38.21% 
+nodesize =  20  mtry = 1  error = 38.21% 
+-0.1303316 0.001 
+Searching right ...
+nodesize = 20  mtry = 5  reps = 1  error = 36.12% 
+nodesize =  20  mtry = 5  error = 36.12% 
+-0.06848039 0.001 
+nodesize =  25  mtry = 4  error = 37.04% 
+
+Trees Grown:       1,    Time Remaining (sec):       0 
+
+
+✓ Random Forest model trained successfully
+
+Training XGBoost competing risks model...
+✓ XGBoost model trained successfully
+
+Training GAM competing risks model...
+✓ GAM model trained successfully
+
+Training BART competing risks model...
+*****Calling gbart: type=2
+*****Data:
+data:n,p,np: 676, 9, 1230
+y1,yn: 0.000000, 0.000000
+x1,x[n*p]: 1.790000, 1.000000
+xp1,xp[np*p]: 1.790000, 1.000000
+*****Number of Trees: 50
+*****Number of Cut Points: 2 ... 2
+*****burn,nd,thin: 50,1000,5
+*****Prior:beta,alpha,tau,nu,lambda,offset: 2,0.95,0.212132,3,1,-1.62788
+*****Dirichlet:sparse,theta,omega,a,b,rho,augment: 0,0,1,0.5,1,8,0
+*****printevery: 100
+
+MCMC
+done 0 (out of 1050)
+done 100 (out of 1050)
+done 200 (out of 1050)
+done 300 (out of 1050)
+done 400 (out of 1050)
+done 500 (out of 1050)
+done 600 (out of 1050)
+done 700 (out of 1050)
+done 800 (out of 1050)
+done 900 (out of 1050)
+done 1000 (out of 1050)
+time: 1s
+trcnt,tecnt: 200,200
+*****Calling gbart: type=2
+*****Data:
+data:n,p,np: 641, 9, 1230
+y1,yn: 1.000000, 0.000000
+x1,x[n*p]: 1.790000, 1.000000
+xp1,xp[np*p]: 1.790000, 1.000000
+*****Number of Trees: 50
+*****Number of Cut Points: 2 ... 2
+*****burn,nd,thin: 50,1000,5
+*****Prior:beta,alpha,tau,nu,lambda,offset: 2,0.95,0.212132,3,1,-1.38725
+*****Dirichlet:sparse,theta,omega,a,b,rho,augment: 0,0,1,0.5,1,8,0
+*****printevery: 100
+
+MCMC
+done 0 (out of 1050)
+done 100 (out of 1050)
+done 200 (out of 1050)
+done 300 (out of 1050)
+done 400 (out of 1050)
+done 500 (out of 1050)
+done 600 (out of 1050)
+done 700 (out of 1050)
+done 800 (out of 1050)
+done 900 (out of 1050)
+done 1000 (out of 1050)
+time: 0s
+trcnt,tecnt: 200,200
+✓ BART model trained successfully
+
+Training DeepSurv competing risks model...
+✗ DeepSurv model failed: unused arguments (epochs = 50, learning_rate = 0.01) 
+
+Training RuleFit competing risks model...
+✓ RuleFit model trained successfully
+
+Training SurvReg competing risks model...
+✓ SurvReg model trained successfully
+
+Total models trained successfully: 8 
+Successful models: Cox, FineGray, RF, XGBoost, GAM, BART, RuleFit, SurvReg 
+
+=== STEP 6: COMPETING RISKS MODEL PREDICTIONS ===
+Generating Cox predictions...
+Cox predictions - Times length: 35 CIF dimensions: 54 35 
+Generating FineGray predictions...
+FineGray predictions - Times length: 50 CIF dimensions: 54 50 
+Generating RF predictions...
+RF predictions - Times length: 80 CIF dimensions: 54 80 
+Generating XGBoost predictions...
+XGBoost predictions - Times length: 35 CIF dimensions: 54 35 
+Generating GAM predictions...
+GAM predictions - Times length: 35 CIF dimensions: 54 35 
+Generating BART predictions...
+*****In main of C++ for bart prediction
+tc (threadcount): 1
+number of bart draws: 200
+number of trees in bart sum: 50
+number of x columns: 9
+from x,np,p: 9, 1080
+***using serial code
+*****In main of C++ for bart prediction
+tc (threadcount): 1
+number of bart draws: 200
+number of trees in bart sum: 50
+number of x columns: 9
+from x,np,p: 9, 1080
+***using serial code
+BART predictions - Times length: 11 CIF dimensions: 54 11 
+Generating RuleFit predictions...
+RuleFit predictions - Times length: 50 CIF dimensions: 54 50 
+Generating SurvReg predictions...
+SurvReg predictions - Times length: 35 CIF dimensions: 54 35 
+
+=== STEP 7: COMPETING RISKS MODEL EVALUATION ===
+Calculating concordance indices for competing risks...
+Evaluation time point: 5 months
+
+Cox concordance calculation failed: missing value where TRUE/FALSE needed 
+FineGray concordance calculation failed: missing value where TRUE/FALSE needed 
+RF concordance: 0.512 
+XGBoost concordance calculation failed: missing value where TRUE/FALSE needed 
+GAM concordance calculation failed: missing value where TRUE/FALSE needed 
+BART concordance calculation failed: missing value where TRUE/FALSE needed 
+RuleFit concordance calculation failed: missing value where TRUE/FALSE needed 
+SurvReg concordance calculation failed: missing value where TRUE/FALSE needed 
+
+Calculating Brier scores for competing risks...
+Cox Brier score: 0.1761 
+FineGray Brier score: 0.1848 
+RF Brier score: 0.1749 
+XGBoost Brier score: 0.1926 
+GAM Brier score: 0.1761 
+BART Brier score: 0.1685 
+RuleFit Brier score: 0.1848 
+SurvReg Brier score: 0.1795 
+
+=== STEP 8: ENSEMBLE PREDICTIONS FOR COMPETING RISKS ===
+Top models for ensemble: RF 
+Ensemble uses single model: RF 
+Ensemble predictions created for 80 subjects using 1 models
+Ensemble concordance: 0.512 
+Ensemble Brier score: 0.1749 
+
+=== STEP 9: EXPECTED TIME LOST ANALYSIS ===
+Maximum follow-up time: 131.77 months
+Cox ETL - mean: 8.61 range: 0-17.48 
+FineGray ETL - mean: 10.88 range: 0-13.36 
+RF ETL - mean: NA range: NA-NA 
+XGBoost ETL - mean: 4.08 range: 0-15.97 
+GAM ETL - mean: 8.58 range: 0-18.07 
+BART ETL - mean: 120.93 range: 0-192.53 
+RuleFit ETL - mean: 10.88 range: 0-13.36 
+SurvReg ETL - mean: 11.66 range: 0-23.94 
+Ensemble ETL - mean: NA range: NA-NA 
+
+=== STEP 10: COMPETING RISKS VISUALIZATION ===
+
+Model Performance Summary:
+      Model Concordance Brier_Score
+RF       RF   0.5115132   0.1749161
+1  Ensemble   0.5115132   0.1749161
+
+Creating CIF plots for first 3 test patients...
+✓ Color palette created - Ensemble is BLACK
+
+=== CIF VALUES FOR FIRST 3 TEST PATIENTS ===
+
+--- PATIENT 1 ---
+Patient characteristics:
+  Sex   D   Phase Age Source
+1   M ALL Relapse  48  BM+PB
+
+CIF values at key time points:
+
+Cox model:
+   6 months: 0.3760
+  12 months: 0.6434
+  24 months: 0.6703
+  36 months: 0.6978
+
+FineGray model:
+   6 months: 0.0967
+  12 months: 0.1661
+  24 months: 0.1767
+  36 months: 0.1851
+
+RF model:
+   6 months: 0.1168
+  12 months: 0.2192
+  24 months: 0.2310
+  36 months: 0.2313
+
+XGBoost model:
+   6 months: 0.2346
+  12 months: 0.7469
+  24 months: 0.7887
+  36 months: 0.8325
+
+GAM model:
+   6 months: 0.5668
+  12 months: 0.8378
+  24 months: 0.8586
+  36 months: 0.8783
+
+BART model:
+   6 months: 0.2175
+  12 months: 0.2530
+  24 months: 0.2726
+  36 months: 0.2726
+
+RuleFit model:
+   6 months: 0.0967
+  12 months: 0.1661
+  24 months: 0.1767
+  36 months: 0.1851
+
+SurvReg model:
+   6 months: 0.0357
+  12 months: 0.0699
+  24 months: 0.0739
+  36 months: 0.0790
+
+Ensemble model:
+   6 months: 0.1168
+  12 months: 0.2192
+  24 months: 0.2310
+  36 months: 0.2313
+
+--- PATIENT 2 ---
+Patient characteristics:
+  Sex   D Phase Age Source
+2   F AML   CR2  23  BM+PB
+
+CIF values at key time points:
+
+Cox model:
+   6 months: 0.1802
+  12 months: 0.3524
+  24 months: 0.3734
+  36 months: 0.3960
+
+FineGray model:
+   6 months: 0.0220
+  12 months: 0.0390
+  24 months: 0.0417
+  36 months: 0.0438
+
+RF model:
+   6 months: 0.0787
+  12 months: 0.1571
+  24 months: 0.1593
+  36 months: 0.1709
+
+XGBoost model:
+   6 months: 0.0353
+  12 months: 0.1686
+  24 months: 0.1885
+  36 months: 0.2135
+
+GAM model:
+   6 months: 0.1730
+  12 months: 0.3384
+  24 months: 0.3586
+  36 months: 0.3802
+
+BART model:
+   6 months: 0.0484
+  12 months: 0.0609
+  24 months: 0.0694
+  36 months: 0.0694
+
+RuleFit model:
+   6 months: 0.0220
+  12 months: 0.0390
+  24 months: 0.0417
+  36 months: 0.0438
+
+SurvReg model:
+   6 months: 0.2142
+  12 months: 0.3816
+  24 months: 0.3991
+  36 months: 0.4205
+
+Ensemble model:
+   6 months: 0.0787
+  12 months: 0.1571
+  24 months: 0.1593
+  36 months: 0.1709
+
+--- PATIENT 3 ---
+Patient characteristics:
+  Sex   D Phase Age Source
+3   M ALL   CR3   7  BM+PB
+
+CIF values at key time points:
+
+Cox model:
+   6 months: 0.2242
+  12 months: 0.4259
+  24 months: 0.4496
+  36 months: 0.4748
+
+FineGray model:
+   6 months: 0.1369
+  12 months: 0.2313
+  24 months: 0.2454
+  36 months: 0.2566
+
+RF model:
+   6 months: 0.1520
+  12 months: 0.2379
+  24 months: 0.2477
+  36 months: 0.2520
+
+XGBoost model:
+   6 months: 0.0715
+  12 months: 0.3172
+  24 months: 0.3505
+  36 months: 0.3911
+
+GAM model:
+   6 months: 0.2063
+  12 months: 0.3949
+  24 months: 0.4174
+  36 months: 0.4411
+
+BART model:
+   6 months: 0.1648
+  12 months: 0.2147
+  24 months: 0.2522
+  36 months: 0.2522
+
+RuleFit model:
+   6 months: 0.1369
+  12 months: 0.2313
+  24 months: 0.2454
+  36 months: 0.2566
+
+SurvReg model:
+   6 months: 0.1341
+  12 months: 0.2497
+  24 months: 0.2624
+  36 months: 0.2782
+
+Ensemble model:
+   6 months: 0.1520
+  12 months: 0.2379
+  24 months: 0.2477
+  36 months: 0.2520
+
+✓ CIF values displayed for first 3 patients
+
+Saving plots to PDF...
+✓ Plots saved to bmt_competing_risks_analysis.pdf
+
+=== STEP 11: MODEL SAVING AND LOADING ===
+Models saved successfully:
+- cox_crmodel_bmt.rds 
+- finegray_crmodel_bmt.rds 
+- rf_crmodel_bmt.rds 
+- xgboost_crmodel_bmt.rds 
+- gam_crmodel_bmt.rds 
+- bart_crmodel_bmt.rds 
+- rulefit_crmodel_bmt.rds 
+- survreg_crmodel_bmt.rds 
+- ensemble_crmodel_bmt.rds 
+
+=== FINAL SUMMARY ===
+══════════════════════════════════════════════════════════
+Comprehensive Competing Risks Analysis Complete!
+══════════════════════════════════════════════════════════
+
+Dataset: Bone Marrow Transplant (BMT) - Competing Risks
+Total observations: 177 
+Training set: 123 subjects
+Test set: 54 subjects
+
+Event Distribution:
+- Censored: 46 ( 26 %)
+- Relapse (event of interest): 56 ( 31.6 %)
+- TRM (competing risk): 75 ( 42.4 %)
+
+Models Successfully Trained: 8 
+Models with Predictions: 8 
+
+Model Performance (Concordance Index):
+  -  RF : 0.512 
+>>>  Ensemble : 0.512 
+
+Model Performance (Brier Score):
+  -  RF : 0.1749 
+>>>  Ensemble : 0.1749 
+
+Expected Time Lost (Mean, in months):
+  -  Cox : 8.61 
+  -  FineGray : 10.88 
+  -  RF : NA 
+  -  XGBoost : 4.08 
+  -  GAM : 8.58 
+  -  BART : 120.93 
+  -  RuleFit : 10.88 
+  -  SurvReg : 11.66 
+>>>  Ensemble : NA 
+
+✓ Best Performing Model (by C-index): RF with concordance: 0.512 
+
+Output Files Generated:
+- Model files: 9 RDS files
+- Visualization: bmt_competing_risks_analysis.pdf (4 pages)
+
+This analysis demonstrates:
+✓ Data loading and preprocessing for competing risks
+✓ Multiple competing risks models (Cox, Fine-Gray, RF, XGBoost, GAM)
+✓ Cumulative Incidence Function (CIF) calculations
+✓ Expected Time Lost (ETL) for competing risks
+✓ Model evaluation with CR-specific metrics
+✓ Ensemble methods for competing risks (HIGHLIGHTED IN BLACK)
+✓ Comprehensive CIF and ETL visualization
+✓ Model persistence and reloading
+
+══════════════════════════════════════════════════════════
+=== COMPETING RISKS VIGNETTE COMPLETE ===
+══════════════════════════════════════════════════════════
+There were 50 or more warnings (use warnings() to see the first 50)
+> 
+> 

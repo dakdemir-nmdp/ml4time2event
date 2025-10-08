@@ -98,6 +98,8 @@ cifMatListAveraging<-function(listprobsMat, type="CumHaz"){
     }
     # Calculate the mean probability across models
     NewProbs<-apply(ProbsArray, c(1,2),function(x)(mean(x, na.rm = TRUE))) # Use na.rm=TRUE
+    # Ensure probabilities are bounded between 0 and 1
+    NewProbs <- pmax(pmin(NewProbs, 1.0), 0.0)
   } else {
       stop("Type must be either 'CumHaz' or 'prob'")
   }
