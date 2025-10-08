@@ -261,6 +261,20 @@ Predict_CRModel_rulefit <- function(modelout, newdata, newtimes = NULL, failcode
          paste(missing_vars, collapse = ", "))
   }
 
+  # Handle failcode parameter
+  if (is.null(failcode)) {
+    failcode <- modelout$failcode  # Use the failcode from training
+  } else {
+    if (!is.numeric(failcode) || length(failcode) != 1 || failcode < 1) {
+      stop("'failcode' must be a positive integer")
+    }
+    # Note: RuleFit models can only predict for the event type they were trained on
+    if (failcode != modelout$failcode) {
+      stop("RuleFit models can only predict for the event they were trained on (failcode = ", 
+           modelout$failcode, "). Requested failcode: ", failcode)
+    }
+  }
+
   # ============================================================================
   # Prepare newdata
   # ============================================================================

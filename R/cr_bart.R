@@ -142,6 +142,9 @@ CRModel_BART <- function(data, expvars, timevar, eventvar, failcode = 1,
 #' @param newtimes optional numeric vector of time points for prediction.
 #'   If NULL (default), uses the model's native time points.
 #'   Can be any positive values - interpolation handles all time points.
+#' @param failcode integer, the code for the event of interest for CIF prediction.
+#'   If NULL (default), uses the failcode from the model training.
+#'   Note: BART models can only predict for the event they were trained on.
 #'
 #' @return a list containing:
 #'   \item{CIFs}{predicted cumulative incidence function matrix
