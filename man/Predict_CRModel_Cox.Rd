@@ -4,18 +4,38 @@
 \alias{Predict_CRModel_Cox}
 \title{Predict_CRModel_Cox}
 \usage{
-Predict_CRModel_Cox(modelout, newdata)
+Predict_CRModel_Cox(modelout, newdata, newtimes = NULL)
 }
 \arguments{
 \item{modelout}{the output from 'CRModel_Cox'}
 
-\item{newdata}{the data for which the predictions are to be calculated}
+\item{newdata}{data frame with new observations for prediction}
+
+\item{newtimes}{optional numeric vector of time points for prediction.
+If NULL (default), uses the times from the training data.
+Can be any positive values - interpolation handles all time points.}
 }
 \value{
-a list with the following items. cph_modelTestPredict: the output of 'survival::survfit',
- CIFs=predicted CIF matrix (for event coded as 1),
- Times: The times at which the CIFs are predicted.
+a list containing:
+  \item{cph_modelTestPredict}{the raw survfit object from prediction}
+  \item{CIFs}{predicted cumulative incidence function matrix
+    (rows=times, cols=observations)}
+  \item{Times}{the times at which CIFs are calculated}
 }
 \description{
-Get predictions from a Cox CR model for a test dataset
+Get predictions from a fitted cause-specific Cox competing risks model for new data.
+}
+\examples{
+\dontrun{
+# Fit model
+model <- CRModel_Cox(data, expvars = c("x1", "x2"),
+                    timevar = "time", eventvar = "event")
+
+# Predict on test data
+preds <- Predict_CRModel_Cox(model, test_data)
+
+# Predict at specific times
+preds_custom <- Predict_CRModel_Cox(model, test_data,
+                                   newtimes = c(30, 60, 90, 180, 365))
+}
 }

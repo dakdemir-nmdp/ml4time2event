@@ -1,78 +1,292 @@
+# ==============================================================================
+# Test Suite for Competing Risks Cox Model
+# ==============================================================================
+
 library(testthat)
-library(here)
-# library(data.table) # Removed
-library(survival) # Required for Surv and coxph
-library(cmprsk)   # Required for predict.coxphcr (if used internally) or CIF calculation logic
+library(survival)
 
-# Assuming the functions are available in the environment
-source(here("R/models/cr_cox.R"))
+# ==============================================================================
+# Test Data Setup
+# ==============================================================================
 
-context("Testing cr_cox functions")
+# Create simulated competing risks data for testing
+set.seed(42)
+n_train <- 200
+n_test <- 50
 
-# --- Test Data Setup ---
-# Reusing the setup from test_cr_random_forest.R for consistency
-set.seed(123)
-n_obs <- 50
-cr_data <- data.frame( # Replaced data.table()
-  time = pmin(rexp(n_obs, rate = 0.1), rexp(n_obs, rate = 0.15)),
-  status = sample(0:2, n_obs, replace = TRUE, prob = c(0.2, 0.4, 0.4)), # 0=censored, 1=event1, 2=event2
-  x1 = rnorm(n_obs),
-  x2 = factor(sample(c("A", "B"), n_obs, replace = TRUE)),
-  x3 = rnorm(n_obs, mean = 5),
-  stringsAsFactors = FALSE
+# Training data - competing risks format
+train_data <- data.frame(
+  time = rexp(n_train, rate = 0.1),
+  event = sample(0:2, n_train, replace = TRUE, prob = c(0.3, 0.4, 0.3)), # 0=censored, 1=cause1, 2=cause2
+  x1 = rnorm(n_train),
+  x2 = rnorm(n_train),
+  x3 = rnorm(n_train, mean = 1),
+  x4 = rnorm(n_train, mean = -1),
+  cat1 = factor(sample(c("A", "B", "C"), n_train, replace = TRUE)),
+  cat2 = factor(sample(c("Low", "High"), n_train, replace = TRUE))
 )
-# Create a Surv object suitable for coxph (status needs modification for cause-specific Cox)
-# For cause-specific Cox, we typically model each cause separately, treating others as censored.
 
-# Data for cause 1 model: status = 1 if event 1, 0 otherwise
-train_data_c1 <- cr_data # Removed copy()
-train_data_c1$status_c1 <- ifelse(train_data_c1$status == 1, 1, 0) # Base R assignment
-cr_formula_c1 <- Surv(time, status_c1) ~ x1 + x2 + x3
+# Test data
+test_data <- data.frame(
+  time = rexp(n_test, rate = 0.1),
+  event = sample(0:2, n_test, replace = TRUE, prob = c(0.3, 0.4, 0.3)),
+  x1 = rnorm(n_test),
+  x2 = rnorm(n_test),
+  x3 = rnorm(n_test, mean = 1),
+  x4 = rnorm(n_test, mean = -1),
+  cat1 = factor(sample(c("A", "B", "C"), n_test, replace = TRUE),
+                levels = c("A", "B", "C")),
+  cat2 = factor(sample(c("Low", "High"), n_test, replace = TRUE),
+                levels = c("Low", "High"))
+)
 
-# Data for cause 2 model: status = 1 if event 2, 0 otherwise
-train_data_c2 <- cr_data # Removed copy()
-train_data_c2$status_c2 <- ifelse(train_data_c2$status == 2, 1, 0) # Base R assignment
-cr_formula_c2 <- Surv(time, status_c2) ~ x1 + x2 + x3
+# Define variables
+expvars_numeric <- c("x1", "x2", "x3")
+expvars_all <- c("x1", "x2", "x3", "cat1", "cat2")
+expvars_many <- c("x1", "x2", "x3", "x4", "cat1", "cat2")
 
-# Use original data split
-train_indices <- 1:40
-test_indices <- 41:50
-train_data_orig <- cr_data[train_indices, ]
-test_data_orig <- cr_data[test_indices, ]
+# ==============================================================================
+# Tests for CRModel_Cox - Basic Functionality
+# ==============================================================================
 
-# Time points for prediction
-time_points <- c(quantile(train_data_orig$time[train_data_orig$status != 0], 0.25),
-                 median(train_data_orig$time[train_data_orig$status != 0]),
-                 quantile(train_data_orig$time[train_data_orig$status != 0], 0.75))
+test_that("CRModel_Cox fits basic model", {
+  model <- CRModel_Cox(
+    data = train_data,
+    expvars = expvars_numeric,
+    timevar = "time",
+    eventvar = "event"
+  )
 
-# Original formula for CRModel_Cox (assuming it handles the multi-state internally)
-cr_formula_orig <- Surv(time, status) ~ x1 + x2 + x3
+  # Check output structure
+  expect_type(model, "list")
+  expect_named(model, c("cph_model", "times", "varprof", "model_type",
+                       "expvars", "timevar", "eventvar", "failcode", "varsel_method", "time_range"))
 
+  # Check model type
+  expect_equal(model$model_type, "cr_cox")
+  expect_s3_class(model$cph_model, "coxph")
 
-# --- Tests for CRModel_Cox ---
+  # Check time range
+  expect_true(is.numeric(model$time_range))
+  expect_equal(length(model$time_range), 2)
+  expect_true(model$time_range[1] == 0)
+  expect_true(model$time_range[2] > 0)
 
-test_that("CRModel_Cox runs and returns a list of coxph models", {
-  skip_if_not_installed("survival")
-  # This test assumes CRModel_Cox fits separate cause-specific models
-  # If it uses another approach (like cmprsk::crr), the expectation needs change
+  # Check times
+  expect_true(is.numeric(model$times))
+  expect_true(length(model$times) > 0)
+  expect_true(all(model$times >= 0))
 
-  # Need to understand the expected output structure of CRModel_Cox
-  # Assuming it returns a list, one element per cause
-  model_cox_list <- CRModel_Cox(formula = cr_formula_orig, data = train_data_orig)
-
-  expect_type(model_cox_list, "list")
-  # Assuming models for event 1 and 2 are returned
-  expect_length(model_cox_list, 2)
-  expect_s3_class(model_cox_list[[1]], "coxph")
-  expect_s3_class(model_cox_list[[2]], "coxph")
-
-  # Check if models used the correct data subset/status internally (hard to verify directly)
+  # Check varprof
+  expect_true(is.list(model$varprof))
+  expect_equal(length(model$varprof), length(expvars_numeric))
 })
 
-test_that("CRModel_Cox requires formula and data", {
+test_that("CRModel_Cox handles factor variables", {
+  model <- CRModel_Cox(
+    data = train_data,
+    expvars = expvars_all,
+    timevar = "time",
+    eventvar = "event"
+  )
+
+  expect_s3_class(model$cph_model, "coxph")
+  expect_true(is.list(model$varprof))
+})
+
+# ==============================================================================
+# Tests for Predict_CRModel_Cox - Basic Functionality
+# ==============================================================================
+
+test_that("Predict_CRModel_Cox returns correct output structure", {
+  model <- CRModel_Cox(
+    data = train_data,
+    expvars = expvars_numeric,
+    timevar = "time",
+    eventvar = "event"
+  )
+
+  preds <- Predict_CRModel_Cox(model, test_data)
+
+  # Check output structure
+  expect_type(preds, "list")
+  expect_named(preds, c("cph_modelTestPredict", "CIFs", "Times"))
+
+  # Check CIFs matrix
+  expect_true(is.matrix(preds$CIFs))
+  expect_equal(ncol(preds$CIFs), nrow(test_data))
+
+  # Check Times
+  expect_true(is.numeric(preds$Times))
+  expect_true(all(preds$Times >= 0))
+
+  # Check CIF values (should be between 0 and 1)
+  expect_true(all(preds$CIFs >= 0 & preds$CIFs <= 1, na.rm = TRUE))
+
+  # Check survfit object
+  expect_s3_class(preds$cph_modelTestPredict, "survfit")
+})
+
+test_that("Predict_CRModel_Cox CIFs are monotonically non-decreasing", {
+  model <- CRModel_Cox(
+    data = train_data,
+    expvars = expvars_numeric,
+    timevar = "time",
+    eventvar = "event"
+  )
+
+  preds <- Predict_CRModel_Cox(model, test_data)
+
+  # For each observation, CIF should be non-decreasing over time
+  for (i in seq_len(ncol(preds$CIFs))) {
+    cif_curve <- preds$CIFs[, i]
+    diffs <- diff(cif_curve)
+    expect_true(all(diffs >= -1e-10))  # Allow small numerical tolerance
+  }
+})
+
+test_that("Predict_CRModel_Cox handles custom time points", {
+  model <- CRModel_Cox(
+    data = train_data,
+    expvars = expvars_numeric,
+    timevar = "time",
+    eventvar = "event"
+  )
+
+  custom_times <- c(1, 5, 10, 20, 50)
+  preds <- Predict_CRModel_Cox(model, test_data, newtimes = custom_times)
+
+  expect_equal(preds$Times, custom_times)
+  expect_equal(nrow(preds$CIFs), length(custom_times))
+  expect_equal(ncol(preds$CIFs), nrow(test_data))
+})
+
+test_that("Predict_CRModel_Cox includes time 0", {
+  model <- CRModel_Cox(
+    data = train_data,
+    expvars = expvars_numeric,
+    timevar = "time",
+    eventvar = "event"
+  )
+
+  preds <- Predict_CRModel_Cox(model, test_data)
+
+  # Time 0 should be included
+  expect_true(0 %in% preds$Times)
+
+  # CIF at time 0 should be 0
+  time_0_idx <- which(preds$Times == 0)
+  expect_true(all(abs(preds$CIFs[time_0_idx, ]) < 1e-6))
+})
+
+# ==============================================================================
+# Tests for Factor Level Handling
+# ==============================================================================
+
+test_that("Predict_CRModel_Cox handles matching factor levels", {
+  model <- CRModel_Cox(
+    data = train_data,
+    expvars = expvars_all,
+    timevar = "time",
+    eventvar = "event"
+  )
+
+  # Test data with same factor levels
+  preds <- Predict_CRModel_Cox(model, test_data)
+
+  expect_equal(ncol(preds$CIFs), nrow(test_data))
+  expect_true(all(!is.na(preds$CIFs)))
+})
+
+test_that("Predict_CRModel_Cox warns about new factor levels", {
+  model <- CRModel_Cox(
+    data = train_data,
+    expvars = expvars_all,
+    timevar = "time",
+    eventvar = "event"
+  )
+
+  # Create test data with new factor level
+  test_data_new_level <- test_data
+  test_data_new_level$cat1 <- factor(
+    c("A", "B", "C", "D")[seq_len(nrow(test_data_new_level))],
+    levels = c("A", "B", "C", "D")
+  )
+
+  expect_warning(
+    Predict_CRModel_Cox(model, test_data_new_level),
+    "has new levels"
+  )
+})
+
+test_that("Predict_CRModel_Cox converts character to factor", {
+  model <- CRModel_Cox(
+    data = train_data,
+    expvars = expvars_all,
+    timevar = "time",
+    eventvar = "event"
+  )
+
+  # Create test data with character instead of factor
+  test_data_char <- test_data
+  test_data_char$cat1 <- as.character(test_data_char$cat1)
+  test_data_char$cat2 <- as.character(test_data_char$cat2)
+
+  preds <- Predict_CRModel_Cox(model, test_data_char)
+
+  expect_equal(ncol(preds$CIFs), nrow(test_data_char))
+  expect_true(all(!is.na(preds$CIFs)))
+})
+
+# ==============================================================================
+# Tests for Error Handling
+# ==============================================================================
+
+test_that("CRModel_Cox handles missing data appropriately", {
+  # Create data with missing values
+  train_data_na <- train_data
+  train_data_na$x1[1:10] <- NA
+
+  # Should handle missing data by removing rows
+  model <- CRModel_Cox(
+    data = train_data_na,
+    expvars = expvars_numeric,
+    timevar = "time",
+    eventvar = "event"
+  )
+
+  expect_s3_class(model$cph_model, "coxph")
+  # Should have fewer observations
+  expect_true(model$cph_model$n < nrow(train_data_na))
+})
+
+test_that("CRModel_Cox requires valid inputs", {
+  expect_error(CRModel_Cox(data = train_data, expvars = "nonexistent_var",
+                          timevar = "time", eventvar = "event"))
+  expect_error(CRModel_Cox(data = train_data, expvars = expvars_numeric,
+                          timevar = "nonexistent_time", eventvar = "event"))
+  expect_error(CRModel_Cox(data = train_data, expvars = expvars_numeric,
+                          timevar = "time", eventvar = "nonexistent_event"))
+})
+
+test_that("Predict_CRModel_Cox requires valid inputs", {
+  model <- CRModel_Cox(
+    data = train_data,
+    expvars = expvars_numeric,
+    timevar = "time",
+    eventvar = "event"
+  )
+
+  expect_error(Predict_CRModel_Cox(model, test_data[, !names(test_data) %in% "x1"]))  # Missing required variable (x1)
+  expect_error(Predict_CRModel_Cox(list(), test_data))  # Invalid model
+})
+
+test_that("CRModel_Cox requires data, expvars, timevar, eventvar", {
   skip_if_not_installed("survival")
-  expect_error(CRModel_Cox(formula = cr_formula_orig), "argument \"data\" is missing")
-  expect_error(CRModel_Cox(data = train_data_orig), "argument \"formula\" is missing")
+  expect_error(CRModel_Cox(expvars = expvars_numeric, timevar = "time", eventvar = "event"), "argument \"data\" is missing")
+  expect_error(CRModel_Cox(data = train_data, timevar = "time", eventvar = "event"), "argument \"expvars\" is missing")
+  expect_error(CRModel_Cox(data = train_data, expvars = expvars_numeric, eventvar = "event"), "argument \"timevar\" is missing")
+  expect_error(CRModel_Cox(data = train_data, expvars = expvars_numeric, timevar = "time"), "argument \"eventvar\" is missing")
 })
 
 
@@ -80,53 +294,63 @@ test_that("CRModel_Cox requires formula and data", {
 
 test_that("Predict_CRModel_Cox returns predictions in correct format", {
   skip_if_not_installed("survival")
-  skip_if_not_installed("cmprsk") # Often needed for CIF calculation
 
   # Fit the model first
-  model_cox_list <- CRModel_Cox(formula = cr_formula_orig, data = train_data_orig)
+  model_cox <- CRModel_Cox(data = train_data,
+                          expvars = expvars_numeric,
+                          timevar = "time",
+                          eventvar = "event")
 
   # Get predictions
-  predictions <- Predict_CRModel_Cox(model = model_cox_list, data = test_data_orig, times = time_points)
+  predictions <- Predict_CRModel_Cox(modelout = model_cox, newdata = test_data)
 
   # Check output structure
   expect_type(predictions, "list")
-  expect_length(predictions, 2) # One element per cause
-  expect_true(is.matrix(predictions[[1]])) # Expecting matrix for CIF of event 1
-  expect_true(is.matrix(predictions[[2]])) # Expecting matrix for CIF of event 2
+  expect_named(predictions, c("cph_modelTestPredict", "CIFs", "Times"))
 
-  # Check dimensions
-  # Rows = number of test observations, Cols = number of time points
-  expect_equal(nrow(predictions[[1]]), nrow(test_data_orig))
-  expect_equal(ncol(predictions[[1]]), length(time_points))
-  expect_equal(nrow(predictions[[2]]), nrow(test_data_orig))
-  expect_equal(ncol(predictions[[2]]), length(time_points))
+  # Check CIFs matrix
+  expect_true(is.matrix(predictions$CIFs))
+  expect_equal(ncol(predictions$CIFs), nrow(test_data))  # columns = observations
+  expect_equal(nrow(predictions$CIFs), length(predictions$Times))  # rows = times
 
-  # Check values are probabilities (between 0 and 1)
-  expect_true(all(predictions[[1]] >= 0 & predictions[[1]] <= 1, na.rm = TRUE))
-  expect_true(all(predictions[[2]] >= 0 & predictions[[2]] <= 1, na.rm = TRUE))
+  # Check times
+  expect_true(is.numeric(predictions$Times))
+  expect_true(all(predictions$Times >= 0))
+  expect_true(predictions$Times[1] == 0)  # Should start at 0
 
-  # Check sum of CIFs <= 1 for each time point and observation
-  expect_true(all(predictions[[1]] + predictions[[2]] <= 1.0001, na.rm = TRUE)) # Allow small tolerance
+  # Check CIF values are probabilities
+  expect_true(all(predictions$CIFs >= 0 & predictions$CIFs <= 1, na.rm = TRUE))
+
+  # Check monotonicity (CIF should be non-decreasing)
+  expect_true(all(diff(predictions$CIFs[, 1]) >= 0))  # Check first observation
 })
 
-test_that("Predict_CRModel_Cox handles single time point", {
+test_that("Predict_CRModel_Cox handles custom time points", {
   skip_if_not_installed("survival")
-  skip_if_not_installed("cmprsk")
 
-  model_cox_list <- CRModel_Cox(formula = cr_formula_orig, data = train_data_orig)
-  single_time <- median(train_data_orig$time[train_data_orig$status != 0])
-  predictions <- Predict_CRModel_Cox(model = model_cox_list, data = test_data_orig, times = single_time)
+  model_cox <- CRModel_Cox(data = train_data,
+                          expvars = expvars_numeric,
+                          timevar = "time",
+                          eventvar = "event")
+
+  custom_times <- c(1, 5, 10)
+  predictions <- Predict_CRModel_Cox(modelout = model_cox, newdata = test_data, newtimes = custom_times)
 
   expect_type(predictions, "list")
-  expect_true(is.matrix(predictions[[1]]))
-  expect_equal(ncol(predictions[[1]]), 1) # Should have 1 column
-  expect_equal(nrow(predictions[[1]]), nrow(test_data_orig))
+  expect_true(is.matrix(predictions$CIFs))
+  expect_equal(length(predictions$Times), length(custom_times))
+  expect_equal(nrow(predictions$CIFs), length(custom_times))
+  expect_equal(ncol(predictions$CIFs), nrow(test_data))
 })
 
-test_that("Predict_CRModel_Cox requires model, data, and times", {
+test_that("Predict_CRModel_Cox requires model and data", {
   skip_if_not_installed("survival")
-  model_cox_list <- CRModel_Cox(formula = cr_formula_orig, data = train_data_orig)
-  expect_error(Predict_CRModel_Cox(data = test_data_orig, times = time_points), "argument \"model\" is missing")
-  expect_error(Predict_CRModel_Cox(model = model_cox_list, times = time_points), "argument \"data\" is missing")
-  expect_error(Predict_CRModel_Cox(model = model_cox_list, data = test_data_orig), "argument \"times\" is missing")
+
+  model_cox <- CRModel_Cox(data = train_data,
+                          expvars = expvars_numeric,
+                          timevar = "time",
+                          eventvar = "event")
+
+  expect_error(Predict_CRModel_Cox(modelout = model_cox), "argument \"newdata\" is missing")
+  expect_error(Predict_CRModel_Cox(newdata = test_data), "argument \"modelout\" is missing")
 })

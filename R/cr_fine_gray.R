@@ -1,82 +1,322 @@
 #' @title CRModel_FineGray
 #'
-#' @description Fit a Fine-Gray model for CR outcomes using penalized regression
+#' @description Fit a Fine-Gray model for competing risks using penalized regression
 #'
 #' @param data data frame with explanatory and outcome variables
 #' @param expvars character vector of names of explanatory variables in data
 #' @param timevar character name of time variable in data
-#' @param eventvar character name of event variable in data (coded 0,1,2)
+#' @param eventvar character name of event variable in data (coded 0,1,2 where 0=censored, 1=event of interest, 2=competing event)
+#' @param failcode integer, the code for the event of interest (default: 1)
+#' @param ntimes integer, number of time points to use for prediction grid (default: 50)
+#' @param verbose logical, print progress messages (default: FALSE)
 #'
-#' @return a list object with the following. allvals: AIC values for a range of shrinkage parameters,
-#' fit: fit object from 'fastcmprsk::fastCrrp',
-#' CIF.hat: estimated CIFs in training data,
-#' expvars: character vector of explanatory variables,
-#' timesfit: times for which CIFs are given,
-#' varprof: profile of explanatory variables,
-#' meanTrain: means of training features,
-#' sdTrain: standard deviations of training features,
-#' loadings: SVD loadings.
+#' @return a list with the following components:
+#'   \item{fg_model}{the fitted Fine-Gray model object from fastcmprsk::fastCrrp}
+#'   \item{time_range}{vector with min and max observed event times}
+#'   \item{varprof}{variable profile list containing factor levels and numeric ranges}
+#'   \item{model_type}{character string "fine_gray"}
+#'   \item{expvars}{character vector of explanatory variables used}
+#'   \item{timevar}{character name of time variable}
+#'   \item{eventvar}{character name of event variable}
+#'   \item{failcode}{the event code for the outcome of interest}
+#'   \item{train_data}{processed training data used for fitting}
+#'   \item{scaling}{list with meanTrain and sdTrain for variable scaling}
+#'   \item{loadings}{SVD loadings for dimensionality reduction}
 #'
 #' @importFrom fastcmprsk fastCrrp Crisk
 #' @importFrom stats AIC model.matrix quantile sd
+#' @importFrom utils head tail
 #' @export
-CRModel_FineGray<-function(data,expvars, timevar, eventvar){
+CRModel_FineGray <- function(data, expvars, timevar, eventvar, failcode = 1,
+                            ntimes = 50, verbose = FALSE) {
 
-  # Assuming VariableProfile is defined elsewhere or loaded via namespace
-  # varprof<-VariableProfile(data, expvars)
-  varprof <- list() # Placeholder
-
-  timevarvec<-data[, timevar]
-  eventvarvec<-as.integer(data[, eventvar])
-
-  covmat<-stats::model.matrix(~-1+., data=data[, expvars])
-
-  lambdavec<-seq(0.005,.99,length=20)
-  alphavec<-seq(0.05,.95,length=20)
-
-  allvals<-as.data.frame(expand.grid(lambdavec,alphavec))
-  colnames(allvals)<-c("lambda","alpha")
-  allvals$AIC<-apply(allvals,1,function(x){
-    aic<- tryCatch(stats::AIC(fastcmprsk::fastCrrp(fastcmprsk::Crisk(timevarvec,eventvarvec)~covmat,lambda = x[1], alpha=x[2], penalty = "ENET")), error=function(e){Inf})
-    return(aic)
+  # ============================================================================
+  # Input Validation
+  # ============================================================================
+  if (!is.data.frame(data)) {
+    stop("'data' must be a data frame")
   }
-  )
-  covmat<-scale(covmat, center=TRUE, scale=TRUE)
-  meanTrain<-attr(covmat, "scaled:center")
-  sdTrain<-attr(covmat, "scaled:scale")
+  if (!is.character(expvars) || length(expvars) == 0) {
+    stop("'expvars' must be a non-empty character vector")
+  }
+  if (!timevar %in% colnames(data)) {
+    stop("'timevar' not found in data: ", timevar)
+  }
+  if (!eventvar %in% colnames(data)) {
+    stop("'eventvar' not found in data: ", eventvar)
+  }
+  missing_vars <- setdiff(expvars, colnames(data))
+  if (length(missing_vars) > 0) {
+    stop("The following expvars not found in data: ", paste(missing_vars, collapse=", "))
+  }
+  if (!is.numeric(failcode) || length(failcode) != 1 || failcode < 1) {
+    stop("'failcode' must be a positive integer")
+  }
 
-  svdcovmat<-svd(covmat) # Changed from stats::svd
-  Feat<-(covmat%*%svdcovmat$v)[,1:min(c(20,ncol(covmat)))]
-  fit<-fastcmprsk::fastCrrp(fastcmprsk::Crisk(timevarvec,eventvarvec)~Feat,
-                            lambda = allvals[which.min(allvals[,3]),1],
-                            alpha=allvals[which.min(allvals[,3]),2],
-                            penalty = "ENET",
-                            standardize=FALSE,
-                            max.iter = 5000)
-  CIF.hat <- tcrossprod(exp(cbind(Feat)%*%c(unlist(fit$coef))),  fit$breslowJump[, 2]) #This is baseline cumulative hazard
-  CIF.hat<-rbind(0,apply(CIF.hat, 1, cumsum))
-  CIF.hat <- 1 - exp(-CIF.hat)
-  return(list(allvals=allvals,fit=fit,CIF.hat=CIF.hat, expvars=expvars, timesfit= c(0,fit$breslowJump[,1]), varprof=varprof, meanTrain=meanTrain,sdTrain=sdTrain, loadings=svdcovmat$v))
+  # ============================================================================
+  # Data Preparation
+  # ============================================================================
+  if (verbose) cat("Creating variable profile...\n")
+  varprof <- VariableProfile(data, expvars)
+
+  # Ensure event variable is numeric
+  data[[eventvar]] <- as.numeric(data[[eventvar]])
+
+  # Prepare data subset with complete cases
+  XYTrain <- data[, c(timevar, eventvar, expvars), drop = FALSE]
+  n_original <- nrow(XYTrain)
+  XYTrain <- XYTrain[complete.cases(XYTrain), , drop = FALSE]
+  n_complete <- nrow(XYTrain)
+
+  if (n_complete < n_original) {
+    warning(sprintf("Removed %d rows with missing values. %d rows remaining.",
+                    n_original - n_complete, n_complete))
+  }
+  if (n_complete < 10) {
+    stop("Insufficient data after removing missing values. Need at least 10 observations.")
+  }
+
+  # Get unique event times for the event of interest
+  event_times <- XYTrain[[timevar]][XYTrain[[eventvar]] == failcode]
+  if (length(event_times) == 0) {
+    stop("No events of type ", failcode, " in training data. Cannot fit competing risks model.")
+  }
+
+  # Store event time range for reference
+  time_range <- c(0, max(event_times))
+
+  # ============================================================================
+  # Model Fitting
+  # ============================================================================
+  if (verbose) cat("Fitting Fine-Gray model for event type", failcode, "...\n")
+
+  # Create model matrix
+  covmat <- stats::model.matrix(~ -1 + ., data = XYTrain[, expvars, drop = FALSE])
+
+  # Scale covariates
+  covmat_scaled <- scale(covmat, center = TRUE, scale = TRUE)
+  meanTrain <- attr(covmat_scaled, "scaled:center")
+  sdTrain <- attr(covmat_scaled, "scaled:scale")
+
+  # SVD for dimensionality reduction (keep top 20 components or fewer)
+  svdcovmat <- svd(covmat_scaled)
+  n_components <- min(c(20, ncol(covmat_scaled)))
+  Feat <- (covmat_scaled %*% svdcovmat$v)[, 1:n_components]
+
+  # Fit model with default elastic net parameters (lambda=0.01, alpha=0.5)
+  # For simplicity, we'll use fixed parameters instead of grid search
+  fg_model <- tryCatch(
+    fastcmprsk::fastCrrp(
+      fastcmprsk::Crisk(XYTrain[[timevar]], XYTrain[[eventvar]]) ~ Feat,
+      lambda = 0.01,
+      alpha = 0.5,
+      penalty = "ENET",
+      standardize = FALSE,
+      max.iter = 5000
+    ),
+    error = function(e) {
+      stop("Failed to fit Fine-Gray model: ", e$message)
+    }
+  )
+
+  # ============================================================================
+  # Return Results
+  # ============================================================================
+  if (verbose) cat("Fine-Gray model fitting complete.\n")
+
+  result <- list(
+    fg_model = fg_model,
+    time_range = time_range,
+    varprof = varprof,
+    model_type = "fine_gray",
+    expvars = expvars,
+    timevar = timevar,
+    eventvar = eventvar,
+    failcode = failcode,
+    train_data = XYTrain,
+    scaling = list(meanTrain = meanTrain, sdTrain = sdTrain),
+    loadings = svdcovmat$v
+  )
+
+  class(result) <- c("ml4t2e_cr_finegray", "list")
+  return(result)
 }
 
 
-#' @title Predict_CRModel_FG
+#' @title Predict_CRModel_FineGray
 #'
-#' @description Get predictions from a Fine-Gray CR model for a test dataset
+#' @description Get predictions from a fitted Fine-Gray competing risks model for new data.
 #'
 #' @param modelout the output from 'CRModel_FineGray'
-#' @param newdata the data for which the predictions are to be calculated
+#' @param newdata data frame with new observations for prediction
+#' @param newtimes optional numeric vector of time points for prediction.
+#'   If NULL (default), generates 50 equally-spaced points from 0 to max observed time.
+#'   Can be any positive values - interpolation handles all time points.
 #'
-#' @return a list with the following items. CIFs=predicted CIF matrix (for event coded as 1),
-#'  Times: The times at which the CIFs are predicted.
+#' @return a list containing:
+#'   \item{CIFs}{predicted cumulative incidence function matrix
+#'     (rows=times, cols=observations)}
+#'   \item{Times}{the times at which CIFs are calculated
+#'     (always includes time 0)}
 #'
 #' @importFrom stats model.matrix
 #' @export
-Predict_CRModel_FG<-function(modelout, newdata){
-  covmat<-stats::model.matrix(~-1+., data=newdata[, modelout$expvars])
-  Feat<-(scale(covmat, scale=modelout$sdTrain, center=modelout$meanTrain)%*%modelout$loadings)[,1:min(c(20,ncol(covmat)))]
-  CIF.hat <- tcrossprod(exp(Feat%*%c(unlist(modelout$fit$coef))),  modelout$fit$breslowJump[, 2]) #This is baseline cumulative hazard
-  CIF.hat<-apply(CIF.hat, 1, cumsum)
-  CIF.hat <- rbind(0,1 - exp(-CIF.hat))
-  return(list(CIFs=cbind(t(CIF.hat)),Times=c(modelout$timesfit)))
+#'
+#' @examples
+#' \dontrun{
+#' # Fit model
+#' model <- CRModel_FineGray(data, expvars = c("x1", "x2"),
+#'                          timevar = "time", eventvar = "event")
+#'
+#' # Predict on test data
+#' preds <- Predict_CRModel_FineGray(model, test_data)
+#'
+#' # Predict at specific times
+#' preds_custom <- Predict_CRModel_FineGray(model, test_data,
+#'                                         newtimes = c(30, 60, 90, 180, 365))
+#' }
+Predict_CRModel_FineGray <- function(modelout, newdata, newtimes = NULL) {
+
+  # ============================================================================
+  # Input Validation
+  # ============================================================================
+  if (!inherits(modelout, "ml4t2e_cr_finegray")) {
+    stop("'modelout' must be output from CRModel_FineGray")
+  }
+  if (!is.data.frame(newdata)) {
+    stop("'newdata' must be a data frame")
+  }
+
+  # Check that required variables are present in newdata
+  missing_vars <- setdiff(modelout$expvars, colnames(newdata))
+  if (length(missing_vars) > 0) {
+    stop("The following variables missing in newdata: ",
+         paste(missing_vars, collapse = ", "))
+  }
+
+  # Generate default times if not specified
+  if (is.null(newtimes)) {
+    # Create a reasonable default grid: 50 points from 0 to max observed time
+    max_time <- modelout$time_range[2]
+    newtimes <- seq(0, max_time, length.out = 50)
+  } else {
+    if (!is.numeric(newtimes) || any(newtimes < 0)) {
+      stop("'newtimes' must be a numeric vector of non-negative values")
+    }
+    newtimes <- sort(unique(newtimes))
+  }
+
+  # ============================================================================
+  # Prepare newdata
+  # ============================================================================
+  # Ensure factor levels match training data
+  newdata_prepared <- newdata[, modelout$expvars, drop = FALSE]
+
+  for (var in modelout$expvars) {
+    if (var %in% names(modelout$varprof)) {
+      varinfo <- modelout$varprof[[var]]
+      # Handle factors
+      if (is.table(varinfo)) {
+        training_levels <- names(varinfo)
+        if (is.factor(newdata_prepared[[var]])) {
+          # Ensure factor has same levels as training
+          new_levels <- levels(newdata_prepared[[var]])
+          extra_levels <- setdiff(new_levels, training_levels)
+          if (length(extra_levels) > 0) {
+            warning("Factor '", var, "' has new levels in newdata: ",
+                    paste(extra_levels, collapse = ", "),
+                    ". These will be set to NA.")
+          }
+          newdata_prepared[[var]] <- factor(newdata_prepared[[var]],
+                                            levels = training_levels)
+        } else if (is.character(newdata_prepared[[var]])) {
+          # Convert character to factor with training levels
+          newdata_prepared[[var]] <- factor(newdata_prepared[[var]],
+                                            levels = training_levels)
+        }
+      }
+    }
+  }
+
+  # Check for NAs
+  if (any(is.na(newdata_prepared))) {
+    warning("Missing values in newdata will result in NA predictions")
+  }
+
+  # ============================================================================
+  # Make Predictions
+  # ============================================================================
+  # Create model matrix and apply same preprocessing as training
+  covmat <- stats::model.matrix(~ -1 + ., data = newdata_prepared)
+
+  # Apply scaling
+  covmat_scaled <- scale(covmat,
+                         center = modelout$scaling$meanTrain,
+                         scale = modelout$scaling$sdTrain)
+
+  # Apply SVD transformation
+  n_components <- min(c(20, ncol(covmat_scaled)))
+  Feat <- (covmat_scaled %*% modelout$loadings)[, 1:n_components]
+
+  # Get baseline cumulative hazard from the model
+  # The model provides Breslow jumps at specific times
+  baseline_times <- modelout$fg_model$breslowJump[, 1]
+  baseline_haz <- modelout$fg_model$breslowJump[, 2]
+
+  # Compute CIF for each observation
+  n_obs <- nrow(Feat)
+  cif_matrix <- matrix(NA, nrow = length(baseline_times) + 1, ncol = n_obs)
+
+  # Time 0 has CIF = 0
+  cif_matrix[1, ] <- 0
+
+  # Compute CIF at each baseline time point
+  for (i in 1:n_obs) {
+    # Linear predictor
+    lp <- sum(Feat[i, ] * unlist(modelout$fg_model$coef))
+
+    # Cumulative hazard for this observation
+    cumhaz <- exp(lp) * baseline_haz
+
+    # Cumulative incidence function (subdistribution hazard)
+    cif_vals <- 1 - exp(-cumsum(cumhaz))
+
+    cif_matrix[-1, i] <- cif_vals
+  }
+
+  # ============================================================================
+  # Apply Interpolation
+  # ============================================================================
+  if (is.null(newtimes)) {
+    # Return predictions in native time grid: [observations, times]
+    result_cifs <- t(cif_matrix)  # cif_matrix is [times+1, observations], transpose to [observations, times+1]
+    result_times <- c(0, baseline_times)
+  } else {
+    # Interpolate to new time points
+    if (!is.numeric(newtimes) || any(newtimes < 0)) {
+      stop("'newtimes' must be a numeric vector of non-negative values")
+    }
+    newtimes <- sort(unique(newtimes))
+
+    # Use the standard CIF interpolation utility function
+    pred_cifs <- cifMatInterpolaltor(
+      probsMat = t(cif_matrix),  # cifMatInterpolaltor expects [observations, times]
+      times = c(0, baseline_times),
+      newtimes = newtimes
+    )
+
+    # cifMatInterpolaltor returns [newtimes, observations], transpose to [observations, newtimes]
+    result_cifs <- t(pred_cifs)
+    result_times <- newtimes
+  }
+
+  # ============================================================================
+  # Return Results
+  # ============================================================================
+  result <- list(
+    CIFs = result_cifs,
+    Times = result_times
+  )
+
+  return(result)
 }

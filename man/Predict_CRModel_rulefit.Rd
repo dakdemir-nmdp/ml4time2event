@@ -4,19 +4,24 @@
 \alias{Predict_CRModel_rulefit}
 \title{Predict_CRModel_rulefit}
 \usage{
-Predict_CRModel_rulefit(modelout, newdata)
+Predict_CRModel_rulefit(modelout, newdata, newtimes = NULL)
 }
 \arguments{
-\item{modelout}{the output from 'CRModel_rulefit'}
+\item{modelout}{the output from 'CRModel_rulefit' (a list containing model and metadata)}
 
-\item{newdata}{the data for which the predictions are to be calculated}
+\item{newdata}{data frame with new observations for prediction}
+
+\item{newtimes}{optional numeric vector of time points for prediction.
+If NULL (default), uses the model's native time points.
+Can be any positive values - interpolation handles all time points.}
 }
 \value{
-a list with the following items. TestMat: model matrix for the test data,
-PredRFOut: prediction object from Fine-Gray model,
-CIFs:predicted CIF matrix (for event coded as 1),
-Times: The times at which the CIFs are predicted.
+a list containing:
+  \item{CIFs}{predicted cumulative incidence function matrix
+    (rows=times, cols=observations)}
+  \item{Times}{the times at which CIFs are calculated
+    (always includes time 0)}
 }
 \description{
-Get predictions from a rulefit model for a test dataset
+Get predictions from a CR RuleFit model for a test dataset.
 }

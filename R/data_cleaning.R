@@ -8,7 +8,16 @@
 #' @export
 RemoveMonoVarsData <- function(data) {
   if (!is.data.frame(data)) stop("'data' must be a data frame.")
+
+  # Handle empty data frame
+  if (ncol(data) == 0 || nrow(data) == 0) {
+    return(data)
+  }
+
   num_unique_vals <- sapply(data, function(x) length(unique(x[!is.na(x)])))
+  # Ensure it's a numeric vector (sapply can return a list for empty data)
+  num_unique_vals <- as.numeric(num_unique_vals)
+
   # Only remove columns with exactly 1 unique non-NA value (true monotonous)
   # Keep all-NA columns (0 unique values) for RemoveAllNAVars to handle
   cols_to_keep <- num_unique_vals != 1

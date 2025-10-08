@@ -9,11 +9,14 @@ CRModel_RF(
   expvars,
   timevar,
   eventvar,
-  cause = c(1, 1),
+  failcode = 1,
   ntree = 300,
   samplesize = 500,
   nsplit = 5,
-  trace = TRUE
+  trace = TRUE,
+  splitrule = "logrankCR",
+  nodesize_try = c(1, 5, 10, 15),
+  ...
 )
 }
 \arguments{
@@ -23,22 +26,37 @@ CRModel_RF(
 
 \item{timevar}{character name of time variable in data}
 
-\item{eventvar}{character name of event variable in data (coded 0,1,2)}
+\item{eventvar}{character name of event variable in data (coded 0,1,2 where 0=censored, 1=event of interest, 2=competing event)}
 
-\item{cause}{vectoe of weights for causes}
+\item{failcode}{integer, the code for the event of interest (default: 1)}
 
-\item{ntree}{number of trees to fit to extract rules}
+\item{ntree}{integer value, number of trees to grow (default: 300)}
 
-\item{samplesize}{number of samples for each tree}
+\item{samplesize}{integer value, sample size for each grown tree (default: 500)}
 
-\item{nsplit}{maximum number of splits for each tree}
+\item{nsplit}{integer value, maximum number of splits for each tree (default: 5)}
 
-\item{trace}{trace the results or not}
+\item{trace}{logical, trace tuning process or not (default: TRUE)}
+
+\item{splitrule}{character, split rule for trees (default: "logrankCR")}
+
+\item{nodesize_try}{numeric vector, nodesize values to try during tuning (default: c(1, 5, 10, 15))}
+
+\item{...}{additional parameters passed to randomForestSRC functions}
 }
 \value{
-a list object with the following. hd.obj: trained random forest model object,
-varprof: profile of explanatory variables.
+a list with the following components:
+  \item{rf_model}{the fitted randomForestSRC model object}
+  \item{times}{vector of unique event times in the training data}
+  \item{varprof}{variable profile list containing factor levels and numeric ranges}
+  \item{model_type}{character string "cr_rf"}
+  \item{expvars}{character vector of explanatory variables used}
+  \item{timevar}{character name of time variable}
+  \item{eventvar}{character name of event variable}
+  \item{failcode}{the event code for the outcome of interest}
+  \item{time_range}{vector with min and max observed event times}
 }
 \description{
-Fit a  random forest model for competing risk outcomes
+Fit a random forest model for competing risks outcomes using randomForestSRC.
+Includes tuning of nodesize and mtry parameters.
 }

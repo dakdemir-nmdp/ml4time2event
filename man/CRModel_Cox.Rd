@@ -4,7 +4,17 @@
 \alias{CRModel_Cox}
 \title{CRModel_Cox}
 \usage{
-CRModel_Cox(data, expvars, timevar, eventvar)
+CRModel_Cox(
+  data,
+  expvars,
+  timevar,
+  eventvar,
+  failcode = 1,
+  varsel = "none",
+  penalty = "AIC",
+  ntimes = 50,
+  verbose = FALSE
+)
 }
 \arguments{
 \item{data}{data frame with explanatory and outcome variables}
@@ -13,13 +23,52 @@ CRModel_Cox(data, expvars, timevar, eventvar)
 
 \item{timevar}{character name of time variable in data}
 
-\item{eventvar}{character name of event variable in data (coded 0,1,2)}
+\item{eventvar}{character name of event variable in data (coded 0=censored, 1=cause1, 2=cause2, etc.)}
+
+\item{failcode}{integer, the code for the event of interest (default: 1)}
+
+\item{varsel}{character string specifying variable selection method:
+"none" (default, no selection),
+"backward" (backward elimination),
+"forward" (forward selection),
+"both" (stepwise selection)}
+
+\item{penalty}{character string specifying penalty criterion for stepwise methods: "AIC" (default) or "BIC"}
+
+\item{ntimes}{integer, number of time points to use for prediction grid (default: 50)}
+
+\item{verbose}{logical, print progress messages (default: FALSE)}
 }
 \value{
-a list object with the following. cph_model: trained Cox PH model object,
-times: unique times in the training data,
-varprof: profile of explanatory variables.
+a list with the following components:
+  \item{cph_model}{the fitted cause-specific Cox model object}
+  \item{times}{vector of unique event times in the training data}
+  \item{varprof}{variable profile list containing factor levels and numeric ranges}
+  \item{model_type}{character string "cr_cox"}
+  \item{expvars}{character vector of explanatory variables used}
+  \item{timevar}{character name of time variable}
+  \item{eventvar}{character name of event variable}
+  \item{failcode}{the event code for the outcome of interest}
+  \item{varsel_method}{character string indicating variable selection method used}
+  \item{time_range}{vector with min and max observed event times}
 }
 \description{
-Fit a Cox model for CR outcomes using forward selection
+Fit a cause-specific Cox model for competing risks outcomes with optional variable selection.
+}
+\examples{
+\dontrun{
+# Fit cause-specific Cox model without variable selection
+model1 <- CRModel_Cox(data, expvars = c("x1", "x2"),
+                     timevar = "time", eventvar = "event")
+
+# Fit with backward selection (AIC)
+model2 <- CRModel_Cox(data, expvars = c("x1", "x2", "x3"),
+                     timevar = "time", eventvar = "event",
+                     varsel = "backward", penalty = "AIC")
+
+# Fit with forward selection (BIC)
+model3 <- CRModel_Cox(data, expvars = c("x1", "x2", "x3"),
+                     timevar = "time", eventvar = "event",
+                     varsel = "forward", penalty = "BIC")
+}
 }

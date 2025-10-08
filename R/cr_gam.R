@@ -1,56 +1,57 @@
-#' @title CRModel_Cox
+#' @title score2proba
+#' @description internal function: from linear score to survival probabilities using Cox PH baseline.
+#' @param datasurv data frame with 'time' and 'event' columns.
+#' @param score numeric vector of linear predictor scores.
+#' @param conf.int confidence level for survival curve.
+#' @param which.est which estimate to return ("point", "lower", "upper").
+#' @return a list containing the Cox model ('model') and survfit object ('sf').
+#' @importFrom survival coxph Surv survfit coxph.control
+#' @noRd
+score2proba <-
+  function(datasurv, score, conf.int=0.95, which.est=c("point", "lower", "upper")) {
+    which.est <- match.arg(which.est)
+    # pred <- rep(NA, length(score)) # Not used
+    # names(pred) <- names(score) # Not used
+    datacox<-cbind(datasurv, data.frame(score=score))
+    # Ensure column names are 'time' and 'event' for Surv formula
+    colnames(datacox)[1:2]<-c("time","event")
+    # Fit a Cox model with score as the only predictor, fixing coefficient to 1 (offset)
+    # This estimates the baseline hazard based on the provided scores
+    predm <- survival::coxph(survival::Surv(time, event) ~ score, data=datacox, init=1, control=survival::coxph.control(iter.max = 0))
+    # Get survival curve predictions based on the fitted baseline hazard and new scores
+    sf <- survival::survfit(predm, newdata=data.frame("score"=score), conf.int=conf.int)
+    return(list(model=predm,sf=sf))
+  }
+
+#' @title CRModel_GAM
 #'
-#' @description Fit a cause-specific Cox model for competing risks outcomes with optional variable selection.
+#' @description Fit a GAM model for competing risks outcomes using cause-specific modeling.
 #'
 #' @param data data frame with explanatory and outcome variables
 #' @param expvars character vector of names of explanatory variables in data
 #' @param timevar character name of time variable in data
 #' @param eventvar character name of event variable in data (coded 0=censored, 1=cause1, 2=cause2, etc.)
 #' @param failcode integer, the code for the event of interest (default: 1)
-#' @param varsel character string specifying variable selection method:
-#'   "none" (default, no selection),
-#'   "backward" (backward elimination),
-#'   "forward" (forward selection),
-#'   "both" (stepwise selection)
-#' @param penalty character string specifying penalty criterion for stepwise methods: "AIC" (default) or "BIC"
+#' @param shrinkTreshold integer value, minimum number of factor levels for factor variables to be considered for shrinkage ('re' basis).
 #' @param ntimes integer, number of time points to use for prediction grid (default: 50)
 #' @param verbose logical, print progress messages (default: FALSE)
 #'
 #' @return a list with the following components:
-#'   \item{cph_model}{the fitted cause-specific Cox model object}
-#'   \item{times}{vector of unique event times in the training data}
+#'   \item{gam_model}{the fitted cause-specific GAM model object from mgcv::gam}
+#'   \item{times}{vector of unique event times in the training data for the event of interest}
 #'   \item{varprof}{variable profile list containing factor levels and numeric ranges}
-#'   \item{model_type}{character string "cr_cox"}
+#'   \item{model_type}{character string "cr_gam"}
 #'   \item{expvars}{character vector of explanatory variables used}
 #'   \item{timevar}{character name of time variable}
 #'   \item{eventvar}{character name of event variable}
 #'   \item{failcode}{the event code for the outcome of interest}
-#'   \item{varsel_method}{character string indicating variable selection method used}
 #'   \item{time_range}{vector with min and max observed event times}
 #'
-#' @importFrom survival coxph Surv
-#' @importFrom stats step as.formula
+#' @importFrom mgcv gam cox.ph s
+#' @importFrom stats as.formula predict
 #' @export
-#'
-#' @examples
-#' \dontrun{
-#' # Fit cause-specific Cox model without variable selection
-#' model1 <- CRModel_Cox(data, expvars = c("x1", "x2"),
-#'                      timevar = "time", eventvar = "event")
-#'
-#' # Fit with backward selection (AIC)
-#' model2 <- CRModel_Cox(data, expvars = c("x1", "x2", "x3"),
-#'                      timevar = "time", eventvar = "event",
-#'                      varsel = "backward", penalty = "AIC")
-#'
-#' # Fit with forward selection (BIC)
-#' model3 <- CRModel_Cox(data, expvars = c("x1", "x2", "x3"),
-#'                      timevar = "time", eventvar = "event",
-#'                      varsel = "forward", penalty = "BIC")
-#' }
-CRModel_Cox <- function(data, expvars, timevar, eventvar, failcode = 1,
-                       varsel = "none", penalty = "AIC",
-                       ntimes = 50, verbose = FALSE) {
+CRModel_GAM <- function(data, expvars, timevar, eventvar, failcode = 1,
+                       shrinkTreshold = 10, ntimes = 50, verbose = FALSE) {
 
   # ============================================================================
   # Input Validation
@@ -74,8 +75,6 @@ CRModel_Cox <- function(data, expvars, timevar, eventvar, failcode = 1,
   if (!is.numeric(failcode) || length(failcode) != 1 || failcode < 1) {
     stop("'failcode' must be a positive integer")
   }
-  varsel <- match.arg(varsel, c("none", "backward", "forward", "both"))
-  penalty <- match.arg(penalty, c("AIC", "BIC"))
 
   # ============================================================================
   # Data Preparation
@@ -110,9 +109,9 @@ CRModel_Cox <- function(data, expvars, timevar, eventvar, failcode = 1,
   time_range <- c(0, max(event_times))
 
   # ============================================================================
-  # Model Fitting - Cause-Specific Cox Model
+  # Model Fitting - Cause-Specific GAM Model
   # ============================================================================
-  if (verbose) cat("Fitting cause-specific Cox model for event type", failcode, "...\n")
+  if (verbose) cat("Fitting cause-specific GAM model for event type", failcode, "...\n")
 
   # Create cause-specific data: event = 1 if failcode, 0 if censored, NA if other competing event
   XYTrain$status_cs <- ifelse(XYTrain[[eventvar]] == 0, 0,  # censored
@@ -125,120 +124,148 @@ CRModel_Cox <- function(data, expvars, timevar, eventvar, failcode = 1,
     stop("Insufficient data after removing competing events. Need at least 10 observations.")
   }
 
-  # Define formula
-  form <- stats::as.formula(
-    paste0("survival::Surv(", timevar, ", status_cs) ~ ",
-           paste(expvars, collapse = " + "))
-  )
+  # Identify variable types for GAM formula construction
+  numvars <- expvars[which(sapply(as.data.frame(XYTrain_cs[, expvars, drop=FALSE]), is.numeric))]
+  fctvars <- expvars[which(sapply(as.data.frame(XYTrain_cs[, expvars, drop=FALSE]), function(x) {
+    (is.factor(x) | is.character(x))
+  }))]
 
-  if (verbose) cat("Fitting Cox model...\n")
-
-  # Fit initial Cox model
-  cph_model <- tryCatch(
-    survival::coxph(form, data = XYTrain_cs, x = TRUE, y = TRUE),
-    error = function(e) {
-      stop("Failed to fit cause-specific Cox model: ", e$message)
+  # Convert characters to factors
+  for (i in fctvars) {
+    if (is.character(XYTrain_cs[[i]])) {
+      XYTrain_cs[[i]] <- as.factor(XYTrain_cs[[i]])
     }
-  )
-
-  # Variable selection
-  if (varsel != "none") {
-    if (verbose) cat("Performing variable selection (", varsel, ", ", penalty, ")...\n", sep="")
-
-    # Set penalty parameter k for step()
-    k_penalty <- switch(penalty, "AIC" = 2, "BIC" = log(nrow(XYTrain_cs)))
-
-    # Define scope for forward/both methods
-    if (varsel %in% c("forward", "both")) {
-      null_formula <- stats::as.formula(
-        paste0("survival::Surv(", timevar, ", status_cs) ~ 1")
-      )
-      null_model <- survival::coxph(null_formula, data = XYTrain_cs, x = TRUE, y = TRUE)
-      lower_scope <- null_formula
-      upper_scope <- form
-    }
-
-    # Perform stepwise selection
-    cph_model <- tryCatch(
-      {
-        if (varsel == "backward") {
-          stats::step(cph_model, direction = "backward", k = k_penalty, trace = as.numeric(verbose))
-        } else if (varsel == "forward") {
-          stats::step(null_model, direction = "forward", scope = list(lower = lower_scope, upper = upper_scope),
-                     k = k_penalty, trace = as.numeric(verbose))
-        } else if (varsel == "both") {
-          stats::step(null_model, direction = "both", scope = list(lower = lower_scope, upper = upper_scope),
-                     k = k_penalty, trace = as.numeric(verbose))
-        }
-      },
-      error = function(e) {
-        warning("Variable selection failed: ", e$message, ". Using full model.")
-        cph_model # Return original full model
-      }
-    )
   }
+
+  # Separate variables based on number of levels for smoothing/shrinkage
+  catvarstoshrink <- if (length(fctvars) > 0) {
+    fctvars[which(sapply(as.data.frame(XYTrain_cs[, fctvars, drop=FALSE]), function(x) {
+      length(levels(x)) > shrinkTreshold
+    }))]
+  } else {
+    c()
+  }
+  catvarsnottoshrink <- if (length(fctvars) > 0) {
+    fctvars[which(sapply(as.data.frame(XYTrain_cs[, fctvars, drop=FALSE]), function(x) {
+      length(levels(x)) <= shrinkTreshold
+    }))]
+  } else {
+    c()
+  }
+  numvarstosmooth <- if (length(numvars) > 0) {
+    numvars[which(sapply(as.data.frame(XYTrain_cs[, numvars, drop=FALSE]), function(x) {
+      length(unique(x[!is.na(x)])) > shrinkTreshold
+    }))]
+  } else {
+    c()
+  }
+  numvarsnottosmooth <- if (length(numvars) > 0) {
+    numvars[which(sapply(as.data.frame(XYTrain_cs[, numvars, drop=FALSE]), function(x) {
+      length(unique(x[!is.na(x)])) <= shrinkTreshold
+    }))]
+  } else {
+    c()
+  }
+
+  # Build GAM formula string
+  formGAM_terms <- c()
+  for (vari in catvarstoshrink) {
+    formGAM_terms <- c(formGAM_terms, paste0("s(", vari, ", bs='re')")) # Random effect smooth for high-cardinality factors
+  }
+  for (vari in numvarstosmooth) {
+    formGAM_terms <- c(formGAM_terms, paste0("s(", vari, ")")) # Default smooth for numerics
+  }
+  # Add linear terms for remaining variables
+  formGAM_terms <- c(formGAM_terms, numvarsnottosmooth, catvarsnottoshrink)
+
+  # Combine terms into formula
+  if (length(formGAM_terms) > 0) {
+    formGAM_rhs <- paste(formGAM_terms, collapse = "+")
+  } else {
+    formGAM_rhs <- "1" # Intercept only if no predictors
+  }
+
+  formGAM <- stats::as.formula(paste(timevar, "~", formGAM_rhs))
+  if (verbose) print(formGAM)
+
+  # Fit the GAM model with Cox PH family for cause-specific modeling
+  gam_model <- mgcv::gam(
+    formGAM,
+    family = mgcv::cox.ph(),
+    data = XYTrain_cs,
+    weights = XYTrain_cs$status_cs, # Use cause-specific event indicator as weights
+    select = TRUE # Enable shrinkage via double penalty approach
+  )
+
+  # Create baseline model for prediction using score2proba approach
+  # Get linear predictors for training data
+  train_linear_preds <- stats::predict(gam_model,
+                                       newdata = XYTrain_cs,
+                                       type = "link")
+
+  # Create survival data for the cause-specific case
+  train_survival_data <- data.frame(
+    time = XYTrain_cs[[timevar]],
+    event = XYTrain_cs$status_cs
+  )
+
+  # Use score2proba to create baseline hazard model
+  baseline_info <- score2proba(
+    datasurv = train_survival_data,
+    score = train_linear_preds,
+    conf.int = 0.95,
+    which.est = "point"
+  )
+
+  # Store baseline model in the GAM model object
+  gam_model$baseline_model <- baseline_info$model
+  gam_model$baseline_sf <- baseline_info$sf
 
   # ============================================================================
   # Return Results
   # ============================================================================
-  if (verbose) cat("Cause-specific Cox model fitting complete.\n")
+  if (verbose) cat("Cause-specific GAM model fitting complete.\n")
 
   result <- list(
-    cph_model = cph_model,
+    gam_model = gam_model,
     times = sort(unique(XYTrain_cs[[timevar]][XYTrain_cs$status_cs == 1])),
     varprof = varprof,
-    model_type = "cr_cox",
+    model_type = "cr_gam",
     expvars = expvars,
     timevar = timevar,
     eventvar = eventvar,
     failcode = failcode,
-    varsel_method = varsel,
     time_range = time_range
   )
 
-  class(result) <- c("ml4t2e_cr_cox", "list")
+  class(result) <- c("ml4t2e_cr_gam", "list")
   return(result)
 }
 
-#' @title Predict_CRModel_Cox
+#' @title Predict_CRModel_GAM
 #'
-#' @description Get predictions from a fitted cause-specific Cox competing risks model for new data.
+#' @description Get predictions from a fitted cause-specific GAM competing risks model for new data.
 #'
-#' @param modelout the output from 'CRModel_Cox'
+#' @param modelout the output from 'CRModel_GAM'
 #' @param newdata data frame with new observations for prediction
 #' @param newtimes optional numeric vector of time points for prediction.
 #'   If NULL (default), uses the times from the training data.
 #'   Can be any positive values - interpolation handles all time points.
 #'
 #' @return a list containing:
-#'   \item{cph_modelTestPredict}{the raw survfit object from prediction}
 #'   \item{CIFs}{predicted cumulative incidence function matrix
 #'     (rows=times, cols=observations)}
 #'   \item{Times}{the times at which CIFs are calculated}
 #'
-#' @importFrom survival survfit
+#' @importFrom stats predict
 #' @export
-#'
-#' @examples
-#' \dontrun{
-#' # Fit model
-#' model <- CRModel_Cox(data, expvars = c("x1", "x2"),
-#'                     timevar = "time", eventvar = "event")
-#'
-#' # Predict on test data
-#' preds <- Predict_CRModel_Cox(model, test_data)
-#'
-#' # Predict at specific times
-#' preds_custom <- Predict_CRModel_Cox(model, test_data,
-#'                                    newtimes = c(30, 60, 90, 180, 365))
-#' }
-Predict_CRModel_Cox <- function(modelout, newdata, newtimes = NULL) {
+Predict_CRModel_GAM <- function(modelout, newdata, newtimes = NULL) {
 
   # ============================================================================
   # Input Validation
   # ============================================================================
-  if (!inherits(modelout, "ml4t2e_cr_cox")) {
-    stop("'modelout' must be output from CRModel_Cox")
+  if (!inherits(modelout, "ml4t2e_cr_gam")) {
+    stop("'modelout' must be output from CRModel_GAM")
   }
   if (!is.data.frame(newdata)) {
     stop("'newdata' must be a data frame")
@@ -302,28 +329,35 @@ Predict_CRModel_Cox <- function(modelout, newdata, newtimes = NULL) {
   # ============================================================================
   # Make Predictions
   # ============================================================================
-  # Get survival predictions from the cause-specific Cox model
-  cph_modelTestPredict <- tryCatch(
-    survival::survfit(modelout$cph_model, newdata = newdata_prepared),
-    error = function(e) {
-      stop("Prediction failed: ", e$message)
-    }
-  )
+  # Get linear predictors from the GAM model
+  linear_preds <- stats::predict(modelout$gam_model,
+                                 newdata = newdata_prepared,
+                                 type = "link", # Get linear predictor
+                                 se.fit = TRUE)
 
+  # Use the stored baseline hazard from the training fit
+  # and the new scores (linear_preds$fit) to get survival probabilities for the new data
+  sf <- survival::survfit(
+    modelout$gam_model$baseline_model, # Use the stored Cox model
+    newdata = data.frame("score" = linear_preds$fit),
+    conf.int = .95
+  )
+  
   # Extract survival probabilities
-  surv_probs <- cph_modelTestPredict$surv
-  surv_times <- cph_modelTestPredict$time
+  surv_probs <- sf$surv # Matrix: rows=times, cols=observations
+  surv_times <- sf$time
 
   # Ensure matrix format
   if (!is.matrix(surv_probs)) {
     surv_probs <- matrix(surv_probs, ncol = 1)
   }
 
-  # For cause-specific Cox model, the CIF is approximately 1 - S(t)
+  # For cause-specific model, CIF is approximately 1 - S(t)
   # where S(t) is the cause-specific survival function
-  # This is a simplification; in practice, competing risks CIFs require
-  # more complex calculation accounting for all causes
   cif_matrix <- 1 - surv_probs
+
+  # Ensure CIFs are properly bounded [0,1]
+  cif_matrix <- pmin(pmax(cif_matrix, 0), 1)
 
   # ============================================================================
   # Apply Interpolation
@@ -355,7 +389,6 @@ Predict_CRModel_Cox <- function(modelout, newdata, newtimes = NULL) {
   # Return Results
   # ============================================================================
   result <- list(
-    cph_modelTestPredict = cph_modelTestPredict,
     CIFs = result_cifs,
     Times = result_times
   )

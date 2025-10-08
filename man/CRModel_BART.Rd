@@ -4,7 +4,19 @@
 \alias{CRModel_BART}
 \title{CRModel_BART}
 \usage{
-CRModel_BART(data, expvars, timevar, eventvar, K = 10, ntree = 100)
+CRModel_BART(
+  data,
+  expvars,
+  timevar,
+  eventvar,
+  failcode = 1,
+  K = 10,
+  ntree = 100,
+  ndpost = 1000,
+  nskip = 100,
+  keepevery = 10,
+  verbose = FALSE
+)
 }
 \arguments{
 \item{data}{data frame with explanatory and outcome variables}
@@ -13,19 +25,37 @@ CRModel_BART(data, expvars, timevar, eventvar, K = 10, ntree = 100)
 
 \item{timevar}{character name of time variable in data}
 
-\item{eventvar}{character name of event variable in data}
+\item{eventvar}{character name of event variable in data (coded 0,1,2 where 0=censored, 1=event of interest, 2=competing event)}
 
-\item{K}{number of cutpoints for the time variable}
+\item{failcode}{integer, the code for the event of interest (default: 1)}
 
-\item{ntree}{number of trees to fit to extract rules}
+\item{K}{parameter 'K' for BART (number of time points for discrete approximation, default: 10)}
+
+\item{ntree}{number of trees in BART model (default: 100)}
+
+\item{ndpost}{number of posterior draws to save (default: 1000)}
+
+\item{nskip}{number of MCMC iterations to discard as burn-in (default: 100)}
+
+\item{keepevery}{interval at which to keep posterior draws (default: 10)}
+
+\item{verbose}{logical, print progress messages (default: FALSE)}
 }
 \value{
-a list object with the following: post: BART model,
- expvars: character vector of explanatory variables,
- eventvarvec: event variable values,timevarvec: time variable values,
- x.train: design matrix for the training data,
- varprof: profile of the explanatory variables
+a list with the following components:
+  \item{bart_model}{the fitted BART model object from BART::crisk.bart}
+  \item{times}{vector of unique event times in the training data}
+  \item{varprof}{variable profile list containing factor levels and numeric ranges}
+  \item{model_type}{character string "cr_bart"}
+  \item{expvars}{character vector of explanatory variables used}
+  \item{timevar}{character name of time variable}
+  \item{eventvar}{character name of event variable}
+  \item{failcode}{the event code for the outcome of interest}
+  \item{time_range}{vector with min and max observed event times}
+  \item{x_train}{design matrix for the training data}
+  \item{times_train}{time variable values from training data}
+  \item{delta_train}{event variable values from training data}
 }
 \description{
-Fit a BART model for competing risks outcomes
+Fit a BART model for competing risks outcomes using BART::crisk.bart.
 }

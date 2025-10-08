@@ -1,56 +1,33 @@
-#' @title CRModel_Cox
+#' @title CRModel_SurvReg
 #'
-#' @description Fit a cause-specific Cox model for competing risks outcomes with optional variable selection.
+#' @description Fit a parametric survival regression model for competing risks outcomes using cause-specific modeling.
 #'
 #' @param data data frame with explanatory and outcome variables
 #' @param expvars character vector of names of explanatory variables in data
 #' @param timevar character name of time variable in data
 #' @param eventvar character name of event variable in data (coded 0=censored, 1=cause1, 2=cause2, etc.)
 #' @param failcode integer, the code for the event of interest (default: 1)
-#' @param varsel character string specifying variable selection method:
-#'   "none" (default, no selection),
-#'   "backward" (backward elimination),
-#'   "forward" (forward selection),
-#'   "both" (stepwise selection)
-#' @param penalty character string specifying penalty criterion for stepwise methods: "AIC" (default) or "BIC"
+#' @param dist distribution for the parametric model, one of "weibull", "exponential", "gaussian", "logistic","lognormal" or "loglogistic".
 #' @param ntimes integer, number of time points to use for prediction grid (default: 50)
 #' @param verbose logical, print progress messages (default: FALSE)
 #'
 #' @return a list with the following components:
-#'   \item{cph_model}{the fitted cause-specific Cox model object}
-#'   \item{times}{vector of unique event times in the training data}
+#'   \item{survreg_model}{the fitted cause-specific parametric survival model object}
+#'   \item{times}{vector of unique event times in the training data for the event of interest}
 #'   \item{varprof}{variable profile list containing factor levels and numeric ranges}
-#'   \item{model_type}{character string "cr_cox"}
+#'   \item{model_type}{character string "cr_survreg"}
 #'   \item{expvars}{character vector of explanatory variables used}
 #'   \item{timevar}{character name of time variable}
 #'   \item{eventvar}{character name of event variable}
 #'   \item{failcode}{the event code for the outcome of interest}
-#'   \item{varsel_method}{character string indicating variable selection method used}
 #'   \item{time_range}{vector with min and max observed event times}
+#'   \item{dist}{the distribution used for the parametric model}
 #'
-#' @importFrom survival coxph Surv
-#' @importFrom stats step as.formula
+#' @importFrom survival survreg Surv
+#' @importFrom stats AIC as.formula predict quantile
 #' @export
-#'
-#' @examples
-#' \dontrun{
-#' # Fit cause-specific Cox model without variable selection
-#' model1 <- CRModel_Cox(data, expvars = c("x1", "x2"),
-#'                      timevar = "time", eventvar = "event")
-#'
-#' # Fit with backward selection (AIC)
-#' model2 <- CRModel_Cox(data, expvars = c("x1", "x2", "x3"),
-#'                      timevar = "time", eventvar = "event",
-#'                      varsel = "backward", penalty = "AIC")
-#'
-#' # Fit with forward selection (BIC)
-#' model3 <- CRModel_Cox(data, expvars = c("x1", "x2", "x3"),
-#'                      timevar = "time", eventvar = "event",
-#'                      varsel = "forward", penalty = "BIC")
-#' }
-CRModel_Cox <- function(data, expvars, timevar, eventvar, failcode = 1,
-                       varsel = "none", penalty = "AIC",
-                       ntimes = 50, verbose = FALSE) {
+CRModel_SurvReg <- function(data, expvars, timevar, eventvar, failcode = 1,
+                           dist = "exponential", ntimes = 50, verbose = FALSE) {
 
   # ============================================================================
   # Input Validation
@@ -74,8 +51,6 @@ CRModel_Cox <- function(data, expvars, timevar, eventvar, failcode = 1,
   if (!is.numeric(failcode) || length(failcode) != 1 || failcode < 1) {
     stop("'failcode' must be a positive integer")
   }
-  varsel <- match.arg(varsel, c("none", "backward", "forward", "both"))
-  penalty <- match.arg(penalty, c("AIC", "BIC"))
 
   # ============================================================================
   # Data Preparation
@@ -100,145 +75,169 @@ CRModel_Cox <- function(data, expvars, timevar, eventvar, failcode = 1,
     stop("Insufficient data after removing missing values. Need at least 10 observations.")
   }
 
-  # Get unique event times for the event of interest
-  event_times <- XYTrain[[timevar]][XYTrain[[eventvar]] == failcode]
-  if (length(event_times) == 0) {
-    stop("No events of type ", failcode, " in training data. Cannot fit competing risks model.")
-  }
+  # ============================================================================
+  # Cause-Specific Data Preparation
+  # ============================================================================
+  # Create cause-specific outcome: 1 for event of interest, 0 for censored/other events
+  XYTrain_cs <- XYTrain
+  XYTrain_cs$status_cs <- ifelse(XYTrain[[eventvar]] == failcode, 1,
+                                ifelse(XYTrain[[eventvar]] == 0, 0, 0))
 
-  # Store event time range for reference
+  # Get time range for the event of interest
+  event_times <- XYTrain_cs[[timevar]][XYTrain_cs$status_cs == 1]
   time_range <- c(0, max(event_times))
 
   # ============================================================================
-  # Model Fitting - Cause-Specific Cox Model
+  # Forward Selection with AIC (adapted for cause-specific modeling)
   # ============================================================================
-  if (verbose) cat("Fitting cause-specific Cox model for event type", failcode, "...\n")
+  if (verbose) cat("Performing forward selection with AIC...\n")
 
-  # Create cause-specific data: event = 1 if failcode, 0 if censored, NA if other competing event
-  XYTrain$status_cs <- ifelse(XYTrain[[eventvar]] == 0, 0,  # censored
-                              ifelse(XYTrain[[eventvar]] == failcode, 1, NA))  # event of interest or competing
+  selected_vars <- c()
+  candidate_vars <- expvars
 
-  # Remove competing events (treat as censored for this cause-specific model)
-  XYTrain_cs <- XYTrain[!is.na(XYTrain$status_cs), , drop = FALSE]
-
-  if (nrow(XYTrain_cs) < 10) {
-    stop("Insufficient data after removing competing events. Need at least 10 observations.")
-  }
-
-  # Define formula
-  form <- stats::as.formula(
-    paste0("survival::Surv(", timevar, ", status_cs) ~ ",
-           paste(expvars, collapse = " + "))
-  )
-
-  if (verbose) cat("Fitting Cox model...\n")
-
-  # Fit initial Cox model
-  cph_model <- tryCatch(
-    survival::coxph(form, data = XYTrain_cs, x = TRUE, y = TRUE),
+  # Start with intercept-only model AIC
+  null_formula <- stats::as.formula(paste("survival::Surv(", timevar, ", status_cs) ~ 1"))
+  null_model <- tryCatch(
+    survival::survreg(null_formula, data = XYTrain_cs, dist = dist, x = FALSE, y = FALSE),
     error = function(e) {
-      stop("Failed to fit cause-specific Cox model: ", e$message)
+      if (verbose) warning("Failed to fit null model: ", e$message)
+      NULL
     }
   )
+  if (is.null(null_model)) stop("Failed to fit intercept-only model.")
+  best_aic <- stats::AIC(null_model)
+  if (verbose) print(paste("Initial AIC (Intercept only):", round(best_aic, 2)))
 
-  # Variable selection
-  if (varsel != "none") {
-    if (verbose) cat("Performing variable selection (", varsel, ", ", penalty, ")...\n", sep="")
+  while (length(candidate_vars) > 0) {
+    aic_values <- numeric(length(candidate_vars))
+    names(aic_values) <- candidate_vars
 
-    # Set penalty parameter k for step()
-    k_penalty <- switch(penalty, "AIC" = 2, "BIC" = log(nrow(XYTrain_cs)))
+    for (i in seq_along(candidate_vars)) {
+      var <- candidate_vars[i]
+      current_vars <- c(selected_vars, var)
+      formula_str <- paste("survival::Surv(", timevar, ", status_cs) ~", paste(current_vars, collapse = "+"))
+      formula <- stats::as.formula(formula_str)
 
-    # Define scope for forward/both methods
-    if (varsel %in% c("forward", "both")) {
-      null_formula <- stats::as.formula(
-        paste0("survival::Surv(", timevar, ", status_cs) ~ 1")
+      model <- tryCatch(
+        survival::survreg(formula, data = XYTrain_cs, dist = dist, x = FALSE, y = FALSE),
+        error = function(e) {
+          if (verbose) warning("Failed to fit model with var ", var, ": ", e$message)
+          NULL
+        }
       )
-      null_model <- survival::coxph(null_formula, data = XYTrain_cs, x = TRUE, y = TRUE)
-      lower_scope <- null_formula
-      upper_scope <- form
+
+      if (!is.null(model)) {
+        aic_values[i] <- stats::AIC(model)
+      } else {
+        aic_values[i] <- Inf # Penalize models that fail to fit
+      }
     }
 
-    # Perform stepwise selection
-    cph_model <- tryCatch(
-      {
-        if (varsel == "backward") {
-          stats::step(cph_model, direction = "backward", k = k_penalty, trace = as.numeric(verbose))
-        } else if (varsel == "forward") {
-          stats::step(null_model, direction = "forward", scope = list(lower = lower_scope, upper = upper_scope),
-                     k = k_penalty, trace = as.numeric(verbose))
-        } else if (varsel == "both") {
-          stats::step(null_model, direction = "both", scope = list(lower = lower_scope, upper = upper_scope),
-                     k = k_penalty, trace = as.numeric(verbose))
-        }
-      },
-      error = function(e) {
-        warning("Variable selection failed: ", e$message, ". Using full model.")
-        cph_model # Return original full model
-      }
-    )
+    best_candidate_idx <- which.min(aic_values)
+    best_candidate_aic <- aic_values[best_candidate_idx]
+    best_candidate_var <- candidate_vars[best_candidate_idx]
+
+    # Add variable if it improves AIC
+    if (best_candidate_aic < best_aic) {
+      if (verbose) print(paste("Adding", best_candidate_var, "AIC:", round(best_candidate_aic, 2),
+                              "(Improvement:", round(best_aic - best_candidate_aic, 2), ")"))
+      selected_vars <- c(selected_vars, best_candidate_var)
+      candidate_vars <- setdiff(candidate_vars, best_candidate_var)
+      best_aic <- best_candidate_aic
+    } else {
+      if (verbose) print(paste("No improvement adding remaining variables. Best AIC:", round(best_aic, 2)))
+      break # Stop if no variable improves AIC
+    }
+  } # End while loop
+
+  # ============================================================================
+  # Fit the Final Selected Model
+  # ============================================================================
+  if (length(selected_vars) > 0) {
+    final_formula_str <- paste("survival::Surv(", timevar, ", status_cs) ~", paste(selected_vars, collapse = "+"))
+    final_model <- survival::survreg(stats::as.formula(final_formula_str), data = XYTrain_cs,
+                                     dist = dist, x = TRUE, y = TRUE)
+  } else {
+    # If no variables selected, use the intercept-only model
+    if (verbose) warning("No variables selected by forward selection. Using intercept-only model.")
+    final_model <- survival::survreg(null_formula, data = XYTrain_cs, dist = dist, x = TRUE, y = TRUE)
+    selected_vars <- character(0)
   }
+
+  if (is.null(final_model)) {
+    stop("No valid model could be fit even after selection. Please check the data and variables.")
+  }
+
+  # ============================================================================
+  # Create Baseline Model for Prediction
+  # ============================================================================
+  # Get linear predictors for training data
+  train_linear_preds <- predict(final_model, type = "linear")
+
+  # Create survival data for the cause-specific case
+  train_survival_data <- data.frame(
+    time = XYTrain_cs[[timevar]],
+    event = XYTrain_cs$status_cs
+  )
+
+  # Use score2proba to create baseline hazard model
+  baseline_info <- score2proba(
+    datasurv = train_survival_data,
+    score = train_linear_preds,
+    conf.int = 0.95,
+    which.est = "point"
+  )
+
+  # Store baseline model in the survreg model object
+  final_model$baseline_model <- baseline_info$model
+  final_model$baseline_sf <- baseline_info$sf
 
   # ============================================================================
   # Return Results
   # ============================================================================
-  if (verbose) cat("Cause-specific Cox model fitting complete.\n")
+  if (verbose) cat("Cause-specific parametric survival model fitting complete.\n")
 
   result <- list(
-    cph_model = cph_model,
+    survreg_model = final_model,
     times = sort(unique(XYTrain_cs[[timevar]][XYTrain_cs$status_cs == 1])),
     varprof = varprof,
-    model_type = "cr_cox",
+    model_type = "cr_survreg",
     expvars = expvars,
     timevar = timevar,
     eventvar = eventvar,
     failcode = failcode,
-    varsel_method = varsel,
-    time_range = time_range
+    time_range = time_range,
+    dist = dist
   )
 
-  class(result) <- c("ml4t2e_cr_cox", "list")
+  class(result) <- c("ml4t2e_cr_survreg", "list")
   return(result)
 }
 
-#' @title Predict_CRModel_Cox
+#' @title Predict_CRModel_SurvReg
 #'
-#' @description Get predictions from a fitted cause-specific Cox competing risks model for new data.
+#' @description Get predictions from a fitted cause-specific parametric survival competing risks model for new data.
 #'
-#' @param modelout the output from 'CRModel_Cox'
+#' @param modelout the output from 'CRModel_SurvReg'
 #' @param newdata data frame with new observations for prediction
 #' @param newtimes optional numeric vector of time points for prediction.
 #'   If NULL (default), uses the times from the training data.
 #'   Can be any positive values - interpolation handles all time points.
 #'
 #' @return a list containing:
-#'   \item{cph_modelTestPredict}{the raw survfit object from prediction}
 #'   \item{CIFs}{predicted cumulative incidence function matrix
 #'     (rows=times, cols=observations)}
 #'   \item{Times}{the times at which CIFs are calculated}
 #'
-#' @importFrom survival survfit
+#' @importFrom stats predict
 #' @export
-#'
-#' @examples
-#' \dontrun{
-#' # Fit model
-#' model <- CRModel_Cox(data, expvars = c("x1", "x2"),
-#'                     timevar = "time", eventvar = "event")
-#'
-#' # Predict on test data
-#' preds <- Predict_CRModel_Cox(model, test_data)
-#'
-#' # Predict at specific times
-#' preds_custom <- Predict_CRModel_Cox(model, test_data,
-#'                                    newtimes = c(30, 60, 90, 180, 365))
-#' }
-Predict_CRModel_Cox <- function(modelout, newdata, newtimes = NULL) {
+Predict_CRModel_SurvReg <- function(modelout, newdata, newtimes = NULL) {
 
   # ============================================================================
   # Input Validation
   # ============================================================================
-  if (!inherits(modelout, "ml4t2e_cr_cox")) {
-    stop("'modelout' must be output from CRModel_Cox")
+  if (!inherits(modelout, "ml4t2e_cr_survreg")) {
+    stop("'modelout' must be output from CRModel_SurvReg")
   }
   if (!is.data.frame(newdata)) {
     stop("'newdata' must be a data frame")
@@ -302,28 +301,34 @@ Predict_CRModel_Cox <- function(modelout, newdata, newtimes = NULL) {
   # ============================================================================
   # Make Predictions
   # ============================================================================
-  # Get survival predictions from the cause-specific Cox model
-  cph_modelTestPredict <- tryCatch(
-    survival::survfit(modelout$cph_model, newdata = newdata_prepared),
-    error = function(e) {
-      stop("Prediction failed: ", e$message)
-    }
+  # Get linear predictors from the parametric model
+  linear_preds <- stats::predict(modelout$survreg_model,
+                                 newdata = newdata_prepared,
+                                 type = "linear")
+
+  # Use the stored baseline hazard from the training fit
+  # and the new scores (linear_preds) to get survival probabilities for the new data
+  sf <- survival::survfit(
+    modelout$survreg_model$baseline_model, # Use the stored Cox model
+    newdata = data.frame("score" = linear_preds),
+    conf.int = .95
   )
 
   # Extract survival probabilities
-  surv_probs <- cph_modelTestPredict$surv
-  surv_times <- cph_modelTestPredict$time
+  surv_probs <- sf$surv # Matrix: rows=times, cols=observations
+  surv_times <- sf$time
 
   # Ensure matrix format
   if (!is.matrix(surv_probs)) {
     surv_probs <- matrix(surv_probs, ncol = 1)
   }
 
-  # For cause-specific Cox model, the CIF is approximately 1 - S(t)
+  # For cause-specific model, CIF is approximately 1 - S(t)
   # where S(t) is the cause-specific survival function
-  # This is a simplification; in practice, competing risks CIFs require
-  # more complex calculation accounting for all causes
   cif_matrix <- 1 - surv_probs
+
+  # Ensure CIFs are properly bounded [0,1]
+  cif_matrix <- pmin(pmax(cif_matrix, 0), 1)
 
   # ============================================================================
   # Apply Interpolation
@@ -355,7 +360,6 @@ Predict_CRModel_Cox <- function(modelout, newdata, newtimes = NULL) {
   # Return Results
   # ============================================================================
   result <- list(
-    cph_modelTestPredict = cph_modelTestPredict,
     CIFs = result_cifs,
     Times = result_times
   )

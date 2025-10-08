@@ -1,124 +1,178 @@
 library(testthat)
-library(here)
-# library(data.table) # Removed
-library(survival) # For Surv object
-# library(dbarts) # Required for the functions being tested - load if needed, or skip
-
-# Assuming the functions are available in the environment
-source("/Users/dakdemir/Library/CloudStorage/OneDrive-NMDP/Year2025/Github/ml4time2event/R/data_summary.R")
-source("/Users/dakdemir/Library/CloudStorage/OneDrive-NMDP/Year2025/Github/ml4time2event/R/cr_bart.R")
-source("/Users/dakdemir/Library/CloudStorage/OneDrive-NMDP/Year2025/Github/ml4time2event/R/data_summary.R")
+library(BART) # Required for the functions being tested
 
 context("Testing cr_bart functions")
 
 # --- Test Data Setup ---
-# Reusing the setup from previous CR tests
+# Create a simple competing risks dataset
 set.seed(123)
-n_obs <- 50
-cr_data <- data.frame( # Replaced data.table()
+n_obs <- 100
+cr_data <- data.frame(
   time = pmin(rexp(n_obs, rate = 0.1), rexp(n_obs, rate = 0.15)),
   status = sample(0:2, n_obs, replace = TRUE, prob = c(0.2, 0.4, 0.4)), # 0=censored, 1=event1, 2=event2
   x1 = rnorm(n_obs),
-  x2 = factor(sample(c("A", "B"), n_obs, replace = TRUE)), # BART might handle factors
+  x2 = factor(sample(c("A", "B"), n_obs, replace = TRUE)),
   x3 = rnorm(n_obs, mean = 5),
   stringsAsFactors = FALSE
 )
 
-# Define formula and parameters
-cr_formula <- Surv(time, status) ~ x1 + x2 + x3
-train_indices <- 1:40
-test_indices <- 41:50
+train_indices <- 1:80
+test_indices <- 81:100
 train_data <- cr_data[train_indices, ]
 test_data <- cr_data[test_indices, ]
-
-# Time points for prediction
+expvars <- c("x1", "x2", "x3")
 time_points <- c(quantile(train_data$time[train_data$status != 0], 0.25),
                  median(train_data$time[train_data$status != 0]),
                  quantile(train_data$time[train_data$status != 0], 0.75))
 
-
 # --- Tests for CRModel_BART ---
 
-test_that("CRModel_BART runs and returns a model object", {
-  skip_if_not_installed("dbarts") # Or relevant BART package
-  # Need to know the expected output structure. Does it fit one model per cause?
-  # Assuming it fits one model per cause, similar to Cox/RuleFit wrappers.
-  # Let's assume it requires a failcode argument.
+test_that("CRModel_BART fits basic model with correct interface", {
+  skip_if_not_installed("BART")
 
-  model_bart_list <- CRModel_BART(formula = cr_formula, data = train_data, failcode = 1, ntree = 10) # Assume failcode needed
+  model_bart <- CRModel_BART(data = train_data, expvars = expvars,
+                            timevar = "time", eventvar = "status",
+                            ntree = 50, ndpost = 100, nskip = 50)
 
-  # Check output type - what class does the BART package return?
-  # dbarts might return a list or a custom object. Assuming a list for now.
-  expect_type(model_bart_list, "list")
-  expect_length(model_bart_list, 1) # Assuming one model per failcode run
-  # Check for expected elements within the BART model object (e.g., 'fit', 'call')
-  expect_true(!is.null(model_bart_list[[1]]$fit)) # Example check for dbarts object structure
+  # Check output structure
+  expect_type(model_bart, "list")
+  expect_named(model_bart, c("bart_model", "times", "varprof", "model_type",
+                            "expvars", "timevar", "eventvar", "failcode",
+                            "time_range", "x_train", "times_train", "delta_train"))
 
+  # Check model type and class
+  expect_equal(model_bart$model_type, "cr_bart")
+  expect_s3_class(model_bart$bart_model, "criskbart")
+  expect_s3_class(model_bart, "ml4t2e_cr_bart")
+
+  # Check basic properties
+  expect_equal(model_bart$expvars, expvars)
+  expect_equal(model_bart$timevar, "time")
+  expect_equal(model_bart$eventvar, "status")
+  expect_equal(model_bart$failcode, 1)
+  expect_true(is.numeric(model_bart$time_range))
+  expect_length(model_bart$time_range, 2)
 })
 
-test_that("CRModel_BART requires formula, data, and failcode", {
-  skip_if_not_installed("dbarts")
-  expect_error(CRModel_BART(formula = cr_formula, data = train_data), "argument \"failcode\" is missing")
-  expect_error(CRModel_BART(formula = cr_formula, failcode = 1), "argument \"data\" is missing")
-  expect_error(CRModel_BART(data = train_data, failcode = 1), "argument \"formula\" is missing")
+test_that("CRModel_BART handles different failcode values", {
+  skip_if_not_installed("BART")
+
+  # Test with failcode = 2
+  model_bart_2 <- CRModel_BART(data = train_data, expvars = expvars,
+                              timevar = "time", eventvar = "status",
+                              failcode = 2, ntree = 50, ndpost = 100, nskip = 50)
+
+  expect_equal(model_bart_2$failcode, 2)
+  expect_s3_class(model_bart_2$bart_model, "criskbart")
 })
 
-test_that("CRModel_BART handles different failcode", {
-  skip_if_not_installed("dbarts")
-  model_bart_c1 <- CRModel_BART(formula = cr_formula, data = train_data, failcode = 1)
-  model_bart_c2 <- CRModel_BART(formula = cr_formula, data = train_data, failcode = 2)
-  expect_type(model_bart_c1, "list")
-  expect_type(model_bart_c2, "list")
-  # Check if underlying model fits differ (they should)
-  # This comparison depends heavily on the BART object structure
-  expect_false(identical(model_bart_c1[[1]]$fit$train.data, model_bart_c2[[1]]$fit$train.data)) # Example check
+test_that("CRModel_BART handles additional parameters", {
+  skip_if_not_installed("BART")
+
+  # Test with different parameters
+  model_bart_params <- CRModel_BART(data = train_data, expvars = expvars,
+                                   timevar = "time", eventvar = "status",
+                                   K = 5, ntree = 30, ndpost = 50, nskip = 25)
+
+  expect_s3_class(model_bart_params$bart_model, "criskbart")
 })
 
+test_that("CRModel_BART validates inputs", {
+  skip_if_not_installed("BART")
+
+  # Test missing data
+  expect_error(CRModel_BART(expvars = expvars, timevar = "time", eventvar = "status"),
+               "argument \"data\" is missing, with no default")
+
+  # Test invalid expvars
+  expect_error(CRModel_BART(data = train_data, expvars = character(0),
+                           timevar = "time", eventvar = "status"),
+               "'expvars' must be a non-empty character vector")
+
+  # Test missing timevar
+  expect_error(CRModel_BART(data = train_data, expvars = expvars,
+                           timevar = "nonexistent", eventvar = "status"),
+               "'timevar' not found in data")
+
+  # Test missing eventvar
+  expect_error(CRModel_BART(data = train_data, expvars = expvars,
+                           timevar = "time", eventvar = "nonexistent"),
+               "'eventvar' not found in data")
+
+  # Test missing expvars in data
+  expect_error(CRModel_BART(data = train_data, expvars = c("x1", "nonexistent"),
+                           timevar = "time", eventvar = "status"),
+               "expvars not found in data")
+})
 
 # --- Tests for Predict_CRModel_BART ---
 
 test_that("Predict_CRModel_BART returns predictions in correct format", {
-  skip_if_not_installed("dbarts")
+  skip_if_not_installed("BART")
 
-  # Fit the model first (for cause 1)
-  model_bart_list <- CRModel_BART(formula = cr_formula, data = train_data, failcode = 1, ntree = 10)
+  model_bart <- CRModel_BART(data = train_data, expvars = expvars,
+                            timevar = "time", eventvar = "status",
+                            ntree = 50, ndpost = 100, nskip = 50)
 
-  # Get predictions
-  # How does prediction work? Does the BART predict method handle competing risks CIF?
-  # Assuming the wrapper function handles CIF calculation.
-  predictions <- Predict_CRModel_BART(model = model_bart_list, data = test_data, times = time_points)
+  predictions <- Predict_CRModel_BART(modelout = model_bart, newdata = test_data)
 
   # Check output structure
   expect_type(predictions, "list")
-  expect_length(predictions, 1) # Predicts for the failcode model was built for
-  expect_true(is.matrix(predictions[[1]])) # Expecting matrix for CIF of event 1
+  expect_named(predictions, c("CIFs", "Times"))
 
-  # Check dimensions
-  # Rows = number of test observations, Cols = number of time points
-  expect_equal(nrow(predictions[[1]]), nrow(test_data))
-  expect_equal(ncol(predictions[[1]]), length(time_points))
+  # Check dimensions: CIFs should be [times, observations]
+  expect_true(is.matrix(predictions$CIFs))
+  expect_equal(nrow(predictions$CIFs), length(predictions$Times))
+  expect_equal(ncol(predictions$CIFs), nrow(test_data))
 
   # Check values are probabilities (between 0 and 1)
-  expect_true(all(predictions[[1]] >= 0 & predictions[[1]] <= 1, na.rm = TRUE))
+  expect_true(all(predictions$CIFs >= 0 & predictions$CIFs <= 1, na.rm = TRUE))
+
+  # Check that time 0 has CIF = 0
+  expect_true(all(predictions$CIFs[1, ] == 0))
 })
 
-test_that("Predict_CRModel_BART handles single time point", {
-  skip_if_not_installed("dbarts")
+test_that("Predict_CRModel_BART handles custom time points", {
+  skip_if_not_installed("BART")
 
-  model_bart_list <- CRModel_BART(formula = cr_formula, data = train_data, failcode = 1, ntree = 10)
-  single_time <- median(train_data$time[train_data$status != 0])
-  predictions <- Predict_CRModel_BART(model = model_bart_list, data = test_data, times = single_time)
+  model_bart <- CRModel_BART(data = train_data, expvars = expvars,
+                            timevar = "time", eventvar = "status",
+                            ntree = 50, ndpost = 100, nskip = 50)
 
-  expect_type(predictions, "list")
-  expect_true(is.matrix(predictions[[1]]))
-  expect_equal(ncol(predictions[[1]]), 1) # Should have 1 column
-  expect_equal(nrow(predictions[[1]]), nrow(test_data))
+  predictions <- Predict_CRModel_BART(modelout = model_bart, newdata = test_data,
+                                     newtimes = time_points)
+
+  # Check dimensions match requested time points
+  expect_equal(length(predictions$Times), length(time_points))
+  expect_equal(nrow(predictions$CIFs), length(time_points))
+  expect_equal(ncol(predictions$CIFs), nrow(test_data))
+
+  # Check that times match requested times
+  expect_equal(as.numeric(predictions$Times), as.numeric(sort(time_points)))
 })
 
-test_that("Predict_CRModel_BART requires model, data, and times", {
-  skip_if_not_installed("dbarts")
-  model_bart_list <- CRModel_BART(formula = cr_formula, data = train_data, failcode = 1, ntree = 10)
-  expect_error(Predict_CRModel_BART(data = test_data, times = time_points), "argument \"model\" is missing")
-  expect_error(Predict_CRModel_BART(model = model_bart_list, times = time_points), "argument \"data\" is missing")
-  expect_error(Predict_CRModel_BART(model = model_bart_list, data = test_data), "argument \"times\" is missing")
+test_that("Predict_CRModel_BART validates inputs", {
+  skip_if_not_installed("BART")
+
+  model_bart <- CRModel_BART(data = train_data, expvars = expvars,
+                            timevar = "time", eventvar = "status",
+                            ntree = 50, ndpost = 100, nskip = 50)
+
+  # Test invalid modelout
+  expect_error(Predict_CRModel_BART(modelout = list(), newdata = test_data),
+               "'modelout' must be output from CRModel_BART")
+
+  # Test missing newdata
+  expect_error(Predict_CRModel_BART(modelout = model_bart),
+               "argument \"newdata\" is missing, with no default")
+
+  # Test missing variables in newdata
+  test_data_missing <- test_data[, -which(names(test_data) == "x1")]
+  expect_error(Predict_CRModel_BART(modelout = model_bart, newdata = test_data_missing),
+               "variables missing in newdata")
+
+  # Test invalid newtimes
+  expect_error(Predict_CRModel_BART(modelout = model_bart, newdata = test_data,
+                                   newtimes = c(-1, 1)),
+               "'newtimes' must be a numeric vector of non-negative values")
 })

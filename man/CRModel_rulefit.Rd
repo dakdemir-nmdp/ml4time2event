@@ -9,10 +9,14 @@ CRModel_rulefit(
   expvars,
   timevar,
   eventvar,
+  failcode = 1,
   ntree = 300,
   nsample = 300,
   keepvars = NULL,
-  cuttimes = NULL
+  cuttimes = NULL,
+  alpha = 0.5,
+  maxit = 2000,
+  ...
 )
 }
 \arguments{
@@ -22,25 +26,38 @@ CRModel_rulefit(
 
 \item{timevar}{character name of time variable in data}
 
-\item{eventvar}{character name of event variable in data}
+\item{eventvar}{character name of event variable in data (coded 0,1,2 where 0=censored, 1=event of interest, 2=competing event)}
 
-\item{ntree}{number of trees to fit to extract rules}
+\item{failcode}{integer, the code for the event of interest (default: 1)}
 
-\item{nsample}{number of samples for each tree}
+\item{ntree}{number of trees to fit to extract rules (default: 300)}
+
+\item{nsample}{number of samples for each tree (default: 300)}
 
 \item{keepvars}{these variables will be used in each bagging iteration}
 
 \item{cuttimes}{these cut times are used for calculating pseudo observation}
+
+\item{alpha}{numeric, the elastic net mixing parameter for glmnet (default: 0.5)}
+
+\item{maxit}{integer, maximum number of iterations for glmnet (default: 2000)}
+
+\item{...}{additional parameters passed to glmnet::cv.glmnet}
 }
 \value{
-a list object with the following: datasamp: a sample of data,
-ruleslist: list of the fitted rules,
-ctreelist: list of tree models,
-CRrulefitModel: fitted Fine-Gray model object (used internally by rulefit),
-expvars: explanatory variables used in the model
-usecols: columns used in the internal Fine-Gray model
-varprof: profile of explanatory variables.
+a list with the following components:
+  \item{rulefit_model}{the fitted RuleFit model object}
+  \item{times}{vector of unique event times in the training data}
+  \item{varprof}{variable profile list containing factor levels and numeric ranges}
+  \item{model_type}{character string "cr_rulefit"}
+  \item{expvars}{character vector of explanatory variables used}
+  \item{timevar}{character name of time variable}
+  \item{eventvar}{character name of event variable}
+  \item{failcode}{the event code for the outcome of interest}
+  \item{time_range}{vector with min and max observed event times}
+  \item{ctreelist}{list of fitted tree models}
+  \item{ruleslist}{list of extracted rules from trees}
 }
 \description{
-Fit a rulefit model for competing risks outcomes
+Fit a rulefit model for competing risks outcomes using RuleFit algorithm
 }

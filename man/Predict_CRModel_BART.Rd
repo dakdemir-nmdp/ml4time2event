@@ -4,18 +4,24 @@
 \alias{Predict_CRModel_BART}
 \title{Predict_CRModel_BART}
 \usage{
-Predict_CRModel_BART(modelout, newdata)
+Predict_CRModel_BART(modelout, newdata, newtimes = NULL)
 }
 \arguments{
-\item{modelout}{the output from 'CRModel_BART'}
+\item{modelout}{the output from 'CRModel_BART' (a list containing model and metadata)}
 
-\item{newdata}{the data for which the predictions are to be calculated}
+\item{newdata}{data frame with new observations for prediction}
+
+\item{newtimes}{optional numeric vector of time points for prediction.
+If NULL (default), uses the model's native time points.
+Can be any positive values - interpolation handles all time points.}
 }
 \value{
-a list with the following items.
-CIFs:predicted CIF matrix (for event coded as 1),
-Times: The times at which the CIFs are predicted.
+a list containing:
+  \item{CIFs}{predicted cumulative incidence function matrix
+    (rows=times, cols=observations)}
+  \item{Times}{the times at which CIFs are calculated
+    (always includes time 0)}
 }
 \description{
-Get predictions from a BART model for a test dataset
+Get predictions from a CR BART model for a test dataset.
 }

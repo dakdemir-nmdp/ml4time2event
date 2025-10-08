@@ -1,20 +1,13 @@
 library(testthat)
-library(here)
-# library(data.table) # Removed
 library(randomForestSRC) # Required for the functions being tested
 library(survival) # For Surv object
-
-# Assuming the functions are available in the environment
-source("/Users/dakdemir/Library/CloudStorage/OneDrive-NMDP/Year2025/Github/ml4time2event/R/data_summary.R")
-source("/Users/dakdemir/Library/CloudStorage/OneDrive-NMDP/Year2025/Github/ml4time2event/R/cr_random_forest.R")
-source("/Users/dakdemir/Library/CloudStorage/OneDrive-NMDP/Year2025/Github/ml4time2event/R/data_summary.R")
 
 context("Testing cr_random_forest functions")
 
 # --- Test Data Setup ---
 # Create a simple competing risks dataset
 set.seed(123)
-n_obs <- 50
+n_obs <- 100
 cr_data <- data.frame(
   time = pmin(rexp(n_obs, rate = 0.1), rexp(n_obs, rate = 0.15)),
   status = sample(0:2, n_obs, replace = TRUE, prob = c(0.2, 0.4, 0.4)), # 0=censored, 1=event1, 2=event2
@@ -23,100 +16,160 @@ cr_data <- data.frame(
   x3 = rnorm(n_obs, mean = 5),
   stringsAsFactors = FALSE
 )
-# Ensure status 0 has max time for simplicity in this small dataset? Not strictly necessary.
-# cr_data[status == 0, time := max(time) + 1]
 
-# Define formula and parameters
-cr_formula <- Surv(time, status) ~ x1 + x2 + x3
-train_indices <- 1:40
-test_indices <- 41:50
+train_indices <- 1:80
+test_indices <- 81:100
 train_data <- cr_data[train_indices, ]
 test_data <- cr_data[test_indices, ]
+expvars <- c("x1", "x2", "x3")
 time_points <- c(quantile(train_data$time[train_data$status != 0], 0.25),
                  median(train_data$time[train_data$status != 0]),
                  quantile(train_data$time[train_data$status != 0], 0.75))
 
-
 # --- Tests for CRModel_RF ---
 
-test_that("CRModel_RF runs and returns a model object", {
+test_that("CRModel_RF fits basic model with correct interface", {
   skip_if_not_installed("randomForestSRC")
 
-  model_rf <- CRModel_RF(formula = cr_formula, data = train_data)
+  model_rf <- CRModel_RF(data = train_data, expvars = expvars,
+                        timevar = "time", eventvar = "status", ntree = 50)
 
-  # Check output type
-  expect_s3_class(model_rf, "rfsrc")
-  expect_true(!is.null(model_rf$cif)) # Check if CIF results are present
+  # Check output structure
+  expect_type(model_rf, "list")
+  expect_named(model_rf, c("rf_model", "times", "varprof", "model_type",
+                          "expvars", "timevar", "eventvar", "failcode", "time_range"))
 
-  # Check basic model properties
-  expect_equal(model_rf$call[[1]], quote(rfsrc))
-  expect_equal(model_rf$n, nrow(train_data))
+  # Check model type and class
+  expect_equal(model_rf$model_type, "cr_rf")
+  expect_s3_class(model_rf$rf_model, "rfsrc")
+  expect_s3_class(model_rf, "ml4t2e_cr_rf")
+
+  # Check basic properties
+  expect_equal(model_rf$expvars, expvars)
+  expect_equal(model_rf$timevar, "time")
+  expect_equal(model_rf$eventvar, "status")
+  expect_equal(model_rf$failcode, 1)
+  expect_true(is.numeric(model_rf$time_range))
+  expect_length(model_rf$time_range, 2)
+})
+
+test_that("CRModel_RF handles different failcode values", {
+  skip_if_not_installed("randomForestSRC")
+
+  # Test with failcode = 2
+  model_rf_2 <- CRModel_RF(data = train_data, expvars = expvars,
+                          timevar = "time", eventvar = "status",
+                          failcode = 2, ntree = 50)
+
+  expect_equal(model_rf_2$failcode, 2)
+  expect_s3_class(model_rf_2$rf_model, "rfsrc")
 })
 
 test_that("CRModel_RF handles additional parameters", {
   skip_if_not_installed("randomForestSRC")
 
-  # Test with different ntree and nodesize
-  model_rf_params <- CRModel_RF(formula = cr_formula, data = train_data, ntree = 10, nodesize = 10)
+  # Test with different parameters
+  model_rf_params <- CRModel_RF(data = train_data, expvars = expvars,
+                               timevar = "time", eventvar = "status",
+                               ntree = 30, samplesize = 40, nsplit = 3)
 
-  expect_s3_class(model_rf_params, "rfsrc")
-  expect_equal(model_rf_params$ntree, 10)
-  # Note: nodesize might not be directly stored with that name, check rfsrc object structure if needed
-  # expect_equal(model_rf_params$nodesize, 10) # This might fail depending on rfsrc object
+  expect_s3_class(model_rf_params$rf_model, "rfsrc")
+  expect_equal(model_rf_params$rf_model$ntree, 30)
 })
 
-test_that("CRModel_RF requires formula and data", {
+test_that("CRModel_RF validates inputs", {
   skip_if_not_installed("randomForestSRC")
-  expect_error(CRModel_RF(formula = cr_formula), "argument \"data\" is missing")
-  expect_error(CRModel_RF(data = train_data), "argument \"formula\" is missing")
-})
 
+  # Test missing data
+  expect_error(CRModel_RF(expvars = expvars, timevar = "time", eventvar = "status"),
+               "argument \"data\" is missing, with no default")
+
+  # Test invalid expvars
+  expect_error(CRModel_RF(data = train_data, expvars = character(0),
+                         timevar = "time", eventvar = "status"),
+               "'expvars' must be a non-empty character vector")
+
+  # Test missing timevar
+  expect_error(CRModel_RF(data = train_data, expvars = expvars,
+                         timevar = "nonexistent", eventvar = "status"),
+               "'timevar' not found in data")
+
+  # Test missing eventvar
+  expect_error(CRModel_RF(data = train_data, expvars = expvars,
+                         timevar = "time", eventvar = "nonexistent"),
+               "'eventvar' not found in data")
+
+  # Test missing expvars in data
+  expect_error(CRModel_RF(data = train_data, expvars = c("x1", "nonexistent"),
+                         timevar = "time", eventvar = "status"),
+               "expvars not found in data")
+})
 
 # --- Tests for Predict_CRModel_RF ---
 
 test_that("Predict_CRModel_RF returns predictions in correct format", {
   skip_if_not_installed("randomForestSRC")
 
-  model_rf <- CRModel_RF(formula = cr_formula, data = train_data, ntree = 10) # Faster model
-  predictions <- Predict_CRModel_RF(model = model_rf, data = test_data, times = time_points)
+  model_rf <- CRModel_RF(data = train_data, expvars = expvars,
+                        timevar = "time", eventvar = "status", ntree = 50)
+
+  predictions <- Predict_CRModel_RF(modelout = model_rf, newdata = test_data)
 
   # Check output structure
   expect_type(predictions, "list")
-  expect_true(is.matrix(predictions[[1]])) # Expecting matrix for CIF of event 1
-  expect_true(is.matrix(predictions[[2]])) # Expecting matrix for CIF of event 2
+  expect_named(predictions, c("CIFs", "Times"))
 
-  # Check dimensions
-  # Rows = number of test observations, Cols = number of time points
-  expect_equal(nrow(predictions[[1]]), nrow(test_data))
-  expect_equal(ncol(predictions[[1]]), length(time_points))
-  expect_equal(nrow(predictions[[2]]), nrow(test_data))
-  expect_equal(ncol(predictions[[2]]), length(time_points))
+  # Check dimensions: CIFs should be [times, observations]
+  expect_true(is.matrix(predictions$CIFs))
+  expect_equal(nrow(predictions$CIFs), length(predictions$Times))
+  expect_equal(ncol(predictions$CIFs), nrow(test_data))
 
   # Check values are probabilities (between 0 and 1)
-  expect_true(all(predictions[[1]] >= 0 & predictions[[1]] <= 1, na.rm = TRUE))
-  expect_true(all(predictions[[2]] >= 0 & predictions[[2]] <= 1, na.rm = TRUE))
+  expect_true(all(predictions$CIFs >= 0 & predictions$CIFs <= 1, na.rm = TRUE))
 
-  # Check sum of CIFs <= 1 for each time point and observation
-  expect_true(all(predictions[[1]] + predictions[[2]] <= 1.0001, na.rm = TRUE)) # Allow small tolerance
+  # Check that time 0 has CIF = 0
+  expect_true(all(predictions$CIFs[1, ] == 0))
 })
 
-test_that("Predict_CRModel_RF handles single time point", {
+test_that("Predict_CRModel_RF handles custom time points", {
   skip_if_not_installed("randomForestSRC")
 
-  model_rf <- CRModel_RF(formula = cr_formula, data = train_data, ntree = 10)
-  single_time <- median(train_data$time[train_data$status != 0])
-  predictions <- Predict_CRModel_RF(model = model_rf, data = test_data, times = single_time)
+  model_rf <- CRModel_RF(data = train_data, expvars = expvars,
+                        timevar = "time", eventvar = "status", ntree = 50)
 
-  expect_type(predictions, "list")
-  expect_true(is.matrix(predictions[[1]]))
-  expect_equal(ncol(predictions[[1]]), 1) # Should have 1 column
-  expect_equal(nrow(predictions[[1]]), nrow(test_data))
+  predictions <- Predict_CRModel_RF(modelout = model_rf, newdata = test_data,
+                                   newtimes = time_points)
+
+  # Check dimensions match requested time points
+  expect_equal(length(predictions$Times), length(time_points))
+  expect_equal(nrow(predictions$CIFs), length(time_points))
+  expect_equal(ncol(predictions$CIFs), nrow(test_data))
+
+  # Check that times match requested times
+  expect_equal(as.numeric(predictions$Times), as.numeric(sort(time_points)))
 })
 
-test_that("Predict_CRModel_RF requires model, data, and times", {
+test_that("Predict_CRModel_RF validates inputs", {
   skip_if_not_installed("randomForestSRC")
-  model_rf <- CRModel_RF(formula = cr_formula, data = train_data, ntree = 10)
-  expect_error(Predict_CRModel_RF(data = test_data, times = time_points), "argument \"model\" is missing")
-  expect_error(Predict_CRModel_RF(model = model_rf, times = time_points), "argument \"data\" is missing")
-  expect_error(Predict_CRModel_RF(model = model_rf, data = test_data), "argument \"times\" is missing")
+
+  model_rf <- CRModel_RF(data = train_data, expvars = expvars,
+                        timevar = "time", eventvar = "status", ntree = 50)
+
+  # Test invalid modelout
+  expect_error(Predict_CRModel_RF(modelout = list(), newdata = test_data),
+               "'modelout' must be output from CRModel_RF")
+
+  # Test missing newdata
+  expect_error(Predict_CRModel_RF(modelout = model_rf),
+               "argument \"newdata\" is missing, with no default")
+
+  # Test missing variables in newdata
+  test_data_missing <- test_data[, -which(names(test_data) == "x1")]
+  expect_error(Predict_CRModel_RF(modelout = model_rf, newdata = test_data_missing),
+               "variables missing in newdata")
+
+  # Test invalid newtimes
+  expect_error(Predict_CRModel_RF(modelout = model_rf, newdata = test_data,
+                                 newtimes = c(-1, 1)),
+               "'newtimes' must be a numeric vector of non-negative values")
 })

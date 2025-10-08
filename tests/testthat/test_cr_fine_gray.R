@@ -53,86 +53,112 @@ time_points <- c(quantile(train_data_orig$ftime[train_data_orig$fstatus != 0], 0
 
 # --- Tests for CRModel_FineGray ---
 
-test_that("CRModel_FineGray runs and returns a crr model object", {
-  skip_if_not_installed("cmprsk")
+test_that("CRModel_FineGray runs and returns expected model structure", {
+  skip_if_not_installed("fastcmprsk")
 
-  # Assuming the function fits a model for cause 1 by default or specified
-  # Need to know how the function selects the cause of interest
-  # Let's assume it fits for cause 1 if not specified
-  model_fg <- CRModel_FineGray(formula = cr_formula_orig, data = train_data_orig, failcode = 1, iter.max = 10) # Specify failcode
+  # Fit model using the correct interface
+  model_fg <- CRModel_FineGray(data = train_data_orig,
+                              expvars = c("x1", "x2A", "x2B", "x3"),
+                              timevar = "ftime",
+                              eventvar = "fstatus",
+                              failcode = 1)
 
-  # Check output type
-  expect_s3_class(model_fg, "crr")
-
-  # Check basic model properties (if available in crr object)
-  # expect_equal(model_fg$n, nrow(train_data_orig)) # crr object structure might differ
+  # Check output structure
+  expect_type(model_fg, "list")
+  expect_s3_class(model_fg, "ml4t2e_cr_finegray")
+  expect_equal(model_fg$model_type, "fine_gray")
+  expect_equal(model_fg$failcode, 1)
+  expect_true("fg_model" %in% names(model_fg))
+  expect_true("time_range" %in% names(model_fg))
+  expect_true("varprof" %in% names(model_fg))
 })
 
-test_that("CRModel_FineGray requires formula, data, and failcode", {
-  skip_if_not_installed("cmprsk")
-  expect_error(CRModel_FineGray(formula = cr_formula_orig, data = train_data_orig), "argument \"failcode\" is missing")
-  expect_error(CRModel_FineGray(formula = cr_formula_orig, failcode = 1), "argument \"data\" is missing")
-  expect_error(CRModel_FineGray(data = train_data_orig, failcode = 1), "argument \"formula\" is missing")
+test_that("CRModel_FineGray requires data, expvars, timevar, eventvar", {
+  skip_if_not_installed("fastcmprsk")
+  expect_error(CRModel_FineGray(expvars = c("x1", "x2A", "x2B", "x3"), timevar = "ftime", eventvar = "fstatus"), "argument \"data\" is missing")
+  expect_error(CRModel_FineGray(data = train_data_orig, timevar = "ftime", eventvar = "fstatus"), "argument \"expvars\" is missing")
+  expect_error(CRModel_FineGray(data = train_data_orig, expvars = c("x1", "x2A", "x2B", "x3"), eventvar = "fstatus"), "argument \"timevar\" is missing")
+  expect_error(CRModel_FineGray(data = train_data_orig, expvars = c("x1", "x2A", "x2B", "x3"), timevar = "ftime"), "argument \"eventvar\" is missing")
 })
 
 test_that("CRModel_FineGray handles different failcode", {
-  skip_if_not_installed("cmprsk")
+  skip_if_not_installed("fastcmprsk")
   # Fit for cause 2
-  model_fg_c2 <- CRModel_FineGray(formula = cr_formula_orig, data = train_data_orig, failcode = 2)
-  expect_s3_class(model_fg_c2, "crr")
-  # Check if coefficients differ from cause 1 model (they should)
-  model_fg_c1 <- CRModel_FineGray(formula = cr_formula_orig, data = train_data_orig, failcode = 1)
-  expect_false(identical(coef(model_fg_c1), coef(model_fg_c2)))
+  model_fg_c2 <- CRModel_FineGray(data = train_data_orig,
+                                 expvars = c("x1", "x2A", "x2B", "x3"),
+                                 timevar = "ftime",
+                                 eventvar = "fstatus",
+                                 failcode = 2)
+  expect_s3_class(model_fg_c2, "ml4t2e_cr_finegray")
+  # Check if models differ for different failcodes
+  model_fg_c1 <- CRModel_FineGray(data = train_data_orig,
+                                 expvars = c("x1", "x2A", "x2B", "x3"),
+                                 timevar = "ftime",
+                                 eventvar = "fstatus",
+                                 failcode = 1)
+  expect_equal(model_fg_c1$failcode, 1)
+  expect_equal(model_fg_c2$failcode, 2)
 })
 
 
-# --- Tests for Predict_CRModel_FG ---
+# --- Tests for Predict_CRModel_FineGray ---
 
-test_that("Predict_CRModel_FG returns predictions in correct format", {
-  skip_if_not_installed("cmprsk")
+test_that("Predict_CRModel_FineGray returns predictions in correct format", {
+  skip_if_not_installed("fastcmprsk")
 
   # Fit the model first (for cause 1)
-  model_fg <- CRModel_FineGray(formula = cr_formula_orig, data = train_data_orig, failcode = 1)
+  model_fg <- CRModel_FineGray(data = train_data_orig,
+                              expvars = c("x1", "x2A", "x2B", "x3"),
+                              timevar = "ftime",
+                              eventvar = "fstatus",
+                              failcode = 1)
 
   # Get predictions
-  # Predict_CRModel_FG likely calls predict.crr internally
-  # Need to ensure test_data covariates are formatted correctly (numeric matrix)
-  # Assuming Predict_CRModel_FG handles this conversion based on the formula
-  predictions <- Predict_CRModel_FG(model = model_fg, data = test_data_orig, times = time_points)
+  predictions <- Predict_CRModel_FineGray(modelout = model_fg, newdata = test_data_orig)
 
-  # Check output structure (predict.crr output is slightly different)
-  # It returns a matrix where rows are time points, columns are subjects
-  # The wrapper function should reformat this to subjects x time points
-  expect_type(predictions, "list") # Should still return a list per cause
-  expect_length(predictions, 1) # Only predicts for the failcode the model was built for
-  expect_true(is.matrix(predictions[[1]])) # Expecting matrix for CIF of event 1
+  # Check output structure
+  expect_type(predictions, "list")
+  expect_true("CIFs" %in% names(predictions))
+  expect_true("Times" %in% names(predictions))
+  expect_true(is.matrix(predictions$CIFs))
+  expect_true(is.vector(predictions$Times))
 
-  # Check dimensions
-  # Rows = number of test observations, Cols = number of time points
-  expect_equal(nrow(predictions[[1]]), nrow(test_data_orig))
-  expect_equal(ncol(predictions[[1]]), length(time_points))
+  # CIFs should be [times, observations]
+  expect_equal(ncol(predictions$CIFs), nrow(test_data_orig))
+  expect_equal(length(predictions$Times), nrow(predictions$CIFs))
 
-  # Check values are probabilities (between 0 and 1)
-  expect_true(all(predictions[[1]] >= 0 & predictions[[1]] <= 1, na.rm = TRUE))
+  # CIFs should start at 0 and be non-decreasing
+  expect_true(all(predictions$CIFs[1, ] == 0))
+  expect_true(all(diff(predictions$CIFs[, 1]) >= 0))  # Check monotonicity for first observation
 })
 
-test_that("Predict_CRModel_FG handles single time point", {
-  skip_if_not_installed("cmprsk")
+test_that("Predict_CRModel_FineGray handles custom time points", {
+  skip_if_not_installed("fastcmprsk")
 
-  model_fg <- CRModel_FineGray(formula = cr_formula_orig, data = train_data_orig, failcode = 1)
-  single_time <- median(train_data_orig$ftime[train_data_orig$fstatus != 0])
-  predictions <- Predict_CRModel_FG(model = model_fg, data = test_data_orig, times = single_time)
+  model_fg <- CRModel_FineGray(data = train_data_orig,
+                              expvars = c("x1", "x2A", "x2B", "x3"),
+                              timevar = "ftime",
+                              eventvar = "fstatus",
+                              failcode = 1)
+  custom_times <- c(1, 5, 10)
+  predictions <- Predict_CRModel_FineGray(modelout = model_fg, newdata = test_data_orig, newtimes = custom_times)
 
   expect_type(predictions, "list")
-  expect_true(is.matrix(predictions[[1]]))
-  expect_equal(ncol(predictions[[1]]), 1) # Should have 1 column
-  expect_equal(nrow(predictions[[1]]), nrow(test_data_orig))
+  expect_true(is.matrix(predictions$CIFs))
+  expect_equal(length(predictions$Times), length(custom_times))
+  expect_equal(nrow(predictions$CIFs), length(custom_times))
+  expect_equal(ncol(predictions$CIFs), nrow(test_data_orig))
 })
 
-test_that("Predict_CRModel_FG requires model, data, and times", {
-  skip_if_not_installed("cmprsk")
-  model_fg <- CRModel_FineGray(formula = cr_formula_orig, data = train_data_orig, failcode = 1, iter.max = 10)
-  expect_error(Predict_CRModel_FG(data = test_data_orig, times = time_points), "argument \"model\" is missing")
-  expect_error(Predict_CRModel_FG(model = model_fg, times = time_points), "argument \"data\" is missing")
-  expect_error(Predict_CRModel_FG(model = model_fg, data = test_data_orig), "argument \"times\" is missing")
+test_that("Predict_CRModel_FineGray requires model and data", {
+  skip_if_not_installed("fastcmprsk")
+
+  model_fg <- CRModel_FineGray(data = train_data_orig,
+                              expvars = c("x1", "x2A", "x2B", "x3"),
+                              timevar = "ftime",
+                              eventvar = "fstatus",
+                              failcode = 1)
+
+  expect_error(Predict_CRModel_FineGray(modelout = model_fg), "argument \"newdata\" is missing")
+  expect_error(Predict_CRModel_FineGray(newdata = test_data_orig), "argument \"modelout\" is missing")
 })

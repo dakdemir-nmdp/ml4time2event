@@ -6,11 +6,11 @@
 #' @param eventvar character name of event variable in data (coded as 0,1,2),
 #' 1 is the event of interest
 #' @param models  a vector of models to be fitted to be chosen among
-#' "FG", "rulefit", "bart", "cox". Two random forest models are
+#' "FG", "rulefit", "bart", "cox", "xgboost", "gam", "survreg". Two random forest models are
 #' automatically fitted and dont need to be listed here
 #' @param ntreeRF number of trees for Random Forest models
 #' @param varsel  logical indicating whether variable selection to be
-#' applied before fitting models "FG", "rulefit", "bart", "cox"
+#' applied before fitting models "FG", "rulefit", "bart", "cox", "xgboost", "gam", "survreg"
 #' @return a list of two items. First is a list containing ExpVars: all of the explanatory vars,
 #'  ExpVars2: a subset of the explanatory variables selected by random forest,
 #'  timevar: time variable,
@@ -27,7 +27,17 @@ RunCRModels<-function(datatrain, ExpVars, timevar, eventvar, models=c("FG", "rul
   }
   # Assuming CRModel_RF is loaded/available
   RF_Model<-CRModel_RF(data=datatrainFact,expvars=ExpVars, timevar=timevar, eventvar=eventvar, samplesize=min(c(500,ceiling(.3*nrow(datatrainFact)))), ntree=ntreeRF)
-  ExpVars2<-names(sort(RF_Model$hd.obj$importance[,1], decreasing=TRUE))[1:min(length(ExpVars),20)]
+  # Get variable importance - use the first event's importance
+  imp_scores <- RF_Model$rf_model$importance[,1]
+  # Ensure we have at least some variables selected
+  if (all(is.na(imp_scores)) || all(imp_scores <= 0, na.rm = TRUE)) {
+    # If all importances are NA or <= 0, use all variables
+    ExpVars2 <- ExpVars
+  } else {
+    # Sort by importance and take top variables (at least 1, at most half)
+    n_vars <- min(length(ExpVars), max(1, length(ExpVars) %/% 2))
+    ExpVars2 <- names(sort(imp_scores, decreasing = TRUE, na.last = TRUE))[seq_len(n_vars)]
+  }
   RF_Model2<-CRModel_RF(data=datatrainFact,expvars=ExpVars2, timevar=timevar, eventvar=eventvar, samplesize=min(c(500,ceiling(.3*nrow(datatrainFact)))), ntree=ntreeRF)
 
  if (!varsel){
@@ -60,6 +70,27 @@ RunCRModels<-function(datatrain, ExpVars, timevar, eventvar, models=c("FG", "rul
       return()
     })
   }
+  if ("xgboost" %in% models){
+    # Assuming CRModel_xgboost is loaded/available
+    xgboost_Model<-tryCatch(CRModel_xgboost(data=datatrainFact,expvars=ExpVars, timevar=timevar, eventvar=eventvar, failcode=1, nrounds=100), error=function(e){
+       print("Failed fitting XGBoost")
+      return()
+    })
+  }
+  if ("gam" %in% models){
+    # Assuming CRModel_GAM is loaded/available
+    gam_Model<-tryCatch(CRModel_GAM(data=datatrainFact,expvars=ExpVars, timevar=timevar, eventvar=eventvar, failcode=1), error=function(e){
+       print("Failed fitting GAM")
+      return()
+    })
+  }
+  if ("survreg" %in% models){
+    # Assuming CRModel_SurvReg is loaded/available
+    survreg_Model<-tryCatch(CRModel_SurvReg(data=datatrainFact,expvars=ExpVars, timevar=timevar, eventvar=eventvar, failcode=1, dist="exponential"), error=function(e){
+       print("Failed fitting SurvReg")
+      return()
+    })
+  }
  } else {
    if ("FG" %in% models){
      FG_Model<-tryCatch(CRModel_FineGray(data=datatrainFact,expvars=ExpVars2, timevar=timevar, eventvar=eventvar), error=function(e){
@@ -86,6 +117,24 @@ RunCRModels<-function(datatrain, ExpVars, timevar, eventvar, models=c("FG", "rul
        return()
      })
    }
+   if ("xgboost" %in% models){
+     xgboost_Model<-tryCatch(CRModel_xgboost(data=datatrainFact,expvars=ExpVars2, timevar=timevar, eventvar=eventvar, failcode=1, nrounds=100), error=function(e){
+       print("Failed fitting XGBoost")
+       return()
+     })
+   }
+   if ("gam" %in% models){
+     gam_Model<-tryCatch(CRModel_GAM(data=datatrainFact,expvars=ExpVars2, timevar=timevar, eventvar=eventvar, failcode=1), error=function(e){
+       print("Failed fitting GAM")
+       return()
+     })
+   }
+   if ("survreg" %in% models){
+     survreg_Model<-tryCatch(CRModel_SurvReg(data=datatrainFact,expvars=ExpVars2, timevar=timevar, eventvar=eventvar, failcode=1, dist="exponential"), error=function(e){
+       print("Failed fitting SurvReg")
+       return()
+     })
+   }
  }
 
 
@@ -107,6 +156,15 @@ RunCRModels<-function(datatrain, ExpVars, timevar, eventvar, models=c("FG", "rul
   }
   if ("rulefit" %in% models){
     input2<-c(input2,list(rulefit_Model=rulefit_Model))
+  }
+  if ("xgboost" %in% models){
+    input2<-c(input2,list(xgboost_Model=xgboost_Model))
+  }
+  if ("gam" %in% models){
+    input2<-c(input2,list(gam_Model=gam_Model))
+  }
+  if ("survreg" %in% models){
+    input2<-c(input2,list(survreg_Model=survreg_Model))
   }
 
   return(c(list(input=input),input2))
@@ -143,8 +201,8 @@ PredictCRModels<-function(models, newdata, newtimes){
     Predict_RF2<-Predict_CRModel_RF(models$RF_Model2, newdata=newdata)
   }
   if (!is.null(models$FG_Model)){
-    # Assuming Predict_CRModel_FG is loaded/available
-    Predict_FG<-Predict_CRModel_FG(models$FG_Model, newdata=newdata)
+    # Assuming Predict_CRModel_FineGray is loaded/available
+    Predict_FG<-Predict_CRModel_FineGray(models$FG_Model, newdata=newdata)
   }
   if (!is.null(models$BART_Model)){
     # Assuming Predict_CRModel_BART is loaded/available
@@ -158,6 +216,18 @@ PredictCRModels<-function(models, newdata, newtimes){
   if (!is.null(models$rulefit_Model)){
     # Assuming Predict_CRModel_rulefit is loaded/available
     Predict_rulefit<-Predict_CRModel_rulefit(models$rulefit_Model, newdata=newdata)
+  }
+  if (!is.null(models$xgboost_Model)){
+    # Assuming Predict_CRModel_xgboost is loaded/available
+    Predict_xgboost<-Predict_CRModel_xgboost(models$xgboost_Model, newdata=newdata)
+  }
+  if (!is.null(models$gam_Model)){
+    # Assuming Predict_CRModel_GAM is loaded/available
+    Predict_gam<-Predict_CRModel_GAM(models$gam_Model, newdata=newdata)
+  }
+  if (!is.null(models$survreg_Model)){
+    # Assuming Predict_CRModel_SurvReg is loaded/available
+    Predict_survreg<-Predict_CRModel_SurvReg(models$survreg_Model, newdata=newdata)
   }
 
   # Assuming cifMatInterpolaltor is loaded/available
@@ -179,6 +249,15 @@ PredictCRModels<-function(models, newdata, newtimes){
   if (!is.null(models$rulefit_Model)){
     newprobsrulefit<-cifMatInterpolaltor(probsMat=Predict_rulefit$CIFs,times=Predict_rulefit$Times, newtimes=newtimes)
   }
+  if (!is.null(models$xgboost_Model)){
+    newprobsxgboost<-cifMatInterpolaltor(probsMat=Predict_xgboost$CIFs,times=Predict_xgboost$Times, newtimes=newtimes)
+  }
+  if (!is.null(models$gam_Model)){
+    newprobsgam<-cifMatInterpolaltor(probsMat=Predict_gam$CIFs,times=Predict_gam$Times, newtimes=newtimes)
+  }
+  if (!is.null(models$survreg_Model)){
+    newprobsurvreg<-cifMatInterpolaltor(probsMat=Predict_survreg$CIFs,times=Predict_survreg$Times, newtimes=newtimes)
+  }
 
   ModelPredictions<-list()
   if (!is.null(models$RF_Model)){
@@ -199,9 +278,18 @@ PredictCRModels<-function(models, newdata, newtimes){
   if (!is.null(models$rulefit_Model)){
     ModelPredictions<-c(ModelPredictions,list(newprobsrulefit=newprobsrulefit))
   }
+  if (!is.null(models$xgboost_Model)){
+    ModelPredictions<-c(ModelPredictions,list(newprobsxgboost=newprobsxgboost))
+  }
+  if (!is.null(models$gam_Model)){
+    ModelPredictions<-c(ModelPredictions,list(newprobsgam=newprobsgam))
+  }
+  if (!is.null(models$survreg_Model)){
+    ModelPredictions<-c(ModelPredictions,list(newprobsurvreg=newprobsurvreg))
+  }
 
   # Assuming cifMatListAveraging is loaded/available
-  NewProbs<-cifMatListAveraging(ModelPredictions)
+  NewProbs<-cifMatListAveraging(ModelPredictions, type = "prob")
   NewProbs<-rbind(NewProbs) # Ensure it's a matrix
   return(list(ModelPredictions=ModelPredictions,NewProbs=NewProbs))
 }
