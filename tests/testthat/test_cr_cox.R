@@ -59,19 +59,25 @@ test_that("CRModel_Cox fits basic model", {
 
   # Check output structure
   expect_type(model, "list")
-  expect_named(model, c("cph_model", "cph_models_all_causes", "all_event_types",
-                       "times", "varprof", "model_type",
-                       "expvars", "timevar", "eventvar", "failcode", "varsel_method", "time_range"))
+  expect_s3_class(model, "ml4t2e_cr_cox")
+  expect_setequal(names(model),
+                  c("cph_models_all_causes", "times", "varprof", "model_type",
+                    "expvars", "timevar", "eventvar", "event_codes",
+                    "varsel_method", "time_range"))
 
   # Check model type
   expect_equal(model$model_type, "cr_cox")
-  expect_s3_class(model$cph_model, "coxph")
+
+  # Ensure we have a model per event code
+  non_null_models <- Filter(Negate(is.null), model$cph_models_all_causes)
+  expect_true(length(non_null_models) >= 1)
+  expect_true(all(names(non_null_models) %in% model$event_codes))
+  expect_true(all(vapply(non_null_models, inherits, logical(1), what = "coxph")))
 
   # Check time range
   expect_true(is.numeric(model$time_range))
   expect_equal(length(model$time_range), 2)
-  expect_true(model$time_range[1] == 0)
-  expect_true(model$time_range[2] > 0)
+  expect_true(all(is.finite(model$time_range)))
 
   # Check times
   expect_true(is.numeric(model$times))
@@ -81,6 +87,7 @@ test_that("CRModel_Cox fits basic model", {
   # Check varprof
   expect_true(is.list(model$varprof))
   expect_equal(length(model$varprof), length(expvars_numeric))
+  expect_true(all(model$event_codes %in% c("1", "2")))
 })
 
 test_that("CRModel_Cox handles factor variables", {
@@ -91,8 +98,9 @@ test_that("CRModel_Cox handles factor variables", {
     eventvar = "event"
   )
 
-  expect_s3_class(model$cph_model, "coxph")
+  expect_s3_class(model, "ml4t2e_cr_cox")
   expect_true(is.list(model$varprof))
+  expect_true(all(names(Filter(Negate(is.null), model$cph_models_all_causes)) %in% model$event_codes))
 })
 
 # ==============================================================================
@@ -107,7 +115,7 @@ test_that("Predict_CRModel_Cox returns correct output structure", {
     eventvar = "event"
   )
 
-  preds <- Predict_CRModel_Cox(model, test_data)
+  preds <- Predict_CRModel_Cox(model, test_data, event_of_interest = "1")
 
   # Check output structure (no longer returns cph_modelTestPredict)
   expect_type(preds, "list")
@@ -133,7 +141,7 @@ test_that("Predict_CRModel_Cox CIFs are monotonically non-decreasing", {
     eventvar = "event"
   )
 
-  preds <- Predict_CRModel_Cox(model, test_data)
+  preds <- Predict_CRModel_Cox(model, test_data, event_of_interest = "1")
 
   # For each observation, CIF should be non-decreasing over time
   for (i in seq_len(ncol(preds$CIFs))) {
@@ -152,11 +160,25 @@ test_that("Predict_CRModel_Cox handles custom time points", {
   )
 
   custom_times <- c(1, 5, 10, 20, 50)
-  preds <- Predict_CRModel_Cox(model, test_data, newtimes = custom_times)
+  preds <- Predict_CRModel_Cox(model, test_data, newtimes = custom_times, event_of_interest = "1")
 
   expect_equal(preds$Times, custom_times)
   expect_equal(nrow(preds$CIFs), length(custom_times))
   expect_equal(ncol(preds$CIFs), nrow(test_data))
+})
+
+test_that("Predict_CRModel_Cox validates requested event", {
+  model <- CRModel_Cox(
+    data = train_data,
+    expvars = expvars_numeric,
+    timevar = "time",
+    eventvar = "event"
+  )
+
+  expect_error(
+    Predict_CRModel_Cox(model, test_data, event_of_interest = "999"),
+    "Requested event_of_interest"
+  )
 })
 
 test_that("Predict_CRModel_Cox includes time 0", {
@@ -167,7 +189,7 @@ test_that("Predict_CRModel_Cox includes time 0", {
     eventvar = "event"
   )
 
-  preds <- Predict_CRModel_Cox(model, test_data)
+  preds <- Predict_CRModel_Cox(model, test_data, event_of_interest = "1")
 
   # Time 0 should be included
   expect_true(0 %in% preds$Times)
@@ -190,7 +212,7 @@ test_that("Predict_CRModel_Cox handles matching factor levels", {
   )
 
   # Test data with same factor levels
-  preds <- Predict_CRModel_Cox(model, test_data)
+  preds <- Predict_CRModel_Cox(model, test_data, event_of_interest = "1")
 
   expect_equal(ncol(preds$CIFs), nrow(test_data))
   expect_true(all(!is.na(preds$CIFs)))
@@ -212,9 +234,10 @@ test_that("Predict_CRModel_Cox warns about new factor levels", {
   )
 
   expect_warning(
-    Predict_CRModel_Cox(model, test_data_new_level),
+    preds_new_level <- Predict_CRModel_Cox(model, test_data_new_level, event_of_interest = "1"),
     "has new levels"
   )
+  expect_true(any(colSums(is.na(preds_new_level$CIFs)) > 0))
 })
 
 test_that("Predict_CRModel_Cox converts character to factor", {
@@ -230,7 +253,7 @@ test_that("Predict_CRModel_Cox converts character to factor", {
   test_data_char$cat1 <- as.character(test_data_char$cat1)
   test_data_char$cat2 <- as.character(test_data_char$cat2)
 
-  preds <- Predict_CRModel_Cox(model, test_data_char)
+  preds <- Predict_CRModel_Cox(model, test_data_char, event_of_interest = "1")
 
   expect_equal(ncol(preds$CIFs), nrow(test_data_char))
   expect_true(all(!is.na(preds$CIFs)))
@@ -253,9 +276,10 @@ test_that("CRModel_Cox handles missing data appropriately", {
     eventvar = "event"
   )
 
-  expect_s3_class(model$cph_model, "coxph")
-  # Should have fewer observations
-  expect_true(model$cph_model$n < nrow(train_data_na))
+  expect_s3_class(model, "ml4t2e_cr_cox")
+  fitted_models <- Filter(Negate(is.null), model$cph_models_all_causes)
+  expect_true(length(fitted_models) >= 1)
+  expect_true(all(vapply(fitted_models, inherits, logical(1), what = "coxph")))
 })
 
 test_that("CRModel_Cox requires valid inputs", {
@@ -275,8 +299,8 @@ test_that("Predict_CRModel_Cox requires valid inputs", {
     eventvar = "event"
   )
 
-  expect_error(Predict_CRModel_Cox(model, test_data[, !names(test_data) %in% "x1"]))  # Missing required variable (x1)
-  expect_error(Predict_CRModel_Cox(list(), test_data))  # Invalid model
+  expect_error(Predict_CRModel_Cox(model, test_data[, !names(test_data) %in% "x1"], event_of_interest = "1"))  # Missing required variable (x1)
+  expect_error(Predict_CRModel_Cox(list(), test_data, event_of_interest = "1"))  # Invalid model
 })
 
 test_that("CRModel_Cox requires data, expvars, timevar, eventvar", {
@@ -300,7 +324,7 @@ test_that("Predict_CRModel_Cox returns predictions in correct format", {
                           eventvar = "event")
 
   # Get predictions
-  predictions <- Predict_CRModel_Cox(modelout = model_cox, newdata = test_data)
+  predictions <- Predict_CRModel_Cox(modelout = model_cox, newdata = test_data, event_of_interest = "1")
 
   # Check output structure (no longer returns cph_modelTestPredict)
   expect_type(predictions, "list")
@@ -332,7 +356,8 @@ test_that("Predict_CRModel_Cox handles custom time points", {
                           eventvar = "event")
 
   custom_times <- c(1, 5, 10)
-  predictions <- Predict_CRModel_Cox(modelout = model_cox, newdata = test_data, newtimes = custom_times)
+  predictions <- Predict_CRModel_Cox(modelout = model_cox, newdata = test_data,
+                                     newtimes = custom_times, event_of_interest = "1")
 
   expect_type(predictions, "list")
   expect_true(is.matrix(predictions$CIFs))

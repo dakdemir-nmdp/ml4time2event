@@ -5,7 +5,7 @@ library(survival)
 # library(pec) # Often used for C-index/Brier calculations, might be a dependency
 
 # Assuming the function is available in the environment
-source(here("R/utils/surv_metrics.R"))
+source(here("R/surv_metrics.R"))
 
 context("Testing surv_metrics functions")
 

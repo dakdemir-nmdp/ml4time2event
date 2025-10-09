@@ -4,7 +4,7 @@ library(here)
 library(survival)
 
 # Assuming the functions are available in the environment
-source(here("R/utils/surv_ensemble.R"))
+source(here("R/surv_ensemble.R"))
 # Need the individual model wrappers if they are called internally, or mock them.
 # source(here("R/models/surv_cox.R")) # Example dependency
 # source(here("R/models/surv_random_forest.R")) # Example dependency

@@ -72,7 +72,7 @@ RunCRModels<-function(datatrain, ExpVars, timevar, eventvar, models=c("FG", "rul
   }
   if ("xgboost" %in% models){
     # Assuming CRModel_xgboost is loaded/available
-    xgboost_Model<-tryCatch(CRModel_xgboost(data=datatrainFact,expvars=ExpVars, timevar=timevar, eventvar=eventvar, failcode=1, nrounds=100), error=function(e){
+  xgboost_Model<-tryCatch(CRModel_xgboost(data=datatrainFact,expvars=ExpVars, timevar=timevar, eventvar=eventvar, event_codes=1, nrounds=100), error=function(e){
        print("Failed fitting XGBoost")
       return()
     })
@@ -118,7 +118,7 @@ RunCRModels<-function(datatrain, ExpVars, timevar, eventvar, models=c("FG", "rul
      })
    }
    if ("xgboost" %in% models){
-     xgboost_Model<-tryCatch(CRModel_xgboost(data=datatrainFact,expvars=ExpVars2, timevar=timevar, eventvar=eventvar, failcode=1, nrounds=100), error=function(e){
+  xgboost_Model<-tryCatch(CRModel_xgboost(data=datatrainFact,expvars=ExpVars2, timevar=timevar, eventvar=eventvar, event_codes=1, nrounds=100), error=function(e){
        print("Failed fitting XGBoost")
        return()
      })

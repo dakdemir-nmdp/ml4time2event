@@ -4,7 +4,7 @@ library(here)
 library(stats) # For approxfun
 
 # Assuming the functions are available in the environment
-source(here("R/utils/surv_interpolation.R"))
+source(here("R/surv_interpolation.R"))
 
 context("Testing surv_interpolation functions")
 

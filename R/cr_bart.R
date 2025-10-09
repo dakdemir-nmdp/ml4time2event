@@ -6,7 +6,9 @@
 #' @param expvars character vector of names of explanatory variables in data
 #' @param timevar character name of time variable in data
 #' @param eventvar character name of event variable in data (coded 0,1,2 where 0=censored, 1=event of interest, 2=competing event)
-#' @param failcode integer, the code for the event of interest (default: 1)
+#' @param event_codes character or numeric vector identifying the event code(s) to
+#'   model. BART competing risks currently supports a single event code. If NULL
+#'   (default), the first non-zero event code observed in the data is used.
 #' @param K parameter 'K' for BART (number of time points for discrete approximation, default: 10)
 #' @param ntree number of trees in BART model (default: 100)
 #' @param ndpost number of posterior draws to save (default: 1000)
@@ -22,7 +24,9 @@
 #'   \item{expvars}{character vector of explanatory variables used}
 #'   \item{timevar}{character name of time variable}
 #'   \item{eventvar}{character name of event variable}
-#'   \item{failcode}{the event code for the outcome of interest}
+#'   \item{event_codes}{character vector of event codes included in the model}
+#'   \item{event_codes_numeric}{numeric vector of event codes included}
+#'   \item{default_event_code}{character scalar for the default event code}
 #'   \item{time_range}{vector with min and max observed event times}
 #'   \item{x_train}{design matrix for the training data}
 #'   \item{times_train}{time variable values from training data}
@@ -31,7 +35,7 @@
 #' @importFrom BART crisk.bart
 #' @importFrom stats model.matrix
 #' @export
-CRModel_BART <- function(data, expvars, timevar, eventvar, failcode = 1,
+CRModel_BART <- function(data, expvars, timevar, eventvar, event_codes = NULL,
                         K = 10, ntree = 100, ndpost = 1000, nskip = 100,
                         keepevery = 10, verbose = FALSE) {
 
@@ -54,8 +58,35 @@ CRModel_BART <- function(data, expvars, timevar, eventvar, failcode = 1,
   if (length(missing_vars) > 0) {
     stop("The following expvars not found in data: ", paste(missing_vars, collapse=", "))
   }
-  if (!is.numeric(failcode) || length(failcode) != 1 || failcode < 1) {
-    stop("'failcode' must be a positive integer")
+  if (!is.null(event_codes) && length(event_codes) == 0) {
+    stop("'event_codes' must be NULL or a non-empty vector")
+  }
+
+  # Identify available event codes (exclude censoring)
+  available_events <- sort(unique(as.character(data[[eventvar]][data[[eventvar]] != 0])))
+  if (length(available_events) == 0) {
+    stop("No events found in the training data.")
+  }
+
+  if (is.null(event_codes)) {
+    event_codes <- available_events[1]
+  }
+
+  event_codes <- as.character(event_codes)
+
+  if (length(event_codes) != 1) {
+    stop("CRModel_BART supports exactly one event code. Received ", length(event_codes), ".")
+  }
+
+  if (!event_codes %in% available_events) {
+    stop("Requested event code ", event_codes, " not present in training data. Available codes: ",
+         paste(available_events, collapse = ", "))
+  }
+
+  event_code_numeric <- suppressWarnings(as.numeric(event_codes))
+  if (is.na(event_code_numeric)) {
+    stop("BART competing risks requires numeric event codes. Unable to coerce '",
+         event_codes, "' to numeric.")
   }
 
   # ============================================================================
@@ -104,11 +135,15 @@ CRModel_BART <- function(data, expvars, timevar, eventvar, failcode = 1,
     stop("Failed to fit BART model after ", failcount, " attempts")
   }
 
-  # Get unique event times from training data
-  times <- sort(unique(data[data[[eventvar]] != 0, timevar]))
+  # Get unique event times from training data for the modeled event code
+  times <- sort(unique(data[data[[eventvar]] == event_code_numeric, timevar]))
 
-  # Get time range
-  time_range <- range(data[data[[eventvar]] != 0, timevar])
+  if (length(times) == 0) {
+    stop("No events of type ", event_codes, " in training data. Cannot fit competing risks model.")
+  }
+
+  # Get time range restricted to modeled event codes
+  time_range <- range(c(0, data[data[[eventvar]] %in% event_code_numeric, timevar]), na.rm = TRUE)
 
   # ============================================================================
   # Return Results
@@ -121,7 +156,9 @@ CRModel_BART <- function(data, expvars, timevar, eventvar, failcode = 1,
     expvars = expvars,
     timevar = timevar,
     eventvar = eventvar,
-    failcode = failcode,
+    event_codes = event_codes,
+    event_codes_numeric = event_code_numeric,
+    default_event_code = event_codes,
     time_range = time_range,
     x_train = x_train,
     times_train = times_train,
@@ -142,9 +179,10 @@ CRModel_BART <- function(data, expvars, timevar, eventvar, failcode = 1,
 #' @param newtimes optional numeric vector of time points for prediction.
 #'   If NULL (default), uses the model's native time points.
 #'   Can be any positive values - interpolation handles all time points.
-#' @param failcode integer, the code for the event of interest for CIF prediction.
-#'   If NULL (default), uses the failcode from the model training.
-#'   Note: BART models can only predict for the event they were trained on.
+#' @param event_of_interest character or numeric scalar indicating the event code
+#'   for which CIFs should be returned. If NULL (default), uses the event code
+#'   stored in the fitted model. BART models can only predict the event they were
+#'   trained on.
 #'
 #' @return a list containing:
 #'   \item{CIFs}{predicted cumulative incidence function matrix
@@ -155,7 +193,7 @@ CRModel_BART <- function(data, expvars, timevar, eventvar, failcode = 1,
 #' @importFrom BART crisk.pre.bart bartModelMatrix
 #' @importFrom stats model.matrix
 #' @export
-Predict_CRModel_BART <- function(modelout, newdata, newtimes = NULL, failcode = NULL) {
+Predict_CRModel_BART <- function(modelout, newdata, newtimes = NULL, event_of_interest = NULL) {
 
   # ============================================================================
   # Input Validation
@@ -174,18 +212,20 @@ Predict_CRModel_BART <- function(modelout, newdata, newtimes = NULL, failcode = 
          paste(missing_vars, collapse = ", "))
   }
 
-  # Handle failcode parameter
-  if (is.null(failcode)) {
-    failcode <- modelout$failcode  # Use the failcode from training
-  } else {
-    if (!is.numeric(failcode) || length(failcode) != 1 || failcode < 1) {
-      stop("'failcode' must be a positive integer")
-    }
-    # Note: BART models can only predict for the event type they were trained on
-    if (failcode != modelout$failcode) {
-      stop("BART models can only predict for the event they were trained on (failcode = ", 
-           modelout$failcode, "). Requested failcode: ", failcode)
-    }
+  # Handle event_of_interest parameter
+  if (is.null(event_of_interest)) {
+    event_of_interest <- modelout$default_event_code
+  }
+
+  event_of_interest <- as.character(event_of_interest)
+
+  if (length(event_of_interest) != 1) {
+    stop("BART competing risks predictions require a single event code")
+  }
+
+  if (!identical(event_of_interest, modelout$default_event_code)) {
+    stop("BART models can only predict for the event they were trained on (event code = ",
+         modelout$default_event_code, "). Requested event code: ", event_of_interest)
   }
 
   # ============================================================================

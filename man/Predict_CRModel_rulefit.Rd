@@ -4,7 +4,12 @@
 \alias{Predict_CRModel_rulefit}
 \title{Predict_CRModel_rulefit}
 \usage{
-Predict_CRModel_rulefit(modelout, newdata, newtimes = NULL)
+Predict_CRModel_rulefit(
+  modelout,
+  newdata,
+  newtimes = NULL,
+  event_of_interest = NULL
+)
 }
 \arguments{
 \item{modelout}{the output from 'CRModel_rulefit' (a list containing model and metadata)}
@@ -14,6 +19,9 @@ Predict_CRModel_rulefit(modelout, newdata, newtimes = NULL)
 \item{newtimes}{optional numeric vector of time points for prediction.
 If NULL (default), uses the model's native time points.
 Can be any positive values - interpolation handles all time points.}
+
+\item{event_of_interest}{character or numeric scalar indicating the event code to
+predict. If NULL (default), uses the event code stored during training.}
 }
 \value{
 a list containing:

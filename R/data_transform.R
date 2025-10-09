@@ -16,9 +16,18 @@ ZeroOneScalerData<-function(data){
   maxxvec <- rep(NA_real_, ncol(data))
   names(minxvec) <- names(maxxvec) <- colnames(data)
 
-  for (i in 1:ncol(datanew)){
+  # Handle empty data frame
+  if (ncol(datanew) == 0) {
+    return(list(data = datanew, minxvec = numeric(0), maxxvec = numeric(0)))
+  }
+  
+  # Define columns to exclude from scaling (typically ID columns)
+  exclude_cols <- c("id", "ID", "Id")
+  
+  for (i in seq_len(ncol(datanew))){
+    col_name <- colnames(datanew)[i]
     col_data <- datanew[[i]]
-    if (is.numeric(col_data)){
+    if (is.numeric(col_data) && !col_name %in% exclude_cols){
       minx <- min(col_data, na.rm = TRUE)
       maxx <- max(col_data, na.rm = TRUE)
       range_val <- maxx - minx
@@ -57,6 +66,12 @@ ZeroOneScalerApplierData<-function(data, mins, maxs){
   if (is.null(names(mins)) || is.null(names(maxs))) stop("'mins' and 'maxs' must be named vectors.")
 
   datanew <- data
+  
+  # Handle empty data frame
+  if (ncol(datanew) == 0) {
+    return(datanew)
+  }
+  
   numeric_cols <- names(which(sapply(datanew, is.numeric)))
 
   for (i in numeric_cols){
@@ -100,6 +115,12 @@ UndoZeroOneScalerApplierData<-function(data, mins, maxs){
   if (is.null(names(mins)) || is.null(names(maxs))) stop("'mins' and 'maxs' must be named vectors.")
 
   datanew <- data
+  
+  # Handle empty data frame
+  if (ncol(datanew) == 0) {
+    return(datanew)
+  }
+  
   numeric_cols <- names(which(sapply(datanew, is.numeric)))
 
   for (i in numeric_cols){
@@ -147,6 +168,12 @@ NumVarstCatsData<-function(data, numgroups=NULL, cuts=NULL, min_unique_vals = 5)
   if (!is.null(numgroups) && !is.null(cuts)) warning("'cuts' provided, 'numgroups' will be ignored.")
 
   datanew <- data
+  
+  # Handle empty data frame
+  if (ncol(datanew) == 0) {
+    return(datanew)
+  }
+  
   numeric_cols <- names(which(sapply(datanew, is.numeric)))
 
   # --- Internal Helper: quantcat (modified from Hmisc::cut2) ---

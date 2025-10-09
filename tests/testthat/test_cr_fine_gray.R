@@ -61,13 +61,13 @@ test_that("CRModel_FineGray runs and returns expected model structure", {
                               expvars = c("x1", "x2A", "x2B", "x3"),
                               timevar = "ftime",
                               eventvar = "fstatus",
-                              failcode = 1)
+                              event_codes = "1")
 
   # Check output structure
   expect_type(model_fg, "list")
   expect_s3_class(model_fg, "ml4t2e_cr_finegray")
   expect_equal(model_fg$model_type, "fine_gray")
-  expect_equal(model_fg$failcode, 1)
+  expect_equal(model_fg$event_codes, "1")
   expect_true("fg_model" %in% names(model_fg))
   expect_true("time_range" %in% names(model_fg))
   expect_true("varprof" %in% names(model_fg))
@@ -88,16 +88,16 @@ test_that("CRModel_FineGray handles different failcode", {
                                  expvars = c("x1", "x2A", "x2B", "x3"),
                                  timevar = "ftime",
                                  eventvar = "fstatus",
-                                 failcode = 2)
+                                 event_codes = "2")
   expect_s3_class(model_fg_c2, "ml4t2e_cr_finegray")
   # Check if models differ for different failcodes
   model_fg_c1 <- CRModel_FineGray(data = train_data_orig,
                                  expvars = c("x1", "x2A", "x2B", "x3"),
                                  timevar = "ftime",
                                  eventvar = "fstatus",
-                                 failcode = 1)
-  expect_equal(model_fg_c1$failcode, 1)
-  expect_equal(model_fg_c2$failcode, 2)
+                                 event_codes = "1")
+  expect_equal(model_fg_c1$event_codes, "1")
+  expect_equal(model_fg_c2$event_codes, "2")
 })
 
 
@@ -111,7 +111,7 @@ test_that("Predict_CRModel_FineGray returns predictions in correct format", {
                               expvars = c("x1", "x2A", "x2B", "x3"),
                               timevar = "ftime",
                               eventvar = "fstatus",
-                              failcode = 1)
+                              event_codes = "1")
 
   # Get predictions
   predictions <- Predict_CRModel_FineGray(modelout = model_fg, newdata = test_data_orig)
@@ -139,7 +139,7 @@ test_that("Predict_CRModel_FineGray handles custom time points", {
                               expvars = c("x1", "x2A", "x2B", "x3"),
                               timevar = "ftime",
                               eventvar = "fstatus",
-                              failcode = 1)
+                              event_codes = "1")
   custom_times <- c(1, 5, 10)
   predictions <- Predict_CRModel_FineGray(modelout = model_fg, newdata = test_data_orig, newtimes = custom_times)
 
@@ -157,7 +157,7 @@ test_that("Predict_CRModel_FineGray requires model and data", {
                               expvars = c("x1", "x2A", "x2B", "x3"),
                               timevar = "ftime",
                               eventvar = "fstatus",
-                              failcode = 1)
+                              event_codes = "1")
 
   expect_error(Predict_CRModel_FineGray(modelout = model_fg), "argument \"newdata\" is missing")
   expect_error(Predict_CRModel_FineGray(newdata = test_data_orig), "argument \"modelout\" is missing")

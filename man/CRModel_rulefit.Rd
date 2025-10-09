@@ -9,7 +9,7 @@ CRModel_rulefit(
   expvars,
   timevar,
   eventvar,
-  failcode = 1,
+  event_codes = NULL,
   ntree = 300,
   nsample = 300,
   keepvars = NULL,
@@ -28,7 +28,7 @@ CRModel_rulefit(
 
 \item{eventvar}{character name of event variable in data (coded 0,1,2 where 0=censored, 1=event of interest, 2=competing event)}
 
-\item{failcode}{integer, the code for the event of interest (default: 1)}
+\item{event_codes}{character or numeric vector identifying the event code to model. RuleFit currently supports a single event code. If NULL (default), the first non-zero event code observed in the data is used.}
 
 \item{ntree}{number of trees to fit to extract rules (default: 300)}
 
@@ -53,7 +53,10 @@ a list with the following components:
   \item{expvars}{character vector of explanatory variables used}
   \item{timevar}{character name of time variable}
   \item{eventvar}{character name of event variable}
-  \item{failcode}{the event code for the outcome of interest}
+  \item{event_codes}{character vector of event codes included in the model}
+  \item{event_codes_numeric}{numeric vector of event codes included}
+  \item{default_event_code}{character scalar for the default event code}
+  \item{default_event_code_numeric}{numeric scalar for the default event code}
   \item{time_range}{vector with min and max observed event times}
   \item{ctreelist}{list of fitted tree models}
   \item{ruleslist}{list of extracted rules from trees}

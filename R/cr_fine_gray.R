@@ -5,8 +5,10 @@
 #' @param data data frame with explanatory and outcome variables
 #' @param expvars character vector of names of explanatory variables in data
 #' @param timevar character name of time variable in data
-#' @param eventvar character name of event variable in data (coded 0,1,2 where 0=censored, 1=event of interest, 2=competing event)
-#' @param failcode integer, the code for the event of interest (default: 1)
+#' @param eventvar character name of event variable in data (coded 0=censored, 1=cause1, 2=cause2, ...)
+#' @param event_codes character vector identifying the event code(s) to model.
+#'   Fine-Gray supports exactly one competing event. If NULL (default), the
+#'   first non-zero event code observed in the data is used.
 #' @param ntimes integer, number of time points to use for prediction grid (default: 50)
 #' @param verbose logical, print progress messages (default: FALSE)
 #'
@@ -27,7 +29,7 @@
 #' @importFrom stats AIC model.matrix quantile sd
 #' @importFrom utils head tail
 #' @export
-CRModel_FineGray <- function(data, expvars, timevar, eventvar, failcode = 1,
+CRModel_FineGray <- function(data, expvars, timevar, eventvar, event_codes = NULL,
                             ntimes = 50, verbose = FALSE) {
 
   # ============================================================================
@@ -49,8 +51,8 @@ CRModel_FineGray <- function(data, expvars, timevar, eventvar, failcode = 1,
   if (length(missing_vars) > 0) {
     stop("The following expvars not found in data: ", paste(missing_vars, collapse=", "))
   }
-  if (!is.numeric(failcode) || length(failcode) != 1 || failcode < 1) {
-    stop("'failcode' must be a positive integer")
+  if (!is.null(event_codes) && length(event_codes) == 0) {
+    stop("'event_codes' must be NULL or a non-empty vector")
   }
 
   # ============================================================================
@@ -76,10 +78,35 @@ CRModel_FineGray <- function(data, expvars, timevar, eventvar, failcode = 1,
     stop("Insufficient data after removing missing values. Need at least 10 observations.")
   }
 
+  available_events <- sort(unique(as.character(XYTrain[[eventvar]][XYTrain[[eventvar]] != 0])))
+  if (length(available_events) == 0) {
+    stop("No events found in the training data.")
+  }
+
+  if (is.null(event_codes)) {
+    event_codes <- available_events[1]
+  }
+
+  event_codes <- as.character(event_codes)
+
+  if (length(event_codes) != 1) {
+    stop("Fine-Gray model supports exactly one event code. Received ", length(event_codes), ".")
+  }
+
+  if (!event_codes %in% available_events) {
+    stop("Requested event code ", event_codes, " not present in training data. Available codes: ",
+         paste(available_events, collapse = ", "))
+  }
+
+  failcode <- suppressWarnings(as.numeric(event_codes))
+  if (is.na(failcode)) {
+    stop("Fine-Gray requires numeric event codes. Unable to coerce '", event_codes, "' to numeric.")
+  }
+
   # Get unique event times for the event of interest
   event_times <- XYTrain[[timevar]][XYTrain[[eventvar]] == failcode]
   if (length(event_times) == 0) {
-    stop("No events of type ", failcode, " in training data. Cannot fit competing risks model.")
+    stop("No events of type ", event_codes, " in training data. Cannot fit competing risks model.")
   }
 
   # Store event time range for reference
@@ -132,13 +159,14 @@ CRModel_FineGray <- function(data, expvars, timevar, eventvar, failcode = 1,
     expvars = expvars,
     timevar = timevar,
     eventvar = eventvar,
-    failcode = failcode,
+    event_codes = event_codes,
+    event_code_numeric = failcode,
     train_data = XYTrain,
     scaling = list(meanTrain = meanTrain, sdTrain = sdTrain),
     loadings = svdcovmat$v
   )
 
-  class(result) <- c("ml4t2e_cr_finegray", "list")
+  class(result) <- c("ml4t2e_cr_finegray", "CRModel_FineGray")
   return(result)
 }
 
@@ -152,9 +180,10 @@ CRModel_FineGray <- function(data, expvars, timevar, eventvar, failcode = 1,
 #' @param newtimes optional numeric vector of time points for prediction.
 #'   If NULL (default), generates 50 equally-spaced points from 0 to max observed time.
 #'   Can be any positive values - interpolation handles all time points.
-#' @param failcode integer, the code for the event of interest for CIF prediction.
-#'   If NULL (default), uses the failcode from the model training.
-#'   Note: Fine-Gray models can only predict for the event they were trained on.
+#' @param event_of_interest character or numeric scalar indicating the event code
+#'   for which CIFs should be returned. If NULL (default), uses the event code
+#'   stored in the fitted model. Fine-Gray models can only predict the event they
+#'   were trained on.
 #'
 #' @return a list containing:
 #'   \item{CIFs}{predicted cumulative incidence function matrix
@@ -178,7 +207,7 @@ CRModel_FineGray <- function(data, expvars, timevar, eventvar, failcode = 1,
 #' preds_custom <- Predict_CRModel_FineGray(model, test_data,
 #'                                         newtimes = c(30, 60, 90, 180, 365))
 #' }
-Predict_CRModel_FineGray <- function(modelout, newdata, newtimes = NULL, failcode = NULL) {
+Predict_CRModel_FineGray <- function(modelout, newdata, newtimes = NULL, event_of_interest = NULL) {
 
   # ============================================================================
   # Input Validation
@@ -197,26 +226,29 @@ Predict_CRModel_FineGray <- function(modelout, newdata, newtimes = NULL, failcod
          paste(missing_vars, collapse = ", "))
   }
 
-  # Handle failcode parameter
-  if (is.null(failcode)) {
-    failcode <- modelout$failcode  # Use the failcode from training
-  } else {
-    if (!is.numeric(failcode) || length(failcode) != 1 || failcode < 1) {
-      stop("'failcode' must be a positive integer")
-    }
-    # Note: Fine-Gray models can only predict for the event type they were trained on
-    if (failcode != modelout$failcode) {
-      stop("Fine-Gray models can only predict for the event they were trained on (failcode = ", 
-           modelout$failcode, "). Requested failcode: ", failcode)
-    }
+  # Handle event_of_interest parameter
+  if (is.null(event_of_interest)) {
+    event_of_interest <- modelout$event_codes
+  }
+
+  event_of_interest <- as.character(event_of_interest)
+
+  if (length(event_of_interest) != 1) {
+    stop("Fine-Gray models can only return CIFs for a single event of interest")
+  }
+
+  if (!identical(event_of_interest, modelout$event_codes)) {
+    stop("Fine-Gray models can only predict for the event they were trained on (event code = ",
+         modelout$event_codes, "). Requested event code: ", event_of_interest)
+  }
+
+  failcode <- suppressWarnings(as.numeric(event_of_interest))
+  if (is.na(failcode)) {
+    stop("Fine-Gray requires numeric event codes. Unable to coerce '", event_of_interest, "' to numeric.")
   }
 
   # Generate default times if not specified
-  if (is.null(newtimes)) {
-    # Create a reasonable default grid: 50 points from 0 to max observed time
-    max_time <- modelout$time_range[2]
-    newtimes <- seq(0, max_time, length.out = 50)
-  } else {
+  if (!is.null(newtimes)) {
     if (!is.numeric(newtimes) || any(newtimes < 0)) {
       stop("'newtimes' must be a numeric vector of non-negative values")
     }

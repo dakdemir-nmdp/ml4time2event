@@ -6,8 +6,10 @@
 #' @param data data frame with explanatory and outcome variables
 #' @param expvars character vector of names of explanatory variables in data
 #' @param timevar character name of time variable in data
-#' @param eventvar character name of event variable in data (coded 0,1,2 where 0=censored, 1=event of interest, 2=competing event)
-#' @param failcode integer, the code for the event of interest (default: 1)
+#' @param eventvar character name of event variable in data (coded 0=censored, 1=cause1, 2=cause2, ...)
+#' @param event_codes character vector identifying the event code(s) to model.
+#'   Random forest competing risks currently supports a single event code. If
+#'   NULL (default), the first non-zero event code observed in the data is used.
 #' @param ntree integer value, number of trees to grow (default: 300)
 #' @param samplesize integer value, sample size for each grown tree (default: 500)
 #' @param nsplit integer value, maximum number of splits for each tree (default: 5)
@@ -31,7 +33,7 @@
 #' @importFrom stats as.formula
 #' @importFrom survival Surv
 #' @export
-CRModel_RF <- function(data, expvars, timevar, eventvar, failcode = 1,
+CRModel_RF <- function(data, expvars, timevar, eventvar, event_codes = NULL,
                       ntree = 300, samplesize = 500, nsplit = 5, trace = TRUE,
                       splitrule = "logrankCR", nodesize_try = c(1, 5, 10, 15), ...) {
 
@@ -54,8 +56,8 @@ CRModel_RF <- function(data, expvars, timevar, eventvar, failcode = 1,
   if (length(missing_vars) > 0) {
     stop("The following expvars not found in data: ", paste(missing_vars, collapse=", "))
   }
-  if (!is.numeric(failcode) || length(failcode) != 1 || failcode < 1) {
-    stop("'failcode' must be a positive integer")
+  if (!is.null(event_codes) && length(event_codes) == 0) {
+    stop("'event_codes' must be NULL or a non-empty vector")
   }
 
   # ============================================================================
@@ -69,6 +71,32 @@ CRModel_RF <- function(data, expvars, timevar, eventvar, failcode = 1,
     if (is.character(data[[vari]])) {
       data[[vari]] <- as.factor(data[[vari]])
     }
+  }
+
+  available_events <- sort(unique(data[[eventvar]][data[[eventvar]] != 0]))
+  if (length(available_events) == 0) {
+    stop("No events found in the training data.")
+  }
+
+  if (is.null(event_codes)) {
+    event_codes <- as.character(available_events[1])
+  }
+
+  event_codes <- as.character(event_codes)
+
+  if (length(event_codes) != 1) {
+    stop("CRModel_RF supports exactly one event code. Received ", length(event_codes), ".")
+  }
+
+  if (!event_codes %in% as.character(available_events)) {
+    stop("Requested event code ", event_codes, " not present in training data. Available codes: ",
+         paste(as.character(available_events), collapse = ", "))
+  }
+
+  event_code_numeric <- suppressWarnings(as.numeric(event_codes))
+  if (is.na(event_code_numeric)) {
+    stop("Random forest competing risks requires numeric event codes. Unable to coerce '",
+         event_codes, "' to numeric.")
   }
 
   # Define formula for randomForestSRC (competing risks)
@@ -87,7 +115,8 @@ CRModel_RF <- function(data, expvars, timevar, eventvar, failcode = 1,
                              mtryStart = 2, # Start tuning mtry from 2
                              nodesizeTry = nodesize_try, # Use user-provided nodesize values
                              ntreeTry = ntree, # Use fixed ntree for tuning speed
-                             cause = c(failcode, setdiff(unique(data[[eventvar]][data[[eventvar]] != 0]), failcode)),
+                             cause = c(event_code_numeric,
+                                        setdiff(unique(data[[eventvar]][data[[eventvar]] != 0]), event_code_numeric)),
                              ...)
 
   # Fit final model with optimal parameters
@@ -96,7 +125,8 @@ CRModel_RF <- function(data, expvars, timevar, eventvar, failcode = 1,
                                      tree.err = FALSE, importance = TRUE, statistics = TRUE,
                                      do.trace = trace, splitrule = splitrule, samptype = "swor",
                                      sampsize = samplesize, nsplit = nsplit,
-                                     cause = c(failcode, setdiff(unique(data[[eventvar]][data[[eventvar]] != 0]), failcode)),
+                                     cause = c(event_code_numeric,
+                                               setdiff(unique(data[[eventvar]][data[[eventvar]] != 0]), event_code_numeric)),
                                      ...)
 
   # Get unique event times from training data
@@ -116,11 +146,12 @@ CRModel_RF <- function(data, expvars, timevar, eventvar, failcode = 1,
     expvars = expvars,
     timevar = timevar,
     eventvar = eventvar,
-    failcode = failcode,
+    event_codes = event_codes,
+    event_code_numeric = event_code_numeric,
     time_range = time_range
   )
 
-  class(result) <- "ml4t2e_cr_rf"
+  class(result) <- c("ml4t2e_cr_rf", "CRModel_RF")
   return(result)
 }
 
@@ -136,6 +167,9 @@ CRModel_RF <- function(data, expvars, timevar, eventvar, failcode = 1,
 #' @param newtimes optional numeric vector of time points for prediction.
 #'   If NULL (default), uses the model's native time points.
 #'   Can be any positive values - interpolation handles all time points.
+#' @param event_of_interest character or numeric scalar indicating the event code
+#'   for which CIFs should be returned. If NULL (default), uses the event code
+#'   stored in the fitted model.
 #'
 #' @return a list containing:
 #'   \item{CIFs}{predicted cumulative incidence function matrix
@@ -145,7 +179,7 @@ CRModel_RF <- function(data, expvars, timevar, eventvar, failcode = 1,
 #'
 #' @importFrom randomForestSRC predict.rfsrc
 #' @export
-Predict_CRModel_RF <- function(modelout, newdata, newtimes = NULL, failcode = NULL) {
+Predict_CRModel_RF <- function(modelout, newdata, newtimes = NULL, event_of_interest = NULL) {
 
   # ============================================================================
   # Input Validation
@@ -164,18 +198,20 @@ Predict_CRModel_RF <- function(modelout, newdata, newtimes = NULL, failcode = NU
          paste(missing_vars, collapse = ", "))
   }
 
-  # Handle failcode parameter
-  if (is.null(failcode)) {
-    failcode <- modelout$failcode  # Use the failcode from training
-  } else {
-    if (!is.numeric(failcode) || length(failcode) != 1 || failcode < 1) {
-      stop("'failcode' must be a positive integer")
-    }
-    # Note: RF models can only predict for the event type they were trained on
-    if (failcode != modelout$failcode) {
-      stop("RF models can only predict for the event they were trained on (failcode = ", 
-           modelout$failcode, "). Requested failcode: ", failcode)
-    }
+  # Handle event_of_interest parameter
+  if (is.null(event_of_interest)) {
+    event_of_interest <- modelout$event_codes
+  }
+
+  event_of_interest <- as.character(event_of_interest)
+
+  if (length(event_of_interest) != 1) {
+    stop("Random forest competing risks predictions require a single event code")
+  }
+
+  if (!identical(event_of_interest, modelout$event_codes)) {
+    stop("RF models can only predict for the event they were trained on (event code = ",
+         modelout$event_codes, "). Requested event code: ", event_of_interest)
   }
 
   # ============================================================================
@@ -218,7 +254,7 @@ Predict_CRModel_RF <- function(modelout, newdata, newtimes = NULL, failcode = NU
 
   # Extract CIF for the event of interest (failcode)
   # randomForestSRC returns cif as [observations, times, causes]
-  cif_matrix <- pred_rf$cif[, , paste0("CIF.", modelout$failcode)]
+  cif_matrix <- pred_rf$cif[, , paste0("CIF.", modelout$event_code_numeric)]
 
   # Add time 0 with CIF = 0
   cif_with_t0 <- cbind(0, cif_matrix)  # Add column for time 0

@@ -31,7 +31,10 @@ score2proba <-
 #' @param expvars character vector of names of explanatory variables in data
 #' @param timevar character name of time variable in data
 #' @param eventvar character name of event variable in data (coded 0=censored, 1=cause1, 2=cause2, etc.)
-#' @param failcode integer, the code for the event of interest (default: 1)
+#' @param event_codes character or numeric vector identifying the event code(s) to
+#'   model. GAM competing risks can fit multiple causes simultaneously. If NULL
+#'   (default), all non-zero event codes observed in the data are used. The first
+#'   entry defines the default event of interest.
 #' @param shrinkTreshold integer value, minimum number of factor levels for factor variables to be considered for shrinkage ('re' basis).
 #' @param ntimes integer, number of time points to use for prediction grid (default: 50)
 #' @param verbose logical, print progress messages (default: FALSE)
@@ -44,14 +47,17 @@ score2proba <-
 #'   \item{expvars}{character vector of explanatory variables used}
 #'   \item{timevar}{character name of time variable}
 #'   \item{eventvar}{character name of event variable}
-#'   \item{failcode}{the event code for the outcome of interest}
+#'   \item{event_codes}{character vector of event codes included in the model}
+#'   \item{event_codes_numeric}{numeric vector of event codes included}
+#'   \item{default_event_code}{character scalar for the default event code}
+#'   \\item{default_event_code_numeric}{numeric scalar for the default event code}
 #'   \item{time_range}{vector with min and max observed event times}
 #'
 #' @importFrom mgcv gam cox.ph s
 #' @importFrom stats as.formula predict
 #' @export
-CRModel_GAM <- function(data, expvars, timevar, eventvar, failcode = 1,
-                       shrinkTreshold = 10, ntimes = 50, verbose = FALSE) {
+CRModel_GAM <- function(data, expvars, timevar, eventvar, event_codes = NULL,
+                        shrinkTreshold = 10, ntimes = 50, verbose = FALSE) {
 
   # ============================================================================
   # Input Validation
@@ -72,8 +78,8 @@ CRModel_GAM <- function(data, expvars, timevar, eventvar, failcode = 1,
   if (length(missing_vars) > 0) {
     stop("The following expvars not found in data: ", paste(missing_vars, collapse=", "))
   }
-  if (!is.numeric(failcode) || length(failcode) != 1 || failcode < 1) {
-    stop("'failcode' must be a positive integer")
+  if (!is.null(event_codes) && length(event_codes) == 0) {
+    stop("'event_codes' must be NULL or a non-empty vector")
   }
 
   # ============================================================================
@@ -99,31 +105,54 @@ CRModel_GAM <- function(data, expvars, timevar, eventvar, failcode = 1,
     stop("Insufficient data after removing missing values. Need at least 10 observations.")
   }
 
+  available_events <- sort(unique(as.character(XYTrain[[eventvar]][XYTrain[[eventvar]] != 0])))
+  if (length(available_events) == 0) {
+    stop("No events found in the training data.")
+  }
+
+  if (is.null(event_codes)) {
+    event_codes <- available_events
+  }
+
+  event_codes <- as.character(event_codes)
+
+  missing_event_codes <- setdiff(event_codes, available_events)
+  if (length(missing_event_codes) > 0) {
+    stop("The following event_codes are not present in the data: ",
+         paste(missing_event_codes, collapse = ", "))
+  }
+
+  event_codes_numeric <- suppressWarnings(as.numeric(event_codes))
+  if (any(is.na(event_codes_numeric))) {
+    stop("GAM competing risks requires numeric event codes. Unable to coerce: ",
+         paste(event_codes[is.na(event_codes_numeric)], collapse = ", "))
+  }
+
+  primary_event_code <- event_codes[1]
+  primary_event_numeric <- event_codes_numeric[1]
+
   # Get unique event times for the event of interest
-  event_times <- XYTrain[[timevar]][XYTrain[[eventvar]] == failcode]
+  event_times <- XYTrain[[timevar]][XYTrain[[eventvar]] == primary_event_numeric]
   if (length(event_times) == 0) {
-    stop("No events of type ", failcode, " in training data. Cannot fit competing risks model.")
+    stop("No events of type ", primary_event_code, " in training data. Cannot fit competing risks model.")
   }
 
   # Store event time range for reference
-  time_range <- c(0, max(event_times))
+  time_range <- range(c(0, XYTrain[[timevar]][XYTrain[[eventvar]] %in% event_codes_numeric]), na.rm = TRUE)
 
   # ============================================================================
   # Model Fitting - Cause-Specific GAM Models for ALL Competing Events
   # ============================================================================
-  # Identify all unique event types (excluding censoring = 0)
-  all_event_types <- sort(unique(XYTrain[[eventvar]][XYTrain[[eventvar]] != 0]))
-
   if (verbose) {
-    cat("Fitting cause-specific GAM models for all event types:", paste(all_event_types, collapse = ", "), "\n")
+    cat("Fitting cause-specific GAM models for event codes:", paste(event_codes_numeric, collapse = ", "), "\n")
   }
 
-  # Store models for all event types
-  gam_models_all_causes <- vector("list", length(all_event_types))
-  names(gam_models_all_causes) <- as.character(all_event_types)
+  # Store models for requested event codes
+  gam_models_all_causes <- vector("list", length(event_codes_numeric))
+  names(gam_models_all_causes) <- as.character(event_codes_numeric)
 
   # Fit a separate GAM model for each event type
-  for (cause in all_event_types) {
+  for (cause in event_codes_numeric) {
     if (verbose) cat("Fitting GAM model for event type", cause, "...\n")
 
     # Create cause-specific data: event = 1 if this cause, 0 otherwise (censored or competing)
@@ -247,10 +276,10 @@ CRModel_GAM <- function(data, expvars, timevar, eventvar, failcode = 1,
   }
 
   # The main model for the event of interest
-  gam_model <- gam_models_all_causes[[as.character(failcode)]]
+  gam_model <- gam_models_all_causes[[as.character(primary_event_numeric)]]
 
   if (is.null(gam_model)) {
-    stop("Failed to fit GAM model for the event of interest (failcode = ", failcode, ")")
+    stop("Failed to fit GAM model for the event of interest (event_code = ", primary_event_code, ")")
   }
 
   # ============================================================================
@@ -261,14 +290,16 @@ CRModel_GAM <- function(data, expvars, timevar, eventvar, failcode = 1,
   result <- list(
     gam_model = gam_model,
     gam_models_all_causes = gam_models_all_causes,  # All cause-specific models for Aalen-Johansen
-    all_event_types = all_event_types,  # Event type codes
+    event_codes = event_codes,
+    event_codes_numeric = event_codes_numeric,
+    default_event_code = primary_event_code,
+    default_event_code_numeric = primary_event_numeric,
     times = sort(unique(event_times)),
     varprof = varprof,
     model_type = "cr_gam",
     expvars = expvars,
     timevar = timevar,
     eventvar = eventvar,
-    failcode = failcode,
     time_range = time_range
   )
 
@@ -285,8 +316,8 @@ CRModel_GAM <- function(data, expvars, timevar, eventvar, failcode = 1,
 #' @param newtimes optional numeric vector of time points for prediction.
 #'   If NULL (default), uses the times from the training data.
 #'   Can be any positive values - interpolation handles all time points.
-#' @param failcode integer, the code for the event of interest for CIF prediction.
-#'   If NULL (default), uses the failcode from the model training.
+#' @param event_of_interest character or numeric scalar indicating which event code
+#'   to predict. If NULL (default), uses the event code stored during training.
 #'
 #' @return a list containing:
 #'   \item{CIFs}{predicted cumulative incidence function matrix
@@ -295,7 +326,7 @@ CRModel_GAM <- function(data, expvars, timevar, eventvar, failcode = 1,
 #'
 #' @importFrom stats predict
 #' @export
-Predict_CRModel_GAM <- function(modelout, newdata, newtimes = NULL, failcode = NULL) {
+Predict_CRModel_GAM <- function(modelout, newdata, newtimes = NULL, event_of_interest = NULL) {
 
   # ============================================================================
   # Input Validation
@@ -314,24 +345,24 @@ Predict_CRModel_GAM <- function(modelout, newdata, newtimes = NULL, failcode = N
          paste(missing_vars, collapse = ", "))
   }
 
-  # Handle failcode parameter
-  if (is.null(failcode)) {
-    failcode <- modelout$failcode  # Use the failcode from training
-  } else {
-    if (!is.numeric(failcode) || length(failcode) != 1 || failcode < 1) {
-      stop("'failcode' must be a positive integer")
-    }
-    if (!failcode %in% modelout$all_event_types) {
-      stop("failcode ", failcode, " was not present in training data. Available event types: ",
-           paste(modelout$all_event_types, collapse = ", "))
-    }
+  # Handle event_of_interest parameter
+  if (is.null(event_of_interest)) {
+    event_of_interest <- modelout$default_event_code
   }
 
+  event_of_interest <- as.character(event_of_interest)
+  event_idx <- match(event_of_interest, modelout$event_codes)
+
+  if (is.na(event_idx)) {
+    stop("event_of_interest ", event_of_interest, " was not present in training data. Available event codes: ",
+         paste(modelout$event_codes, collapse = ", "))
+  }
+
+  target_event_numeric <- modelout$event_codes_numeric[event_idx]
+
   # Generate default times if not specified
-  if (is.null(newtimes)) {
-    # Create a reasonable default grid: include 0 and event times
-    newtimes <- sort(unique(c(0, modelout$times)))
-  } else {
+  use_native_times <- is.null(newtimes)
+  if (!use_native_times) {
     if (!is.numeric(newtimes) || any(newtimes < 0)) {
       stop("'newtimes' must be a numeric vector of non-negative values")
     }
@@ -379,11 +410,12 @@ Predict_CRModel_GAM <- function(modelout, newdata, newtimes = NULL, failcode = N
   # Make Predictions using Aalen-Johansen Estimator
   # ============================================================================
   # Get survival predictions from ALL cause-specific GAM models
-  cause_specific_survs <- vector("list", length(modelout$all_event_types))
-  names(cause_specific_survs) <- as.character(modelout$all_event_types)
+  cause_specific_survs <- vector("list", length(modelout$event_codes_numeric))
+  names(cause_specific_survs) <- as.character(modelout$event_codes_numeric)
 
   # Predict survival for each cause
-  for (cause in modelout$all_event_types) {
+  surv_times <- NULL
+  for (cause in modelout$event_codes_numeric) {
     cause_char <- as.character(cause)
 
     if (is.null(modelout$gam_models_all_causes[[cause_char]])) {
@@ -423,9 +455,12 @@ Predict_CRModel_GAM <- function(modelout, newdata, newtimes = NULL, failcode = N
       next
     }
 
+    if (is.null(surv_times)) {
+      surv_times <- sf$time
+    }
+
     # Extract survival probabilities
     surv_probs_cause <- sf$surv
-    surv_times_cause <- sf$time
 
     # Ensure matrix format
     if (!is.matrix(surv_probs_cause)) {
@@ -443,30 +478,118 @@ Predict_CRModel_GAM <- function(modelout, newdata, newtimes = NULL, failcode = N
     stop("No valid cause-specific survival predictions could be generated")
   }
 
-  # Get the time grid from the first model
-  surv_times <- sf$time
+  if (is.null(surv_times)) {
+    stop("Unable to derive survival time grid from cause-specific models")
+  }
 
-  # Use Aalen-Johansen estimator to calculate proper CIF
-  cif_matrix <- aalenJohansenCIF(
-    cause_specific_survs = cause_specific_survs,
-    times = surv_times,
-    event_of_interest = failcode
-  )
+  # Use proper Aalen-Johansen approach by calculating overall survival first  
+  # Similar to XGBoost approach since GAM also uses baseline Cox models
+  n_obs <- nrow(newdata_prepared)
+  n_times <- length(surv_times)
+  
+  # Calculate cumulative hazards for each cause and each observation
+  cum_hazards_all_causes <- array(0, dim = c(n_times, n_obs, length(modelout$event_codes_numeric)))
+  
+  for (i in seq_along(modelout$event_codes_numeric)) {
+    cause <- modelout$event_codes_numeric[i]
+    cause_char <- as.character(cause)
+
+    if (!is.null(modelout$gam_models_all_causes[[cause_char]])) {
+      # Get linear predictors from GAM
+      linear_preds <- tryCatch(
+        as.vector(stats::predict(
+          modelout$gam_models_all_causes[[cause_char]],
+          newdata = newdata_prepared,
+          type = "link"
+        )),
+        error = function(e) {
+          warning("GAM prediction failed for cause ", cause, ": ", e$message)
+          rep(0, n_obs)
+        }
+      )
+
+      # Get baseline cumulative hazard from survfit
+      sf_baseline <- survival::survfit(
+        modelout$gam_models_all_causes[[cause_char]]$baseline_model,
+        newdata = data.frame("score" = rep(0, 1))
+      )
+
+      # Check if sf_baseline has valid data
+      if (length(sf_baseline$time) == 0 || any(is.na(sf_baseline$surv))) {
+        # If no valid baseline data, assume no events for this cause
+        baseline_cum_hazard <- rep(0, n_times)
+      } else {
+        # Interpolate baseline cumulative hazard to our time grid
+        baseline_cum_hazard <- stats::approx(
+          x = c(0, sf_baseline$time),
+          y = c(0, -log(pmax(sf_baseline$surv, 1e-10))),
+          xout = surv_times,
+          method = "constant",
+          f = 0,
+          rule = 2
+        )$y
+      }
+
+      # Apply individual risk factors: Λ_j(t|x) = Λ_0j(t) * exp(β*x)
+      for (j in seq_len(n_obs)) {
+        cum_hazards_all_causes[, j, i] <- baseline_cum_hazard * exp(linear_preds[j])
+      }
+    }
+  }
+  
+  # Step 2: Calculate overall survival S(t) = exp(-Σ_j Λ_j(t))
+  overall_cum_hazard <- apply(cum_hazards_all_causes, c(1, 2), sum)
+  overall_survival <- exp(-overall_cum_hazard)
+  
+  # Step 3: Calculate CIF using Aalen-Johansen formula
+  cif_matrix <- matrix(0, nrow = n_times, ncol = n_obs)
+  event_idx_numeric <- which(modelout$event_codes_numeric == target_event_numeric)
+
+  if (length(event_idx_numeric) > 0) {
+    target_cum_hazards <- cum_hazards_all_causes[, , event_idx_numeric]
+    
+    for (j in seq_len(n_obs)) {
+      for (t in seq_len(n_times)) {
+        if (t == 1) {
+          # For first time point, CIF = hazard increment
+          target_hazard_increment <- target_cum_hazards[t, j] 
+          cif_matrix[t, j] <- 1.0 * target_hazard_increment
+        } else {
+          # CIF(t) = CIF(t-1) + S(t-1) * Δλ_j(t)
+          target_hazard_increment <- target_cum_hazards[t, j] - target_cum_hazards[t-1, j]
+          cif_matrix[t, j] <- cif_matrix[t-1, j] + overall_survival[t-1, j] * target_hazard_increment
+        }
+      }
+    }
+  }
+  
+  # Ensure bounds and monotonicity
+  # Use matrix() to preserve dimensions after pmax/pmin operations
+  original_dims <- dim(cif_matrix)
+  cif_matrix <- matrix(pmax(0, pmin(as.vector(cif_matrix), 1)), 
+                       nrow = original_dims[1], ncol = original_dims[2])
+  for (j in 1:n_obs) {
+    cif_matrix[, j] <- cummax(cif_matrix[, j])
+  }
 
   # ============================================================================
   # Apply Interpolation
   # ============================================================================
-  if (is.null(newtimes)) {
+  # Ensure time zero included with zero CIF
+  if (!any(abs(surv_times) < .Machine$double.eps)) {
+    surv_times <- c(0, surv_times)
+    cif_matrix <- rbind(rep(0, n_obs), cif_matrix)
+  } else {
+    zero_idx <- which.min(abs(surv_times))
+    cif_matrix[zero_idx, ] <- 0
+  }
+
+  if (use_native_times) {
     # Return predictions in native time grid: [times, observations]
     result_cifs <- cif_matrix  # cif_matrix is already [times, observations]
     result_times <- surv_times
   } else {
     # Interpolate to new time points
-    if (!is.numeric(newtimes) || any(newtimes < 0)) {
-      stop("'newtimes' must be a numeric vector of non-negative values")
-    }
-    newtimes <- sort(unique(newtimes))
-
     # Use the standard CIF interpolation utility function
     pred_cifs <- cifMatInterpolaltor(
       probsMat = t(cif_matrix),  # cifMatInterpolaltor expects [observations, times]

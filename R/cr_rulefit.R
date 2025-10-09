@@ -6,7 +6,9 @@
 #' @param expvars character vector of names of explanatory variables in data
 #' @param timevar character name of time variable in data
 #' @param eventvar character name of event variable in data (coded 0,1,2 where 0=censored, 1=event of interest, 2=competing event)
-#' @param failcode integer, the code for the event of interest (default: 1)
+#' @param event_codes character or numeric vector identifying the event code to
+#'   model. RuleFit currently supports a single event code. If NULL (default),
+#'   the first non-zero event code observed in the data is used.
 #' @param ntree number of trees to fit to extract rules (default: 300)
 #' @param nsample number of samples for each tree (default: 300)
 #' @param keepvars these variables will be used in each bagging iteration
@@ -23,7 +25,10 @@
 #'   \item{expvars}{character vector of explanatory variables used}
 #'   \item{timevar}{character name of time variable}
 #'   \item{eventvar}{character name of event variable}
-#'   \item{failcode}{the event code for the outcome of interest}
+#'   \item{event_codes}{character vector of event codes included in the model}
+#'   \item{event_codes_numeric}{numeric vector of event codes included}
+#'   \item{default_event_code}{character scalar for the default event code}
+#'   \item{default_event_code_numeric}{numeric scalar for the default event code}
 #'   \item{time_range}{vector with min and max observed event times}
 #'   \item{ctreelist}{list of fitted tree models}
 #'   \item{ruleslist}{list of extracted rules from trees}
@@ -34,7 +39,7 @@
 #' @importFrom stats as.formula model.matrix quantile rpois runif sd
 #' @importFrom survival Surv
 #' @export
-CRModel_rulefit <- function(data, expvars, timevar, eventvar, failcode = 1,
+CRModel_rulefit <- function(data, expvars, timevar, eventvar, event_codes = NULL,
                            ntree = 300, nsample = 300, keepvars = NULL,
                            cuttimes = NULL, alpha = 0.5, maxit = 2000, ...) {
 
@@ -53,12 +58,43 @@ CRModel_rulefit <- function(data, expvars, timevar, eventvar, failcode = 1,
   if (!eventvar %in% colnames(data)) {
     stop("'eventvar' not found in data: ", eventvar)
   }
-  if (!is.numeric(failcode) || length(failcode) != 1 || !(failcode %in% c(1, 2))) {
-    stop("'failcode' must be 1 or 2")
-  }
   if (!all(expvars %in% colnames(data))) {
     missing_vars <- expvars[!expvars %in% colnames(data)]
     stop("expvars not found in data: ", paste(missing_vars, collapse = ", "))
+  }
+
+  available_events <- sort(unique(as.character(data[[eventvar]][data[[eventvar]] != 0])))
+  if (length(available_events) == 0) {
+    stop("No events found in the training data.")
+  }
+
+  if (is.null(event_codes)) {
+    event_codes <- available_events[1]
+  }
+
+  event_codes <- as.character(event_codes)
+
+  if (length(event_codes) != 1) {
+    stop("CRModel_rulefit currently supports exactly one event code. Provided: ",
+         paste(event_codes, collapse = ", "))
+  }
+
+  if (!event_codes %in% available_events) {
+    stop("The requested event code (", event_codes, ") is not present in the training data. Available event codes: ",
+         paste(available_events, collapse = ", "))
+  }
+
+  event_codes_numeric <- suppressWarnings(as.numeric(event_codes))
+  if (is.na(event_codes_numeric)) {
+    stop("CRModel_rulefit requires numeric event codes. Unable to coerce: ", event_codes)
+  }
+
+  primary_event_code <- event_codes[1]
+  primary_event_numeric <- event_codes_numeric[1]
+
+  event_times <- data[[timevar]][data[[eventvar]] == primary_event_numeric]
+  if (length(event_times) == 0) {
+    stop("No events of type ", primary_event_code, " in training data. Cannot fit competing risks model.")
   }
 
   # ============================================================================
@@ -77,7 +113,7 @@ CRModel_rulefit <- function(data, expvars, timevar, eventvar, failcode = 1,
 
   formClass <- stats::as.formula(paste("ClassVar ~.", collapse = ""))
   formReg <- stats::as.formula(paste("RegVar ~.", collapse = ""))
-  formSurv <- stats::as.formula(paste("survival::Surv(",timevar,",", eventvar,"==", failcode, ") ~.", collapse = ""))
+  formSurv <- stats::as.formula(paste("survival::Surv(", timevar, ",", eventvar, "==", primary_event_numeric, ") ~.", collapse = ""))
 
   ctreelist <- lapply(1:ntree, function(repi){
     sampcols <- union(keepvars, sample(expvars, min(length(expvars), sample(c(1:10), 1))))
@@ -89,8 +125,8 @@ CRModel_rulefit <- function(data, expvars, timevar, eventvar, failcode = 1,
       samprows <- sample(seq_len(nrow(data)), nsample, replace = TRUE)
       datasampl <- data[samprows, colnames(data) %in% usevars]
 
-      datasampl$ClassVar <- as.character(datasampl[, colnames(datasampl) %in% timevar] < sample(cuttimes, 1) &
-                                         datasampl[, colnames(datasampl) %in% eventvar] == failcode)
+  datasampl$ClassVar <- as.character(datasampl[, colnames(datasampl) %in% timevar] < sample(cuttimes, 1) &
+                 datasampl[, colnames(datasampl) %in% eventvar] == primary_event_numeric)
       datasampl <- datasampl[, !colnames(datasampl) %in% c(timevar, eventvar)]
       rpcontrol <- rpart::rpart.control(
         minsplit = stats::rpois(1,1)+1,
@@ -108,8 +144,8 @@ CRModel_rulefit <- function(data, expvars, timevar, eventvar, failcode = 1,
       usevars <- c(timevar, eventvar, sampcols)
       samprows <- sample(seq_len(nrow(data)), nsample, replace = TRUE)
       datasampl <- data[samprows, colnames(data) %in% usevars]
-      pout <- pseudo::pseudoci(time=datasampl[,timevar], event=datasampl[,eventvar], tmax=sample(cuttimesReg,1))
-      datasampl$RegVar <- c(unlist(pout$pseudo[[paste0("cause", failcode)]]))
+  pout <- pseudo::pseudoci(time=datasampl[, timevar], event=datasampl[, eventvar], tmax=sample(cuttimesReg, 1))
+  datasampl$RegVar <- c(unlist(pout$pseudo[[paste0("cause", primary_event_numeric)]]))
       datasampl$RegVar <- (datasampl$RegVar - mean(datasampl$RegVar)) / stats::sd(datasampl$RegVar)
       datasampl <- datasampl[, !colnames(datasampl) %in% c(timevar, eventvar)]
       rpcontrol <- rpart::rpart.control(
@@ -188,14 +224,14 @@ CRModel_rulefit <- function(data, expvars, timevar, eventvar, failcode = 1,
     expvars = usecols,
     timevar = timevar,
     eventvar = eventvar,
-    failcode = failcode
+    event_codes = primary_event_numeric
   )
 
   # Get unique event times from training data
-  times <- sort(unique(data[data[[eventvar]] != 0, timevar]))
+  times <- sort(unique(event_times))
 
   # Get time range
-  time_range <- range(data[data[[eventvar]] != 0, timevar])
+  time_range <- range(c(0, event_times), na.rm = TRUE)
 
   # ============================================================================
   # Return Results
@@ -214,7 +250,10 @@ CRModel_rulefit <- function(data, expvars, timevar, eventvar, failcode = 1,
     expvars = expvars,
     timevar = timevar,
     eventvar = eventvar,
-    failcode = failcode,
+    event_codes = primary_event_code,
+    event_codes_numeric = primary_event_numeric,
+    default_event_code = primary_event_code,
+    default_event_code_numeric = primary_event_numeric,
     time_range = time_range
   )
 
@@ -232,6 +271,9 @@ CRModel_rulefit <- function(data, expvars, timevar, eventvar, failcode = 1,
 #' @param newtimes optional numeric vector of time points for prediction.
 #'   If NULL (default), uses the model's native time points.
 #'   Can be any positive values - interpolation handles all time points.
+#' @param event_of_interest character or numeric scalar indicating the event code
+#'   to predict. RuleFit models currently support only the event code used during
+#'   training.
 #'
 #' @return a list containing:
 #'   \item{CIFs}{predicted cumulative incidence function matrix
@@ -242,7 +284,7 @@ CRModel_rulefit <- function(data, expvars, timevar, eventvar, failcode = 1,
 #' @importFrom partykit as.party
 #' @importFrom stats model.matrix
 #' @export
-Predict_CRModel_rulefit <- function(modelout, newdata, newtimes = NULL, failcode = NULL) {
+Predict_CRModel_rulefit <- function(modelout, newdata, newtimes = NULL, event_of_interest = NULL) {
 
   # ============================================================================
   # Input Validation
@@ -261,18 +303,16 @@ Predict_CRModel_rulefit <- function(modelout, newdata, newtimes = NULL, failcode
          paste(missing_vars, collapse = ", "))
   }
 
-  # Handle failcode parameter
-  if (is.null(failcode)) {
-    failcode <- modelout$failcode  # Use the failcode from training
-  } else {
-    if (!is.numeric(failcode) || length(failcode) != 1 || failcode < 1) {
-      stop("'failcode' must be a positive integer")
-    }
-    # Note: RuleFit models can only predict for the event type they were trained on
-    if (failcode != modelout$failcode) {
-      stop("RuleFit models can only predict for the event they were trained on (failcode = ", 
-           modelout$failcode, "). Requested failcode: ", failcode)
-    }
+  # Handle event_of_interest parameter
+  if (is.null(event_of_interest)) {
+    event_of_interest <- modelout$default_event_code
+  }
+
+  event_of_interest <- as.character(event_of_interest)
+
+  if (!identical(event_of_interest, modelout$default_event_code)) {
+    stop("RuleFit models can only predict for the event they were trained on (event code = ",
+         modelout$default_event_code, "). Requested event code: ", event_of_interest)
   }
 
   # ============================================================================
@@ -353,7 +393,12 @@ Predict_CRModel_rulefit <- function(modelout, newdata, newtimes = NULL, failcode
   # ============================================================================
   # Make Predictions using underlying Fine-Gray model
   # ============================================================================
-  pred_fg <- Predict_CRModel_FineGray(modelout$rulefit_model$CRrulefitModel, TestMat, newtimes = newtimes)
+  pred_fg <- Predict_CRModel_FineGray(
+    modelout$rulefit_model$CRrulefitModel,
+    TestMat,
+    newtimes = newtimes,
+    event_of_interest = event_of_interest
+  )
 
   # ============================================================================
   # Return Results

@@ -28,6 +28,7 @@ VariableProfile <- function(data, expvars) {
   varprofile
 }
 
+
 #' @title Initialize Neural Network Weights
 #' @description Initializes weights and biases for a single-hidden-layer network.
 #' @param n_in Number of input features.
@@ -65,6 +66,88 @@ forward_pass <- function(X, weights) {
   list(output = Z2, hidden_activations = A1)
 }
 
+#' @title (Helper) Prepare New Data for DeepSurv Models
+#' @description Applies factor level alignment and numeric scaling to new data.
+#' @param modelout Fitted DeepSurv model object.
+#' @param newdata Data frame of new observations.
+#' @return A list containing the prepared data frame and the model matrix.
+#' @keywords internal
+prepare_newdata_for_model <- function(modelout, newdata) {
+  prepared <- newdata[, modelout$expvars, drop = FALSE]
+
+  for (var in modelout$expvars) {
+    if (var %in% names(modelout$factor_levels)) {
+      training_levels <- modelout$factor_levels[[var]]
+      if (is.factor(prepared[[var]])) {
+        prepared[[var]] <- factor(prepared[[var]], levels = training_levels)
+      } else if (is.character(prepared[[var]])) {
+        prepared[[var]] <- factor(prepared[[var]], levels = training_levels)
+      } else {
+        prepared[[var]] <- factor(prepared[[var]], levels = training_levels)
+      }
+    }
+  }
+
+  numeric_vars <- names(modelout$model$scaling_params$mean)
+  if (length(numeric_vars) > 0) {
+    prepared[, numeric_vars] <- sweep(prepared[, numeric_vars, drop = FALSE],
+                                      2, modelout$model$scaling_params$mean, "-")
+    prepared[, numeric_vars] <- sweep(prepared[, numeric_vars, drop = FALSE],
+                                      2, modelout$model$scaling_params$sd, "/")
+  }
+
+  x_matrix <- stats::model.matrix(~ . - 1, data = prepared)
+
+  list(data = prepared, x = x_matrix)
+}
+
+#' @title (Helper) Baseline Hazard Step Function
+#' @description Generates a right-continuous step function for the baseline cumulative hazard.
+#' @param baseline_df Data frame with columns `time` and `cumhaz`.
+#' @return A step function suitable for evaluating cumulative hazard at arbitrary times.
+#' @keywords internal
+baseline_cumhaz_stepfun <- function(baseline_df) {
+  stats::stepfun(baseline_df$time, c(0, baseline_df$cumhaz))
+}
+
+#' @title (Helper) Hazard Increment Matrix
+#' @description Creates a matrix of cumulative hazard increments for each observation over a common time grid.
+#' @param step_fun Step function of baseline cumulative hazard.
+#' @param times Vector of evaluation times (including time 0).
+#' @param risk_scores Numeric vector of risk scores exp(eta(x)).
+#' @return A matrix with rows = intervals between times and columns = observations.
+#' @keywords internal
+hazard_increment_matrix <- function(step_fun, times, risk_scores) {
+  if (!is.numeric(times) || any(is.na(times))) {
+    stop("`times` must be a numeric vector without NA values")
+  }
+  if (length(times) < 2) {
+    stop("`times` must contain at least two time points (including time 0)")
+  }
+
+  baseline_cumhaz <- step_fun(times)
+  baseline_increments <- diff(baseline_cumhaz)
+
+  if (any(baseline_increments < 0)) {
+    stop("Baseline cumulative hazard must be non-decreasing")
+  }
+
+  outer(baseline_increments, risk_scores)
+}
+
+#' @title (Helper) Compute Risk Scores
+#' @description Generates exponentiated linear predictors for a prepared design matrix.
+#' @param modelout Fitted DeepSurv model object.
+#' @param x_matrix Model matrix produced by `prepare_newdata_for_model`.
+#' @return Numeric vector of risk scores exp(η(x)).
+#' @keywords internal
+predict_risk_scores <- function(modelout, x_matrix) {
+  log_risk <- forward_pass(x_matrix, modelout$model$weights)$output
+  log_risk <- as.vector(log_risk)
+  log_risk <- pmax(pmin(log_risk, 50), -50)
+  exp(log_risk)
+}
+
 #' @title Unpack Weights
 #' @description Unpacks a weight vector into weight matrices and bias vectors.
 #' @param w_vec Weight vector.
@@ -88,13 +171,16 @@ unpack_weights <- function(w_vec, n_in, n_hidden) {
 
 #' @title CRModel_DeepSurv
 #'
-#' @description Fit a DeepSurv neural network model for competing risks outcomes using Fine-Gray style loss.
+#' @description Fit a DeepSurv neural network model for competing risks outcomes
+#'   using a Fine-Gray style loss.
 #'
 #' @param data data frame with explanatory and outcome variables
 #' @param expvars character vector of names of explanatory variables in data
 #' @param timevar character name of time variable in data
 #' @param eventvar character name of event variable in data (coded 0=censored, 1=cause1, 2=cause2, etc.)
-#' @param failcode integer, the code for the event of interest (default: 1)
+#' @param event_codes character or numeric vector identifying the event code(s) to
+#'   model. DeepSurv competing risks currently supports a single event code. If
+#'   NULL (default), the first non-zero event code observed in the data is used.
 #' @param size integer, number of units in the hidden layer (default: 5)
 #' @param decay numeric, L2 regularization parameter (default: 0.01)
 #' @param maxit integer, maximum iterations for optimization (default: 1000)
@@ -106,13 +192,16 @@ unpack_weights <- function(w_vec, n_in, n_hidden) {
 #'   \item{varprof}{variable profile list}
 #'   \item{expvars}{character vector of explanatory variables}
 #'   \item{factor_levels}{list of factor levels for categorical variables}
-#'   \item{failcode}{the event code for the outcome of interest}
+#'   \item{event_codes}{character vector of event codes included in the model}
+#'   \item{event_codes_numeric}{numeric vector of event codes included}
+#'   \item{default_event_code}{character scalar for the default event code}
+#'   \item{time_range}{vector with min and max observed event times}
 #'   \item{model_type}{character string "cr_deepsurv"}
 #'
 #' @importFrom stats model.matrix as.formula
 #' @export
-CRModel_DeepSurv <- function(data, expvars, timevar, eventvar, failcode = 1,
-                            size = 5, decay = 0.01, maxit = 1000, verbose = FALSE) {
+CRModel_DeepSurv <- function(data, expvars, timevar, eventvar, event_codes = NULL,
+                             size = 5, decay = 0.01, maxit = 1000, verbose = FALSE) {
 
   # ============================================================================
   # Input Validation
@@ -133,8 +222,8 @@ CRModel_DeepSurv <- function(data, expvars, timevar, eventvar, failcode = 1,
   if (length(missing_vars) > 0) {
     stop("The following expvars not found in data: ", paste(missing_vars, collapse=", "))
   }
-  if (!is.numeric(failcode) || length(failcode) != 1 || failcode < 1) {
-    stop("'failcode' must be a positive integer")
+  if (!is.null(event_codes) && length(event_codes) == 0) {
+    stop("'event_codes' must be NULL or a non-empty vector")
   }
 
   # ============================================================================
@@ -168,28 +257,66 @@ CRModel_DeepSurv <- function(data, expvars, timevar, eventvar, failcode = 1,
     stop("Insufficient data after removing missing values. Need at least 10 observations.")
   }
 
+  available_events <- sort(unique(as.character(XYTrain[[eventvar]][XYTrain[[eventvar]] != 0])))
+  if (length(available_events) == 0) {
+    stop("No events found in the training data.")
+  }
+
+  if (is.null(event_codes)) {
+    event_codes <- available_events[1]
+  }
+
+  event_codes <- as.character(event_codes)
+
+  if (length(event_codes) != 1) {
+    stop("CRModel_DeepSurv supports exactly one event code. Received ", length(event_codes), ".")
+  }
+
+  if (!event_codes %in% available_events) {
+    stop("Requested event code ", event_codes,
+         " not present in training data. No events of type ", event_codes,
+         " in training data.")
+  }
+
+  event_codes_numeric <- suppressWarnings(as.numeric(event_codes))
+  if (is.na(event_codes_numeric)) {
+    stop("DeepSurv competing risks requires numeric event codes. Unable to coerce '",
+         event_codes, "' to numeric.")
+  }
+
+  primary_event_code <- event_codes[1]
+  primary_event_numeric <- event_codes_numeric[1]
+
   # Get unique event times for the event of interest
-  event_times <- XYTrain[[timevar]][XYTrain[[eventvar]] == failcode]
+  event_times <- XYTrain[[timevar]][XYTrain[[eventvar]] == primary_event_numeric]
   if (length(event_times) == 0) {
-    stop("No events of type ", failcode, " in training data. Cannot fit competing risks model.")
+    stop("No events of type ", primary_event_code, " in training data. Cannot fit competing risks model.")
   }
   times <- sort(unique(event_times))
+
+  time_range <- range(c(0, XYTrain[[timevar]][XYTrain[[eventvar]] %in% primary_event_numeric]), na.rm = TRUE)
 
   # ============================================================================
   # Model Fitting (Custom DeepSurv Implementation for Competing Risks)
   # ============================================================================
-  if (verbose) cat("Fitting DeepSurv neural network for competing risks (event type", failcode, ")...\n")
+  if (verbose) cat("Fitting DeepSurv neural network for competing risks (event type", primary_event_code, ")...\n")
 
   # Standardize numeric variables
-  numeric_vars <- expvars[sapply(XYTrain[, expvars, drop=FALSE], is.numeric)]
-  scaling_params <- list(
-    mean = sapply(XYTrain[, numeric_vars, drop=FALSE], mean, na.rm=TRUE),
-    sd = sapply(XYTrain[, numeric_vars, drop=FALSE], sd, na.rm=TRUE)
-  )
+  numeric_vars <- expvars[sapply(XYTrain[, expvars, drop = FALSE], is.numeric)]
+  if (length(numeric_vars) > 0) {
+    scaling_params <- list(
+      mean = sapply(XYTrain[, numeric_vars, drop = FALSE], mean, na.rm = TRUE),
+      sd = sapply(XYTrain[, numeric_vars, drop = FALSE], sd, na.rm = TRUE)
+    )
+  } else {
+    scaling_params <- list(mean = numeric(0), sd = numeric(0))
+  }
 
   # Apply scaling
   XYTrain_scaled <- XYTrain
-  XYTrain_scaled[, numeric_vars] <- scale(XYTrain[, numeric_vars, drop=FALSE])
+  if (length(numeric_vars) > 0) {
+    XYTrain_scaled[, numeric_vars] <- scale(XYTrain[, numeric_vars, drop = FALSE])
+  }
 
   # Create model matrix
   x_train <- stats::model.matrix(~ . - 1, data = XYTrain_scaled[, expvars, drop = FALSE])
@@ -204,7 +331,7 @@ CRModel_DeepSurv <- function(data, expvars, timevar, eventvar, failcode = 1,
   # Create cause-specific indicators for Fine-Gray style loss
   # For competing risks, we use a modified loss that accounts for censoring and competing events
   status_fg <- ifelse(event_sorted == 0, 0,  # censored
-                     ifelse(event_sorted == failcode, 1, 2))  # event of interest or competing
+                      ifelse(event_sorted == primary_event_numeric, 1, 2))  # event of interest or competing
 
   # ============================================================================
   # Neural Network Training with Fine-Gray Style Loss
@@ -319,20 +446,18 @@ CRModel_DeepSurv <- function(data, expvars, timevar, eventvar, failcode = 1,
   final_risk_scores <- exp(final_log_risk)
 
   # Calculate baseline subdistribution hazard similar to Fine-Gray
-  baseline_subhaz <- sapply(times, function(t_i) {
-    # Find events at this time
+  baseline_hazard_increment <- sapply(times, function(t_i) {
     event_indices <- which(time_sorted == t_i & status_fg == 1)
-    if (length(event_indices) > 0) {
-      # Risk set: all subjects still at risk at time t_i
-      risk_set_start <- min(event_indices)
-      risk_set <- final_risk_scores[risk_set_start:length(final_risk_scores)]
-      sum(1 / sum(risk_set))  # Simplified baseline hazard calculation
-    } else {
-      0
+    if (length(event_indices) == 0) {
+      return(0)
     }
+
+    risk_set_start <- min(event_indices)
+    risk_set <- final_risk_scores[risk_set_start:length(final_risk_scores)]
+    length(event_indices) / sum(risk_set)
   })
 
-  cumulative_baseline_subhaz <- cumsum(baseline_subhaz)
+  cumulative_baseline_cumhaz <- cumsum(baseline_hazard_increment)
 
   # ============================================================================
   # Return Results
@@ -342,7 +467,8 @@ CRModel_DeepSurv <- function(data, expvars, timevar, eventvar, failcode = 1,
   # Create a model object that mimics nnet structure for compatibility
   model <- list(
     weights = final_weights,
-    baseline_subhaz = data.frame(time = times, subhaz = cumulative_baseline_subhaz),
+    baseline_hazard = data.frame(time = times, hazard = baseline_hazard_increment),
+    baseline_cumhaz = data.frame(time = times, cumhaz = cumulative_baseline_cumhaz),
     scaling_params = scaling_params,
     n = c(n_features, size, 1),  # Mimic nnet structure
     call = match.call()
@@ -355,8 +481,13 @@ CRModel_DeepSurv <- function(data, expvars, timevar, eventvar, failcode = 1,
     varprof = varprof,
     expvars = expvars,
     factor_levels = factor_levels,
-    failcode = failcode,
-    model_type = "cr_deepsurv"
+    event_codes = event_codes,
+    event_codes_numeric = event_codes_numeric,
+    default_event_code = primary_event_code,
+    model_type = "cr_deepsurv",
+    timevar = timevar,
+    eventvar = eventvar,
+    time_range = time_range
   )
 
   class(result) <- "ml4t2e_cr_deepsurv"
@@ -365,21 +496,42 @@ CRModel_DeepSurv <- function(data, expvars, timevar, eventvar, failcode = 1,
 
 #' @title Predict_CRModel_DeepSurv
 #'
-#' @description Get predictions from a fitted DeepSurv competing risks model for new data.
+#' @description Get predictions from a fitted DeepSurv competing risks model for
+#'   new data.
 #'
 #' @param modelout the output from 'CRModel_DeepSurv'
 #' @param newdata data frame with new observations for prediction
 #' @param newtimes optional numeric vector of time points for prediction.
 #'   If NULL (default), uses the baseline hazard times from training.
+#' @param event_of_interest character or numeric scalar indicating the event code
+#'   for which CIFs should be returned. If NULL (default), uses the event code
+#'   stored in the fitted model. DeepSurv models can only predict the event they
+#'   were trained on.
+#' @param other_models optional named list of additional fitted
+#'   `CRModel_DeepSurv` objects (one per competing event). When provided,
+#'   the function combines all
+#'   cause-specific hazard models using the Aalen-Johansen estimator to obtain
+#'   cumulative incidence functions. If omitted, only the cause-specific hazard
+#'   and cumulative hazard for the event of interest are returned.
 #'
 #' @return a list containing:
-#'   \item{CIFs}{predicted cumulative incidence function matrix
-#'     (rows=times, cols=observations)}
-#'   \item{Times}{the times at which CIFs are calculated}
+#'   \\item{CIFs}{predicted cumulative incidence function matrix
+#'     (rows=times, cols=observations). Available only when `other_models`
+#'     are supplied; otherwise `NULL`.}
+#'   \\item{Times}{the times at which predictions are calculated}
+#'   \item{CauseSpecificHazard}{matrix of cause-specific hazard increments
+#'     for the event of interest (rows = intervals, cols = observations)}
+#'   \item{CauseSpecificCumHaz}{matrix of cumulative cause-specific hazards
+#'     at each time point}
+#'   \item{CauseSpecificSurvival}{matrix of survival probabilities derived
+#'     from the cause-specific hazard alone}
+#'   \item{TotalSurvival}{matrix of overall survival probabilities that
+#'     incorporate all supplied cause-specific hazards}
 #'
 #' @importFrom stats model.matrix
 #' @export
-Predict_CRModel_DeepSurv <- function(modelout, newdata, newtimes = NULL, failcode = NULL) {
+Predict_CRModel_DeepSurv <- function(modelout, newdata, newtimes = NULL,
+                                     event_of_interest = NULL, other_models = NULL) {
 
   # ============================================================================
   # Input Validation
@@ -404,18 +556,20 @@ Predict_CRModel_DeepSurv <- function(modelout, newdata, newtimes = NULL, failcod
          paste(missing_vars, collapse = ", "))
   }
 
-  # Handle failcode parameter
-  if (is.null(failcode)) {
-    failcode <- modelout$failcode  # Use the failcode from training
-  } else {
-    if (!is.numeric(failcode) || length(failcode) != 1 || failcode < 1) {
-      stop("'failcode' must be a positive integer")
-    }
-    # Note: DeepSurv models can only predict for the event type they were trained on
-    if (failcode != modelout$failcode) {
-      stop("DeepSurv models can only predict for the event they were trained on (failcode = ", 
-           modelout$failcode, "). Requested failcode: ", failcode)
-    }
+  # Handle event_of_interest parameter
+  if (is.null(event_of_interest)) {
+    event_of_interest <- modelout$default_event_code
+  }
+
+  event_of_interest <- as.character(event_of_interest)
+
+  if (length(event_of_interest) != 1) {
+    stop("DeepSurv competing risks predictions require a single event code")
+  }
+
+  if (!identical(event_of_interest, modelout$default_event_code)) {
+    stop("DeepSurv models can only predict for the event they were trained on (event code = ",
+         modelout$default_event_code, "). Requested event code: ", event_of_interest)
   }
 
   # Validate newtimes if provided
@@ -427,94 +581,247 @@ Predict_CRModel_DeepSurv <- function(modelout, newdata, newtimes = NULL, failcod
       stop("'newtimes' must be a numeric vector of non-negative values")
     }
   }
-
-  # ============================================================================
-  # Prepare newdata
-  # ============================================================================
-  # Ensure factor levels match training data
-  newdata_prepared <- newdata[, modelout$expvars, drop = FALSE]
-
-  for (var in modelout$expvars) {
-    if (var %in% names(modelout$factor_levels)) {
-      training_levels <- modelout$factor_levels[[var]]
-      if (is.factor(newdata_prepared[[var]])) {
-        newdata_prepared[[var]] <- factor(newdata_prepared[[var]], levels = training_levels)
-      } else if (is.character(newdata_prepared[[var]])) {
-        newdata_prepared[[var]] <- factor(newdata_prepared[[var]], levels = training_levels)
+  
+  if (!("baseline_cumhaz" %in% names(modelout$model))) {
+    if ("baseline_subhaz" %in% names(modelout$model)) {
+      legacy_df <- modelout$model$baseline_subhaz
+      if (!all(c("time", "subhaz") %in% colnames(legacy_df))) {
+        stop("Legacy model object lacks required baseline subhazard columns `time` and `subhaz`.")
       }
+      cumhaz_vals <- legacy_df$subhaz
+      modelout$model$baseline_cumhaz <- data.frame(time = legacy_df$time, cumhaz = cumhaz_vals)
+      hazard_increments <- c(cumhaz_vals[1], diff(cumhaz_vals))
+      modelout$model$baseline_hazard <- data.frame(time = legacy_df$time, hazard = hazard_increments)
+    } else {
+      stop(
+        paste(
+          "Fitted model object is missing `baseline_cumhaz`;",
+          "re-fit the model using the updated ml4time2event version."
+        )
+      )
     }
   }
 
-  # Apply scaling to numeric variables
-  numeric_vars <- names(modelout$model$scaling_params$mean)
-  newdata_prepared[, numeric_vars] <- sweep(newdata_prepared[, numeric_vars, drop=FALSE],
-                                           2, modelout$model$scaling_params$mean, "-")
-  newdata_prepared[, numeric_vars] <- sweep(newdata_prepared[, numeric_vars, drop=FALSE],
-                                           2, modelout$model$scaling_params$sd, "/")
+  # =========================================================================
+  # Prepare newdata for primary model
+  # =========================================================================
+  prepared_primary <- prepare_newdata_for_model(modelout, newdata)
+  x_primary <- prepared_primary$x
 
-  # Create model matrix
-  x_new <- stats::model.matrix(~ . - 1, data = newdata_prepared)
-
-  # ============================================================================
-  # Make Predictions
-  # ============================================================================
-  # Get risk scores from neural network
-  log_risk_scores <- forward_pass(x_new, modelout$model$weights)$output
-
-  # Determine prediction times
-  if (is.null(newtimes)) {
-    pred_times <- c(0, modelout$model$baseline_subhaz$time)
-    baseline_times <- pred_times
-    baseline_cumsubhaz <- c(0, modelout$model$baseline_subhaz$subhaz)
-  } else {
-    pred_times <- sort(unique(newtimes))
-    baseline_times <- c(0, modelout$model$baseline_subhaz$time)
-    baseline_cumsubhaz <- c(0, modelout$model$baseline_subhaz$subhaz)
+  if (ncol(x_primary) != modelout$model$n[1]) {
+    stop("Model matrix column count does not match stored model configuration")
   }
 
-  # Calculate CIF using Fine-Gray style: CIF(t|x) = 1 - exp(-H0(t) * exp(risk_score))
-  # where H0(t) is the cumulative baseline subdistribution hazard  
-  # IMPORTANT: In survival analysis, we want higher risk scores to give higher CIF
-  # The current neural network may learn inverted relationships, so negate the scores
-  corrected_risk_scores <- -as.vector(log_risk_scores)
-  cif_matrix <- 1 - exp(-outer(baseline_cumsubhaz, exp(corrected_risk_scores)))
+  risk_scores_primary <- predict_risk_scores(modelout, x_primary)
 
-  # Ensure CIFs are properly bounded [0,1]
-  cif_matrix <- pmin(pmax(cif_matrix, 0), 1)
+  baseline_step_primary <- baseline_cumhaz_stepfun(modelout$model$baseline_cumhaz)
+  primary_time_grid <- sort(unique(c(0, modelout$model$baseline_cumhaz$time)))
 
-  # ============================================================================
-  # Apply Interpolation
-  # ============================================================================
-  if (is.null(newtimes)) {
-    # Return predictions in native time grid: [times, observations]
-    result_cifs <- cif_matrix  # cif_matrix is already [times, observations]
-    result_times <- baseline_times
-  } else {
-    # Interpolate to new time points
+  # =========================================================================
+  # Handle additional cause-specific models (competing events)
+  # =========================================================================
+  other_model_list <- list()
+  if (!is.null(other_models)) {
+    if (!is.list(other_models)) {
+      stop("`other_models` must be a list of fitted CRModel_DeepSurv objects")
+    }
+
+    other_model_list <- other_models
+
+    observed_event_codes <- modelout$default_event_code
+    for (i in seq_along(other_model_list)) {
+      model_i <- other_model_list[[i]]
+      if (!inherits(model_i, "ml4t2e_cr_deepsurv")) {
+        stop("All elements of `other_models` must be outputs from CRModel_DeepSurv")
+      }
+      if (identical(model_i$default_event_code, modelout$default_event_code)) {
+        stop("`other_models` contains a model for the same event code as the primary model")
+      }
+      if (model_i$default_event_code %in% observed_event_codes) {
+        stop("Duplicate event codes detected across competing models. Ensure one model per event code.")
+      }
+      observed_event_codes <- c(observed_event_codes, model_i$default_event_code)
+    }
+  }
+
+  # =========================================================================
+  # Construct common time grid across all cause-specific models
+  # =========================================================================
+  additional_times <- unlist(lapply(other_model_list, function(mod) mod$model$baseline_cumhaz$time))
+  full_time_grid <- sort(unique(c(primary_time_grid, additional_times)))
+  if (length(full_time_grid) == 0) {
+    full_time_grid <- primary_time_grid
+  }
+
+  if (!any(full_time_grid == 0)) {
+    full_time_grid <- c(0, full_time_grid)
+  }
+
+  # =========================================================================
+  # Compute hazard increments for primary event
+  # =========================================================================
+  hazard_primary <- hazard_increment_matrix(
+    baseline_step_primary,
+    times = full_time_grid,
+    risk_scores = risk_scores_primary
+  )
+
+  # =========================================================================
+  # Compute hazard increments for competing events
+  # =========================================================================
+  competing_hazards <- list()
+  if (length(other_model_list) > 0) {
+    for (i in seq_along(other_model_list)) {
+      model_i <- other_model_list[[i]]
+      model_name <- names(other_model_list)[i]
+      if (is.null(model_name) || identical(model_name, "")) {
+        model_name <- paste0("event_", model_i$default_event_code)
+      }
+
+      missing_vars_i <- setdiff(model_i$expvars, colnames(newdata))
+      if (length(missing_vars_i) > 0) {
+        stop(
+          paste0(
+            "The following variables required by competing model `",
+            model_name,
+            "` are missing in `newdata`: ",
+            paste(missing_vars_i, collapse = ", ")
+          )
+        )
+      }
+
+      prepared_i <- prepare_newdata_for_model(model_i, newdata)
+      risk_i <- predict_risk_scores(model_i, prepared_i$x)
+      step_i <- baseline_cumhaz_stepfun(model_i$model$baseline_cumhaz)
+      competing_hazards[[model_name]] <- hazard_increment_matrix(
+        step_fun = step_i,
+        times = full_time_grid,
+        risk_scores = risk_i
+      )
+    }
+  }
+
+  # =========================================================================
+  # Assemble cumulative hazards and survival on the native grid
+  # =========================================================================
+  intervals <- nrow(hazard_primary)
+  n_obs <- ncol(hazard_primary)
+  times_full <- full_time_grid
+
+  cumulative_hazard_primary <- rbind(
+    rep(0, n_obs),
+    apply(hazard_primary, 2, cumsum)
+  )
+
+  total_hazard_matrix <- hazard_primary
+  if (length(competing_hazards) > 0) {
+    for (comp_mat in competing_hazards) {
+      total_hazard_matrix <- total_hazard_matrix + comp_mat
+    }
+  }
+
+  cumulative_total_hazard <- rbind(
+    rep(0, n_obs),
+    apply(total_hazard_matrix, 2, cumsum)
+  )
+
+  survival_primary <- exp(-cumulative_hazard_primary)
+  survival_total <- exp(-cumulative_total_hazard)
+
+  # =========================================================================
+  # Compute CIF using Aalen-Johansen when competing models are provided
+  # =========================================================================
+  cif_matrix <- NULL
+  if (length(competing_hazards) > 0) {
+    cif_matrix <- matrix(0, nrow = intervals + 1, ncol = n_obs)
+    for (k in seq_len(intervals)) {
+      cif_matrix[k + 1, ] <- cif_matrix[k, ] + survival_total[k, ] * hazard_primary[k, ]
+    }
+    cif_matrix <- pmin(pmax(cif_matrix, 0), 1)
+  }
+
+  # =========================================================================
+  # Optional interpolation to new times
+  # =========================================================================
+  if (!is.null(newtimes)) {
     if (!is.numeric(newtimes) || any(newtimes < 0)) {
       stop("'newtimes' must be a numeric vector of non-negative values")
     }
-    newtimes <- sort(unique(newtimes))
+    target_times <- sort(unique(newtimes))
+    if (!any(target_times == 0)) {
+      target_times <- c(0, target_times)
+    }
 
-    # Use the standard CIF interpolation utility function
-    pred_cifs <- cifMatInterpolaltor(
-      probsMat = t(cif_matrix),  # cifMatInterpolaltor expects [observations, times]
-      times = baseline_times,
-      newtimes = newtimes
+    step_interpolate_matrix <- function(mat, src_times, tgt_times) {
+      res <- apply(mat, 2, function(col_vals) {
+        stats::approx(
+          x = src_times,
+          y = col_vals,
+          xout = tgt_times,
+          method = "constant",
+          rule = 2,
+          f = 0
+        )$y
+      })
+      matrix(res, nrow = length(tgt_times), ncol = ncol(mat))
+    }
+
+    cumulative_hazard_primary <- step_interpolate_matrix(
+      cumulative_hazard_primary,
+      src_times = times_full,
+      tgt_times = target_times
     )
 
-    # cifMatInterpolaltor returns [newtimes, observations], keep as [times, observations]
-    result_cifs <- pred_cifs
-    result_times <- newtimes
+    survival_primary <- exp(-cumulative_hazard_primary)
+
+    cumulative_total_hazard <- step_interpolate_matrix(
+      cumulative_total_hazard,
+      src_times = times_full,
+      tgt_times = target_times
+    )
+    survival_total <- exp(-cumulative_total_hazard)
+
+    hazard_primary <- apply(cumulative_hazard_primary, 2, function(col) c(0, diff(col)))
+    hazard_primary <- matrix(
+      hazard_primary,
+      nrow = nrow(cumulative_hazard_primary),
+      ncol = ncol(cumulative_hazard_primary)
+    )
+
+    if (!is.null(cif_matrix)) {
+      cif_interp <- cifMatInterpolaltor(
+        probsMat = t(cif_matrix),
+        times = times_full,
+        newtimes = target_times
+      )
+      cif_matrix <- cif_interp
+    }
+
+    times_full <- target_times
+  } else {
+    hazard_primary <- rbind(rep(0, n_obs), hazard_primary)
   }
 
-  # ============================================================================
-  # Return Results
-  # ============================================================================
+  # =========================================================================
+  # Assemble results
+  # =========================================================================
   result <- list(
-    CIFs = result_cifs,
-    Times = result_times
+    CIFs = cif_matrix,
+    Times = times_full,
+    CauseSpecificHazard = hazard_primary,
+    CauseSpecificCumHaz = cumulative_hazard_primary,
+    CauseSpecificSurvival = survival_primary,
+    TotalSurvival = survival_total
   )
 
-  return(result)
+  if (is.null(cif_matrix)) {
+    warning(
+      paste(
+        "Cumulative incidence functions require cause-specific models for all",
+        "competing events. Provide them via `other_models` to obtain CIF estimates."
+      )
+    )
+  }
+
+  result
 }

@@ -7,8 +7,28 @@
 #' @importFrom stats approxfun
 #' @noRd
 cifInterpolator<-function(x, probs, times){
+  # Sort times and probs together to handle unsorted input
+  if (length(times) > 1) {
+    sort_order <- order(times)
+    times <- times[sort_order]
+    probs <- probs[sort_order]
+  }
+  
+  # Handle single time/prob case by adding (0, 0) point if needed
+  if (length(times) == 1 && length(probs) == 1) {
+    if (times[1] == 0) {
+      # If the single point is at time 0, extrapolate with constant value
+      return(rep(probs[1], length(x)))
+    } else {
+      # Add (0, 0) point for proper interpolation
+      times <- c(0, times)
+      probs <- c(0, probs)
+    }
+  }
+  
   # Create an interpolation function based on existing times and probabilities
-  f<-stats::approxfun(times, probs, method = "linear", yleft = 0, yright = max(probs, na.rm = TRUE), rule = 2) # Ensure rule=2 to extrapolate using nearest value
+  # Use the last (rightmost) probability value for extrapolation, not the maximum
+  f<-stats::approxfun(times, probs, method = "linear", yleft = 0, yright = probs[length(probs)], rule = 2, na.rm = FALSE) # Ensure rule=2 to extrapolate using nearest value
   # Apply the interpolation function to the new times
   sapply(x, function(xi)f(xi))
 }
@@ -37,27 +57,16 @@ cifMatInterpolaltor<-function(probsMat, times,newtimes){
   # Apply the interpolation function to each row of the probability matrix
   # Note: apply returns matrix with rows=newtimes, cols=observations
   probsMat1<-apply(probsMat, 1, interpolate1)
-
-  # Ensure monotonicity (CIF should be non-decreasing)
-  # This step replaces values that decrease with the previous maximum value.
-  # Apply this correction column-wise (for each observation)
-  probsMat2<-apply(probsMat1, 2, function(col_probs){
-      # Find the first index where the probability decreases compared to the cumulative maximum
-      first_decrease_idx <- which(col_probs < cummax(col_probs))[1]
-      # If a decrease is found, replace all values up to that point with the maximum value found so far
-      # Also replace any NA values with the maximum
-      if (!is.na(first_decrease_idx)) {
-          replace(col_probs, (seq_along(col_probs) <= first_decrease_idx) | is.na(col_probs), max(col_probs[1:first_decrease_idx], na.rm = TRUE))
-      } else {
-          # If no decrease, just replace NAs if any exist (e.g., from extrapolation)
-          replace(col_probs, is.na(col_probs), max(col_probs, na.rm = TRUE))
-      }
-  })
-  # Ensure the result is a matrix, especially if only one newtime is requested
-  if (!is.matrix(probsMat2)) {
-      probsMat2 <- matrix(probsMat2, nrow = length(newtimes), ncol = ncol(probsMat1))
+  
+  # Ensure probsMat1 is always a matrix (when newtimes has length 1, apply returns a vector)
+  if (!is.matrix(probsMat1)) {
+    probsMat1 <- matrix(probsMat1, nrow = length(newtimes), ncol = nrow(probsMat))
   }
-  probsMat2
+
+  # The monotonicity and NA handling has been removed. The function now returns
+  # the raw interpolated values. Models should be responsible for producing
+  # valid CIFs.
+  probsMat1
 }
 
 
@@ -69,6 +78,11 @@ cifMatInterpolaltor<-function(probsMat, times,newtimes){
 #' @return averaged CIF matrix (rows=newtimes, cols=observations)
 #' @noRd
 cifMatListAveraging<-function(listprobsMat, type="CumHaz"){
+  # Validate type parameter first, regardless of list length
+  if (!type %in% c("CumHaz", "prob")) {
+    stop("Type must be either 'CumHaz' or 'prob'")
+  }
+  
   if (length(listprobsMat) == 0) return(NULL)
   if (length(listprobsMat) == 1) return(listprobsMat[[1]])
 
@@ -87,7 +101,7 @@ cifMatListAveraging<-function(listprobsMat, type="CumHaz"){
       HazzardArray[,,i]<--log(1 - listprobsMat[[i]] + 1e-10)
     }
     # Calculate the mean cumulative hazard across models
-    MeanHazzard<-apply(HazzardArray, c(1,2),function(x)(mean(x, na.rm = TRUE))) # Use na.rm=TRUE
+    MeanHazzard<-apply(HazzardArray, c(1,2),function(x)(mean(x, na.rm = FALSE)))
     # Convert mean cumulative hazard back to probability: 1 - exp(-H)
     NewProbs<-1-exp(-MeanHazzard)
   } else if (type=="prob"){
@@ -97,11 +111,9 @@ cifMatListAveraging<-function(listprobsMat, type="CumHaz"){
       ProbsArray[,,i]<-listprobsMat[[i]]
     }
     # Calculate the mean probability across models
-    NewProbs<-apply(ProbsArray, c(1,2),function(x)(mean(x, na.rm = TRUE))) # Use na.rm=TRUE
+    NewProbs<-apply(ProbsArray, c(1,2),function(x)(mean(x, na.rm = FALSE)))
     # Ensure probabilities are bounded between 0 and 1
     NewProbs <- pmax(pmin(NewProbs, 1.0), 0.0)
-  } else {
-      stop("Type must be either 'CumHaz' or 'prob'")
   }
   NewProbs
 }
@@ -259,4 +271,115 @@ aalenJohansenCIF <- function(cause_specific_survs, times, event_of_interest) {
   }
 
   return(CIF)
+}
+
+
+#' @title aalenJohansenFromCoxModels
+#' @description Calculate CIF using proper Aalen-Johansen estimator from cause-specific Cox models.
+#' @param cox_models list of fitted Cox models for each cause
+#' @param newdata data frame of new observations
+#' @param times vector of time points
+#' @param event_of_interest the event type to calculate CIF for
+#' @return matrix of CIF values (rows=times, cols=observations)
+#' @noRd
+aalenJohansenFromCoxModels <- function(cox_models, newdata, times, event_of_interest) {
+  
+  event_of_interest <- as.character(event_of_interest)
+  n_times <- length(times)
+  n_obs <- nrow(newdata)
+  
+  # Initialize CIF matrix
+  cif_matrix <- matrix(0, nrow = n_times, ncol = n_obs)
+  
+
+  
+  # For each observation
+  for (i in 1:n_obs) {
+    obs_data <- newdata[i, , drop = FALSE]
+
+    if (anyNA(obs_data)) {
+      cif_matrix[, i] <- NA_real_
+      next
+    }
+    
+    # Calculate cause-specific hazards at each time point
+    cause_hazards <- vector("list", length(cox_models))
+    names(cause_hazards) <- names(cox_models)
+    
+    for (cause in names(cox_models)) {
+      cox_model <- cox_models[[cause]]
+      
+      # Get baseline cumulative hazard. This will now error out if newdata is problematic.
+      base_surv <- survival::survfit(cox_model, newdata = obs_data)
+      
+      # Extract hazard increments (Nelson-Aalen style)
+      if (length(base_surv$time) > 0 && !any(is.na(base_surv$surv))) {
+        # Interpolate baseline cumulative hazard to our time grid
+        cum_base_haz <- stats::approx(
+          x = c(0, base_surv$time), 
+          y = c(0, -log(pmax(base_surv$surv, 1e-10))), # Avoid log(0)
+          xout = times, 
+          method = "constant", 
+          f = 0, 
+          rule = 2
+        )$y
+        
+        # Convert to hazard increments
+        haz_increments <- diff(c(0, cum_base_haz))
+      } else {
+        haz_increments <- rep(0, n_times)
+      }
+      
+      cause_hazards[[cause]] <- haz_increments
+    }
+    
+    # Calculate overall survival using all cause-specific hazards
+    overall_surv <- rep(1, n_times)
+    cum_overall_haz <- 0
+    
+    for (t in 1:n_times) {
+      # Add hazard increment from all causes
+      for (cause in names(cause_hazards)) {
+        cum_overall_haz <- cum_overall_haz + cause_hazards[[cause]][t]
+      }
+      overall_surv[t] <- exp(-cum_overall_haz)
+    }
+    
+
+    
+    # Calculate CIF using Aalen-Johansen formula
+    # CIF_j(t) = ∫_0^t S(s-) * λ_j(s) ds
+    # Discrete version: CIF_j(t) = Σ_{s≤t} S(s-) * Δλ_j(s)
+    
+    if (event_of_interest %in% names(cause_hazards)) {
+      target_hazards <- cause_hazards[[event_of_interest]]
+      
+      for (t in 1:n_times) {
+        if (t == 1) {
+          # At first time point, S(0-) = 1
+          cif_matrix[t, i] <- 1.0 * target_hazards[t]
+        } else {
+          # CIF(t) = CIF(t-1) + S(t-1) * Δλ_j(t)
+          cif_matrix[t, i] <- cif_matrix[t-1, i] + overall_surv[t-1] * target_hazards[t]
+        }
+      }
+    }
+  }
+  
+  # Ensure CIF is bounded [0, 1] and monotonic
+  # Use matrix() to preserve dimensions after pmax/pmin operations
+  original_dims <- dim(cif_matrix)
+  cif_matrix <- matrix(pmax(0, pmin(as.vector(cif_matrix), 1)), 
+                       nrow = original_dims[1], ncol = original_dims[2])
+  
+  # Ensure monotonicity
+  if (n_obs == 1) {
+    cif_matrix[, 1] <- cummax(cif_matrix[, 1])
+  } else {
+    for (j in 1:n_obs) {
+      cif_matrix[, j] <- cummax(cif_matrix[, j])
+    }
+  }
+  
+  return(cif_matrix)
 }

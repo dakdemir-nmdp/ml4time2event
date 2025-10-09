@@ -44,6 +44,18 @@ expvars_numeric <- c("x1", "x2", "x3")
 expvars_all <- c("x1", "x2", "x3", "cat1", "cat2")
 expvars_many <- c("x1", "x2", "x3", "x4", "cat1", "cat2")
 
+fit_cr_deepsurv <- function(event_code, expvars = expvars_numeric, size = 3) {
+  CRModel_DeepSurv(
+    data = train_data,
+    expvars = expvars,
+    timevar = "time",
+    eventvar = "event",
+    event_codes = event_code,
+    size = size,
+    maxit = 50
+  )
+}
+
 # ==============================================================================
 # Tests for CRModel_DeepSurv - Basic Functionality
 # ==============================================================================
@@ -54,7 +66,7 @@ test_that("CRModel_DeepSurv fits basic model", {
     expvars = expvars_numeric,
     timevar = "time",
     eventvar = "event",
-    failcode = 1,
+    event_codes = 1,
     size = 3,  # Small network for testing
     maxit = 50  # Limited iterations for testing
   )
@@ -62,7 +74,9 @@ test_that("CRModel_DeepSurv fits basic model", {
   # Check output structure
   expect_type(model, "list")
   expect_named(model, c("model", "times", "varprof", "expvars",
-                       "factor_levels", "failcode", "model_type"))
+                        "factor_levels", "event_codes", "event_codes_numeric",
+                        "default_event_code", "model_type", "timevar", "eventvar",
+                        "time_range"))
 
   # Check model type
   expect_equal(model$model_type, "cr_deepsurv")
@@ -77,8 +91,8 @@ test_that("CRModel_DeepSurv fits basic model", {
   expect_true(is.list(model$varprof))
   expect_equal(length(model$varprof), length(expvars_numeric))
 
-  # Check failcode
-  expect_equal(model$failcode, 1)
+  # Check default event code
+  expect_equal(model$default_event_code, "1")
 })
 
 test_that("CRModel_DeepSurv handles factor variables", {
@@ -87,7 +101,7 @@ test_that("CRModel_DeepSurv handles factor variables", {
     expvars = expvars_all,
     timevar = "time",
     eventvar = "event",
-    failcode = 1,
+    event_codes = 1,
     size = 3,
     maxit = 50
   )
@@ -96,19 +110,19 @@ test_that("CRModel_DeepSurv handles factor variables", {
   expect_true(is.list(model$varprof))
 })
 
-test_that("CRModel_DeepSurv handles different failcodes", {
-  # Test failcode = 2
+test_that("CRModel_DeepSurv handles custom event codes", {
+  # Test event code = 2
   model <- CRModel_DeepSurv(
     data = train_data,
     expvars = expvars_numeric,
     timevar = "time",
     eventvar = "event",
-    failcode = 2,
+    event_codes = 2,
     size = 3,
     maxit = 50
   )
 
-  expect_equal(model$failcode, 2)
+  expect_equal(model$default_event_code, "2")
   expect_s3_class(model$model, "nnet")
 })
 
@@ -143,10 +157,14 @@ test_that("CRModel_DeepSurv validates inputs", {
                                timevar = "time", eventvar = "event"),
                "'expvars' must be a non-empty character vector")
 
-  # Invalid failcode
+  # Invalid event_codes
   expect_error(CRModel_DeepSurv(data = train_data, expvars = expvars_numeric,
-                               timevar = "time", eventvar = "event", failcode = 0),
-               "'failcode' must be a positive integer")
+                                timevar = "time", eventvar = "event", event_codes = character(0)),
+               "'event_codes' must be NULL or a non-empty vector")
+
+  expect_error(CRModel_DeepSurv(data = train_data, expvars = expvars_numeric,
+                                timevar = "time", eventvar = "event", event_codes = 999),
+               "not present in training data")
 
   # Missing timevar column
   expect_error(CRModel_DeepSurv(data = train_data, expvars = expvars_numeric,
@@ -173,12 +191,12 @@ test_that("CRModel_DeepSurv handles insufficient data", {
 })
 
 test_that("CRModel_DeepSurv handles no events of interest", {
-  # Create data with no events of failcode = 1
+  # Create data with no events of event code = 1
   no_event_data <- train_data
   no_event_data$event[no_event_data$event == 1] <- 2  # Change all events to competing
 
   expect_error(CRModel_DeepSurv(data = no_event_data, expvars = expvars_numeric,
-                               timevar = "time", eventvar = "event", failcode = 1),
+                               timevar = "time", eventvar = "event", event_codes = 1),
                "No events of type 1 in training data")
 })
 
@@ -186,94 +204,103 @@ test_that("CRModel_DeepSurv handles no events of interest", {
 # Tests for Predict_CRModel_DeepSurv - Basic Functionality
 # ==============================================================================
 
-test_that("Predict_CRModel_DeepSurv returns correct output structure", {
-  model <- CRModel_DeepSurv(
-    data = train_data,
-    expvars = expvars_numeric,
-    timevar = "time",
-    eventvar = "event",
-    failcode = 1,
-    size = 3,
-    maxit = 50
+test_that("Predict_CRModel_DeepSurv returns hazard components without competing models", {
+  primary_model <- fit_cr_deepsurv(1)
+
+  preds <- expect_warning(
+    Predict_CRModel_DeepSurv(primary_model, test_data),
+    "Cumulative incidence functions require"
   )
 
-  preds <- Predict_CRModel_DeepSurv(model, test_data)
-
-  # Check output structure
   expect_type(preds, "list")
-  expect_named(preds, c("CIFs", "Times"))
-
-  # Check CIFs matrix
-  expect_true(is.matrix(preds$CIFs))
-  expect_equal(ncol(preds$CIFs), nrow(test_data))
-
-  # Check Times
+  expect_setequal(
+    names(preds),
+    c("CIFs", "Times", "CauseSpecificHazard", "CauseSpecificCumHaz",
+      "CauseSpecificSurvival", "TotalSurvival")
+  )
+  expect_null(preds$CIFs)
   expect_true(is.numeric(preds$Times))
   expect_true(all(preds$Times >= 0))
+  expect_true(is.matrix(preds$CauseSpecificHazard))
+  expect_true(is.matrix(preds$CauseSpecificCumHaz))
+  expect_true(is.matrix(preds$CauseSpecificSurvival))
+  expect_equal(ncol(preds$CauseSpecificHazard), nrow(test_data))
+  expect_equal(preds$CauseSpecificSurvival[1, ], rep(1, nrow(test_data)))
+})
 
-  # Check CIF values (should be between 0 and 1)
+test_that("Predict_CRModel_DeepSurv returns CIFs when competing models provided", {
+  primary_model <- fit_cr_deepsurv(1)
+  competing_model <- fit_cr_deepsurv(2)
+
+  preds <- Predict_CRModel_DeepSurv(
+    primary_model,
+    test_data,
+    other_models = list(cause2 = competing_model)
+  )
+
+  expect_true(is.matrix(preds$CIFs))
+  expect_equal(ncol(preds$CIFs), nrow(test_data))
   expect_true(all(preds$CIFs >= 0 & preds$CIFs <= 1, na.rm = TRUE))
 })
 
 test_that("Predict_CRModel_DeepSurv CIFs are monotonically non-decreasing", {
-  model <- CRModel_DeepSurv(
-    data = train_data,
-    expvars = expvars_numeric,
-    timevar = "time",
-    eventvar = "event",
-    failcode = 1,
-    size = 3,
-    maxit = 50
+  primary_model <- fit_cr_deepsurv(1)
+  competing_model <- fit_cr_deepsurv(2)
+
+  preds <- Predict_CRModel_DeepSurv(
+    primary_model,
+    test_data,
+    other_models = list(cause2 = competing_model)
   )
 
-  preds <- Predict_CRModel_DeepSurv(model, test_data)
-
-  # For each observation, CIF should be non-decreasing over time
   for (i in seq_len(ncol(preds$CIFs))) {
     cif_curve <- preds$CIFs[, i]
     diffs <- diff(cif_curve)
-    expect_true(all(diffs >= -1e-10))  # Allow small numerical tolerance
+    expect_true(all(diffs >= -1e-10))
   }
 })
 
 test_that("Predict_CRModel_DeepSurv handles custom time points", {
-  model <- CRModel_DeepSurv(
-    data = train_data,
-    expvars = expvars_numeric,
-    timevar = "time",
-    eventvar = "event",
-    failcode = 1,
-    size = 3,
-    maxit = 50
-  )
+  primary_model <- fit_cr_deepsurv(1)
+  competing_model <- fit_cr_deepsurv(2)
 
   custom_times <- c(1, 5, 10, 20, 50)
-  preds <- Predict_CRModel_DeepSurv(model, test_data, newtimes = custom_times)
+  preds <- Predict_CRModel_DeepSurv(
+    primary_model,
+    test_data,
+    newtimes = custom_times,
+    other_models = list(cause2 = competing_model)
+  )
 
-  expect_equal(preds$Times, custom_times)
-  expect_equal(nrow(preds$CIFs), length(custom_times))
+  expect_true(0 %in% preds$Times)
+  expect_true(all(custom_times %in% preds$Times))
+  expect_equal(nrow(preds$CIFs), length(preds$Times))
   expect_equal(ncol(preds$CIFs), nrow(test_data))
 })
 
 test_that("Predict_CRModel_DeepSurv includes time 0", {
-  model <- CRModel_DeepSurv(
-    data = train_data,
-    expvars = expvars_numeric,
-    timevar = "time",
-    eventvar = "event",
-    failcode = 1,
-    size = 3,
-    maxit = 50
+  primary_model <- fit_cr_deepsurv(1)
+  competing_model <- fit_cr_deepsurv(2)
+
+  preds <- Predict_CRModel_DeepSurv(
+    primary_model,
+    test_data,
+    other_models = list(cause2 = competing_model)
   )
 
-  preds <- Predict_CRModel_DeepSurv(model, test_data)
-
-  # Time 0 should be included
   expect_true(0 %in% preds$Times)
-
-  # CIF at time 0 should be 0
   time_0_idx <- which(preds$Times == 0)
   expect_true(all(abs(preds$CIFs[time_0_idx, ]) < 1e-6))
+
+  expect_error(
+    Predict_CRModel_DeepSurv(
+      primary_model,
+      test_data,
+      event_of_interest = 2,
+      other_models = list(cause2 = competing_model)
+    ),
+    "DeepSurv models can only predict"
+  )
 })
 
 # ==============================================================================
@@ -286,7 +313,7 @@ test_that("Predict_CRModel_DeepSurv validates inputs", {
     expvars = expvars_numeric,
     timevar = "time",
     eventvar = "event",
-    failcode = 1,
+    event_codes = 1,
     size = 3,
     maxit = 50
   )
@@ -323,18 +350,14 @@ test_that("Predict_CRModel_DeepSurv validates inputs", {
 # ==============================================================================
 
 test_that("Predict_CRModel_DeepSurv handles matching factor levels", {
-  model <- CRModel_DeepSurv(
-    data = train_data,
-    expvars = expvars_all,
-    timevar = "time",
-    eventvar = "event",
-    failcode = 1,
-    size = 3,
-    maxit = 50
-  )
+  primary_model <- fit_cr_deepsurv(1, expvars = expvars_all)
+  competing_model <- fit_cr_deepsurv(2, expvars = expvars_all)
 
-  # Test data with same factor levels
-  preds <- Predict_CRModel_DeepSurv(model, test_data)
+  preds <- Predict_CRModel_DeepSurv(
+    primary_model,
+    test_data,
+    other_models = list(cause2 = competing_model)
+  )
 
   expect_equal(ncol(preds$CIFs), nrow(test_data))
   expect_true(all(!is.na(preds$CIFs)))
@@ -345,34 +368,24 @@ test_that("Predict_CRModel_DeepSurv handles matching factor levels", {
 # ==============================================================================
 
 test_that("CRModel_DeepSurv accepts different network sizes", {
-  # Small network
-  model_small <- CRModel_DeepSurv(
-    data = train_data,
-    expvars = expvars_numeric,
-    timevar = "time",
-    eventvar = "event",
-    failcode = 1,
-    size = 2,
-    maxit = 50
-  )
-
-  # Larger network
-  model_large <- CRModel_DeepSurv(
-    data = train_data,
-    expvars = expvars_numeric,
-    timevar = "time",
-    eventvar = "event",
-    failcode = 1,
-    size = 5,
-    maxit = 50
-  )
+  model_small <- fit_cr_deepsurv(1, size = 2)
+  model_large <- fit_cr_deepsurv(1, size = 5)
+  competing_small <- fit_cr_deepsurv(2, size = 2)
+  competing_large <- fit_cr_deepsurv(2, size = 5)
 
   expect_s3_class(model_small$model, "nnet")
   expect_s3_class(model_large$model, "nnet")
 
-  # Both should produce valid predictions
-  preds_small <- Predict_CRModel_DeepSurv(model_small, test_data)
-  preds_large <- Predict_CRModel_DeepSurv(model_large, test_data)
+  preds_small <- Predict_CRModel_DeepSurv(
+    model_small,
+    test_data,
+    other_models = list(cause2 = competing_small)
+  )
+  preds_large <- Predict_CRModel_DeepSurv(
+    model_large,
+    test_data,
+    other_models = list(cause2 = competing_large)
+  )
 
   expect_true(all(preds_small$CIFs >= 0 & preds_small$CIFs <= 1))
   expect_true(all(preds_large$CIFs >= 0 & preds_large$CIFs <= 1))
@@ -385,7 +398,7 @@ test_that("CRModel_DeepSurv handles regularization", {
     expvars = expvars_numeric,
     timevar = "time",
     eventvar = "event",
-    failcode = 1,
+    event_codes = 1,
     size = 3,
     decay = 0,
     maxit = 50
@@ -397,7 +410,7 @@ test_that("CRModel_DeepSurv handles regularization", {
     expvars = expvars_numeric,
     timevar = "time",
     eventvar = "event",
-    failcode = 1,
+    event_codes = 1,
     size = 3,
     decay = 0.1,
     maxit = 50

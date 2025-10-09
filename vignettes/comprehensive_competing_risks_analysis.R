@@ -132,8 +132,12 @@ cat("\n=== STEP 5: COMPETING RISKS MODEL TRAINING ===\n")
 cat("Explanatory variables:", paste(expvars, collapse = ", "), "\n")
 cat("Time variable:", timevar, "\n")
 cat("Event variable:", eventvar, "\n")
-cat("Event of interest (failcode): 1 (Relapse)\n")
-cat("Competing risk: 2 (TRM)\n\n")
+primary_event_code <- 1L
+competing_event_codes <- 2L
+event_codes_all <- c(primary_event_code, competing_event_codes)
+
+cat("Event of interest:", primary_event_code, "(Relapse)\n")
+cat("Competing risk(s):", paste(competing_event_codes, collapse = ", "), "(TRM)\n\n")
 
 # Initialize model storage
 models <- list()
@@ -147,7 +151,7 @@ tryCatch({
     expvars = expvars,
     timevar = timevar,
     eventvar = eventvar,
-    failcode = 1
+    event_codes = event_codes_all
   )
   models[["Cox"]] <- cox_model
   model_names <- c(model_names, "Cox")
@@ -164,7 +168,7 @@ tryCatch({
     expvars = expvars,
     timevar = timevar,
     eventvar = eventvar,
-    failcode = 1
+    event_codes = primary_event_code
   )
   models[["FineGray"]] <- fg_model
   model_names <- c(model_names, "FineGray")
@@ -199,7 +203,7 @@ tryCatch({
     expvars = expvars,
     timevar = timevar,
     eventvar = eventvar,
-    failcode = 1,
+    event_codes = event_codes_all,
     nrounds = 100,
     eta = 0.1,
     max_depth = 3
@@ -219,7 +223,7 @@ tryCatch({
     expvars = expvars,
     timevar = timevar,
     eventvar = eventvar,
-    failcode = 1
+    event_codes = event_codes_all
   )
   models[["GAM"]] <- gam_model
   model_names <- c(model_names, "GAM")
@@ -236,7 +240,7 @@ tryCatch({
     expvars = expvars,
     timevar = timevar,
     eventvar = eventvar,
-    failcode = 1,
+    event_codes = primary_event_code,
     ntree = 50,  # Smaller for speed
     ndpost = 200,  # Smaller for speed
     nskip = 50,   # Smaller for speed
@@ -250,24 +254,61 @@ tryCatch({
 })
 
 # 6.7 DeepSurv for Competing Risks
-cat("\nTraining DeepSurv competing risks model...\n")
+cat("\nTraining DeepSurv competing risks model (event", primary_event_code, ")...\n")
+deepsurv_primary <- NULL
+deepsurv_competing_models <- list()
+
 tryCatch({
-  deepsurv_model <- CRModel_DeepSurv(
+  deepsurv_primary <- CRModel_DeepSurv(
     data = train_data,
     expvars = expvars,
     timevar = timevar,
     eventvar = eventvar,
-    failcode = 1,
-    size = 5,  # Hidden layer size
-    decay = 0.01,  # L2 regularization
-    maxit = 100  # Maximum iterations (smaller for speed)
+    event_codes = primary_event_code,
+    size = 5,
+    decay = 0.01,
+    maxit = 100
   )
-  models[["DeepSurv"]] <- deepsurv_model
-  model_names <- c(model_names, "DeepSurv")
-  cat("✓ DeepSurv model trained successfully\n")
+  cat("✓ DeepSurv primary event model trained successfully\n")
 }, error = function(e) {
-  cat("✗ DeepSurv model failed:", e$message, "\n")
+  cat("✗ DeepSurv primary event model failed:", e$message, "\n")
 })
+
+if (!is.null(deepsurv_primary) && length(competing_event_codes) > 0) {
+  for (comp_code in competing_event_codes) {
+    cat("Training DeepSurv competing event model (event", comp_code, ")...\n")
+    tryCatch({
+      comp_model <- CRModel_DeepSurv(
+        data = train_data,
+        expvars = expvars,
+        timevar = timevar,
+        eventvar = eventvar,
+        event_codes = comp_code,
+        size = 5,
+        decay = 0.01,
+        maxit = 100
+      )
+      model_name_comp <- paste0("event_", comp_code)
+      deepsurv_competing_models[[model_name_comp]] <- comp_model
+      cat("✓ DeepSurv competing event model", comp_code, "trained successfully\n")
+    }, error = function(e) {
+      cat("✗ DeepSurv competing event model", comp_code, "failed:", e$message, "\n")
+    })
+  }
+}
+
+if (!is.null(deepsurv_primary)) {
+  models[["DeepSurv"]] <- list(
+    primary = deepsurv_primary,
+    competing = deepsurv_competing_models
+  )
+  model_names <- c(model_names, "DeepSurv")
+  if (length(competing_event_codes) > 0 && length(deepsurv_competing_models) == 0) {
+    warning(
+      "DeepSurv competing event models could not be trained; cumulative incidence estimates may be unavailable."
+    )
+  }
+}
 
 # 6.8 RuleFit for Competing Risks
 cat("\nTraining RuleFit competing risks model...\n")
@@ -277,7 +318,7 @@ tryCatch({
     expvars = expvars,
     timevar = timevar,
     eventvar = eventvar,
-    failcode = 1
+    event_codes = primary_event_code
   )
   models[["RuleFit"]] <- rulefit_model
   model_names <- c(model_names, "RuleFit")
@@ -294,7 +335,7 @@ tryCatch({
     expvars = expvars,
     timevar = timevar,
     eventvar = eventvar,
-    failcode = 1
+    event_codes = event_codes_all
   )
   models[["SurvReg"]] <- survreg_model
   model_names <- c(model_names, "SurvReg")
@@ -320,7 +361,19 @@ predict_functions <- list(
   "XGBoost" = Predict_CRModel_xgboost,
   "GAM" = Predict_CRModel_GAM,
   "BART" = Predict_CRModel_BART,
-  "DeepSurv" = Predict_CRModel_DeepSurv,
+  "DeepSurv" = function(model_bundle, newdata) {
+    if (is.null(model_bundle$primary)) {
+      stop("DeepSurv model bundle is missing the primary event model")
+    }
+    if (length(model_bundle$competing) == 0) {
+      stop("DeepSurv predictions require trained models for all competing events")
+    }
+    Predict_CRModel_DeepSurv(
+      modelout = model_bundle$primary,
+      newdata = newdata,
+      other_models = model_bundle$competing
+    )
+  },
   "RuleFit" = Predict_CRModel_rulefit,
   "SurvReg" = Predict_CRModel_SurvReg
 )
@@ -330,9 +383,13 @@ for (model_name in model_names) {
     cat("Generating", model_name, "predictions...\n")
     tryCatch({
       pred <- predict_functions[[model_name]](models[[model_name]], test_data)
+      if (is.null(pred$CIFs)) {
+        stop(model_name, " predictions did not include cumulative incidence functions")
+      }
       predictions[[model_name]] <- pred
+      cif_dims <- paste(dim(pred$CIFs), collapse = " x ")
       cat(model_name, "predictions - Times length:", length(pred$Times),
-          "CIF dimensions:", dim(pred$CIF), "\n")
+          "CIF dimensions:", cif_dims, "\n")
     }, error = function(e) {
       cat(model_name, "prediction failed:", e$message, "\n")
     })
@@ -363,12 +420,13 @@ cat("Evaluation time point:", round(eval_time, 2), "months\n\n")
 for (model_name in names(predictions)) {
   tryCatch({
     pred <- predictions[[model_name]]
+    if (is.null(pred$CIFs)) {
+      stop("CIFs unavailable for model")
+    }
 
-    # Get CIF predictions at evaluation time
     time_idx <- which.min(abs(pred$Times - eval_time))
-    cif_at_eval <- pred$CIF[time_idx, ]
+    cif_at_eval <- pred$CIFs[time_idx, ]
 
-    # Calculate concordance for competing risks
     concordance_val <- timedepConcordanceCR(
       SurvObj = surv_obj,
       Predictions = matrix(cif_at_eval, ncol = 1),
@@ -393,21 +451,21 @@ brier_scores <- list()
 for (model_name in names(predictions)) {
   tryCatch({
     pred <- predictions[[model_name]]
+    if (is.null(pred$CIFs)) {
+      stop("CIFs unavailable for model")
+    }
 
-    # Calculate Brier score at evaluation time
     time_idx <- which.min(abs(pred$Times - eval_time))
-    cif_at_eval <- pred$CIF[time_idx, ]
+    cif_at_eval <- pred$CIFs[time_idx, ]
 
-    # Binary outcome: did relapse occur by eval_time?
     observed_outcome <- ifelse(actual_events == 1 & actual_times <= eval_time, 1, 0)
-
-    # Brier score: mean squared error
     brier_score <- mean((cif_at_eval - observed_outcome)^2)
     brier_scores[[model_name]] <- brier_score
 
     cat(model_name, "Brier score:", round(brier_score, 4), "\n")
   }, error = function(e) {
-    cat(model_name, "Brier score calculation failed:", e$message, "\n")
+    brier_scores[[model_name]] <- NA
+    cat(model_name, "Brier score: NA (failed:", e$message, ")\n")
   })
 }
 
@@ -421,12 +479,12 @@ integrated_concordances <- list()
 for (model_name in names(predictions)) {
   tryCatch({
     pred <- predictions[[model_name]]
+    if (is.null(pred$CIFs)) {
+      stop("CIFs unavailable for model")
+    }
 
-    # integratedConcordanceCR expects predictions as matrix (rows=observations, cols=times)
-    # pred$CIF is already in this format (times x observations), so we transpose it
-    cif_matrix <- t(pred$CIF)  # Now: observations x times
+    cif_matrix <- t(pred$CIFs)
 
-    # Calculate integrated concordance for competing risks (event 1)
     integrated_conc <- integratedConcordanceCR(
       SurvObj = surv_obj,
       Predictions = cif_matrix,
@@ -453,7 +511,8 @@ if (length(valid_concordances) >= 5) {
 } else if (length(valid_concordances) > 0) {
   top_models <- names(valid_concordances)
 } else {
-  top_models <- model_names[1:min(5, length(model_names))]
+  top_n <- min(5, length(model_names))
+  top_models <- if (top_n > 0) model_names[seq_len(top_n)] else character(0)
 }
 
 cat("Top models for ensemble:", paste(top_models, collapse = ", "), "\n")
@@ -463,8 +522,15 @@ cat("Top models for ensemble:", paste(top_models, collapse = ", "), "\n")
 all_times <- c()
 for (model_name in top_models) {
   if (model_name %in% names(predictions)) {
-    all_times <- c(all_times, predictions[[model_name]]$Times)
+    pred_obj <- predictions[[model_name]]
+    if (!is.null(pred_obj$CIFs)) {
+      all_times <- c(all_times, pred_obj$Times)
+    }
   }
+}
+
+if (length(all_times) == 0) {
+  stop("No models with cumulative incidence functions available for ensemble construction.")
 }
 
 # Create common time grid
@@ -475,7 +541,10 @@ common_times <- common_times[common_times <= max(all_times) & common_times > 0]
 if (length(top_models) == 1) {
   model_name <- top_models[1]
   pred <- predictions[[model_name]]
-  ensemble_cif <- t(pred$CIF)  # Transpose to times x observations format
+  if (is.null(pred$CIFs)) {
+    stop("Selected ensemble model does not provide CIF outputs.")
+  }
+  ensemble_cif <- t(pred$CIFs)  # Transpose to times x observations format
   common_times <- pred$Times
   cat("Ensemble uses single model:", model_name, "\n")
 } else {
@@ -485,23 +554,30 @@ if (length(top_models) == 1) {
   for (model_name in top_models) {
     if (model_name %in% names(predictions)) {
       pred <- predictions[[model_name]]
-      model_interp <- matrix(NA, nrow = length(common_times), ncol = ncol(pred$CIF))
+      if (is.null(pred$CIFs)) {
+        next
+      }
+      model_interp <- matrix(NA, nrow = length(common_times), ncol = ncol(pred$CIFs))
 
-      for (j in seq_len(ncol(pred$CIF))) {
+  for (j in seq_len(ncol(pred$CIFs))) {
         tryCatch({
-          model_interp[, j] <- approx(pred$Times, pred$CIF[, j],
+          model_interp[, j] <- approx(pred$Times, pred$CIFs[, j],
                                        xout = common_times, method = "linear",
                                        rule = 2)$y
         }, error = function(e) {
           # Fallback: use nearest neighbor interpolation
           model_interp[, j] <- sapply(common_times, function(t) {
             idx <- which.min(abs(pred$Times - t))
-            pred$CIF[idx, j]
+            pred$CIFs[idx, j]
           })
         })
       }
       ensemble_matrices[[model_name]] <- model_interp
     }
+  }
+
+  if (length(ensemble_matrices) == 0) {
+    stop("No ensemble matrices constructed; ensure selected models provide CIFs.")
   }
 
   # Create ensemble by averaging CIF predictions
@@ -571,12 +647,14 @@ etl_results <- list()
 for (model_name in names(predictions)) {
   tryCatch({
     pred <- predictions[[model_name]]
+    if (is.null(pred$CIFs)) {
+      stop("CIFs unavailable for model")
+    }
 
-    # Calculate ETL for each subject by integrating CIF
-    etl_values <- numeric(nrow(pred$CIF))
-    for (j in seq_len(nrow(pred$CIF))) {
+    etl_values <- numeric(nrow(pred$CIFs))
+    for (j in seq_len(nrow(pred$CIFs))) {
       # Numerical integration of CIF from 0 to max_time
-      cif_curve <- pred$CIF[j, ]
+      cif_curve <- pred$CIFs[j, ]
       time_grid <- pred$Times
 
       # Use trapezoidal rule for integration
@@ -661,6 +739,9 @@ for (patient in plot_patients) {
   # Add predictions from all models
   for (model_name in names(predictions)) {
     pred <- predictions[[model_name]]
+    if (is.null(pred$CIFs)) {
+      stop("CIFs unavailable for model during plotting")
+    }
     model_data <- data.frame(
       Time = pred$Times,
       CIF = pred$CIFs[, patient],  # Fixed: CIFs matrix is [times, observations]
@@ -923,13 +1004,13 @@ cat("Models Successfully Trained:", length(models), "\n")
 cat("Models with Predictions:", length(predictions), "\n\n")
 
 cat("Model Performance (Concordance Index):\n")
-for (i in 1:nrow(performance_df)) {
+for (i in seq_len(nrow(performance_df))) {
   prefix <- if (performance_df$Model[i] == "Ensemble") ">>> " else "  - "
   cat(prefix, performance_df$Model[i], ":", round(performance_df$Concordance[i], 3), "\n")
 }
 
 cat("\nModel Performance (Brier Score):\n")
-for (i in 1:nrow(performance_df)) {
+for (i in seq_len(nrow(performance_df))) {
   prefix <- if (performance_df$Model[i] == "Ensemble") ">>> " else "  - "
   cat(prefix, performance_df$Model[i], ":", round(performance_df$Brier_Score[i], 4), "\n")
 }

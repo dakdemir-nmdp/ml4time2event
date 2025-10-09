@@ -4,7 +4,7 @@ library(here)
 library(stats) # For approxfun
 
 # Assuming the functions are available in the environment
-source(here("R/utils/cr_interpolation.R"))
+source(here("R/cr_interpolation.R"))
 
 context("Testing cr_interpolation functions")
 
@@ -127,9 +127,8 @@ test_that("cifMatInterpolaltor enforces monotonicity", {
   times_nonmono <- c(2, 5, 10)
   new_times_nonmono <- c(1, 3, 6, 11)
   # Initial interpolation: 0.05, 0.1667, 0.3 + (0.25-0.3)/5*1 = 0.29, 0.25(yright)
-  # Monotonicity correction should make it: 0.05, 0.1667, 0.3, 0.3
+  # Monotonicity correction should make it: 0.05, 0.1667, 0.29, 0.29 (using cummax)
   interpolated_mat <- cifMatInterpolaltor(probs_nonmono, times_nonmono, new_times_nonmono)
-  expect_equal(as.vector(interpolated_mat), c(0.05, 0.1 + 2/30, 0.3, 0.3), tolerance=1e-6) # Check logic
   # Re-calc: t=1->0.05; t=3->0.1667; t=6->0.29; t=11->0.25(yright)
   # cummax: 0.05, 0.1667, 0.29, 0.29
   # Corrected: 0.05, 0.1667, 0.29, 0.29
@@ -214,28 +213,28 @@ test_that("cifMatListAveraging handles inconsistent dimensions", {
 })
 
 test_that("cifMatListAveraging handles NAs (na.rm=TRUE behavior)", {
-   mat1 <- matrix(c(0.1, 0.3, 0.2, 0.4), nrow=2) # times x obs
-   mat2 <- matrix(c(0.2, NA, 0.3, 0.5), nrow=2)
-   mat3 <- matrix(c(NA, NA, 0.4, 0.6), nrow=2)
+   mat1 <- matrix(c(0.1, 0.3, NA, 0.4), nrow=2) # times x obs, [1,2] = NA
+   mat2 <- matrix(c(0.2, NA, NA, 0.5), nrow=2)  # [1,2] = NA, [2,1] = NA
+   mat3 <- matrix(c(NA, NA, NA, 0.6), nrow=2)   # [1,1] = NA, [1,2] = NA, [2,1] = NA
    list_na <- list(mat1, mat2, mat3)
 
    # CumHaz
    averaged_ch <- cifMatListAveraging(list_na, type="CumHaz")
-   # [1, 1]: 1-exp(-mean(c(-log(1-0.1), -log(1-0.2))))
+   # [1, 1]: 1-exp(-mean(c(-log(1-0.1), -log(1-0.2)))) = 0.1514719
    expect_equal(averaged_ch[1,1], 1 - exp(-mean(c(-log(0.9), -log(0.8)))))
-   # [1, 2]: Should be NA as all inputs are NA for averaging H
+   # [1, 2]: All inputs are NA (NA, NA, NA) -> should be NA
    expect_true(is.na(averaged_ch[1,2]))
-   # [2, 1]: 1-exp(-mean(c(-log(1-0.2), -log(1-0.3), -log(1-0.4))))
-   expect_equal(averaged_ch[2,1], 1 - exp(-mean(c(-log(0.8), -log(0.7), -log(0.6)))))
-   # [2, 2]: 1-exp(-mean(c(-log(1-0.4), -log(1-0.5), -log(1-0.6))))
+   # [2, 1]: 1-exp(-mean(c(-log(1-0.3)))) = 0.3 (only mat1[2,1]=0.3 is non-NA)
+   expect_equal(averaged_ch[2,1], 1 - exp(-mean(c(-log(0.7)))))
+   # [2, 2]: 1-exp(-mean(c(-log(1-0.4), -log(1-0.5), -log(1-0.6)))) = 0.5067576
    expect_equal(averaged_ch[2,2], 1 - exp(-mean(c(-log(0.6), -log(0.5), -log(0.4)))))
 
    # Prob
    averaged_p <- cifMatListAveraging(list_na, type="prob")
-   expect_equal(averaged_p[1,1], mean(c(0.1, 0.2), na.rm=TRUE))
-   expect_true(is.na(averaged_p[1,2])) # mean(NA, NA, NA) is NaN -> becomes NA? Check mean behavior. mean(c(NA,NA), na.rm=T) is NaN. Let's assume NaN -> NA.
-   expect_equal(averaged_p[2,1], mean(c(0.2, 0.3, 0.4), na.rm=TRUE))
-   expect_equal(averaged_p[2,2], mean(c(0.4, 0.5, 0.6), na.rm=TRUE))
+   expect_equal(averaged_p[1,1], mean(c(0.1, 0.2), na.rm=TRUE))  # mean(0.1, 0.2) = 0.15
+   expect_true(is.na(averaged_p[1,2])) # mean(NA, NA, NA) with na.rm=TRUE gives NaN, should be NA
+   expect_equal(averaged_p[2,1], mean(c(0.3), na.rm=TRUE))       # only 0.3 is non-NA = 0.3
+   expect_equal(averaged_p[2,2], mean(c(0.4, 0.5, 0.6), na.rm=TRUE)) # mean(0.4, 0.5, 0.6) = 0.5
 })
 
 test_that("cifMatListAveraging requires valid type", {

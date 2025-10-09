@@ -54,10 +54,11 @@ survprobMatInterpolator <- function(probsMat, times, newtimes) {
   }
 
   # Ensure monotonicity (survival should be non-increasing)
-  # Apply to each column (each observation)
-  for (i in seq_len(ncol(probs_interp))) {
-    probs_interp[, i] <- cummin(probs_interp[, i])
-  }
+  # This is now removed as it hides problems from the models.
+  # The models themselves should be responsible for producing monotonic curves.
+  # for (i in seq_len(ncol(probs_interp))) {
+  #   probs_interp[, i] <- cummin(probs_interp[, i])
+  # }
 
   probs_interp
 }
@@ -87,7 +88,7 @@ survprobMatListAveraging<-function(listprobsMat){
     HazzardArray[,,i]<--log(listprobsMat[[i]] + 1e-10)
   }
   # Calculate the mean cumulative hazard across models
-  MeanHazzard<-apply(HazzardArray, c(1,2),function(x)(mean(na.omit(x)))) # na.omit might be risky if all are NA
+  MeanHazzard<-apply(HazzardArray, c(1,2),function(x)(mean(x, na.rm = FALSE)))
   # Convert mean cumulative hazard back to survival probability: exp(-H)
   NewProbs<-exp(-MeanHazzard)
   NewProbs

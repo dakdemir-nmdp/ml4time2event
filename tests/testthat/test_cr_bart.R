@@ -37,8 +37,9 @@ test_that("CRModel_BART fits basic model with correct interface", {
   # Check output structure
   expect_type(model_bart, "list")
   expect_named(model_bart, c("bart_model", "times", "varprof", "model_type",
-                            "expvars", "timevar", "eventvar", "failcode",
-                            "time_range", "x_train", "times_train", "delta_train"))
+                             "expvars", "timevar", "eventvar", "event_codes",
+                             "event_codes_numeric", "default_event_code", "time_range",
+                             "x_train", "times_train", "delta_train"))
 
   # Check model type and class
   expect_equal(model_bart$model_type, "cr_bart")
@@ -49,20 +50,20 @@ test_that("CRModel_BART fits basic model with correct interface", {
   expect_equal(model_bart$expvars, expvars)
   expect_equal(model_bart$timevar, "time")
   expect_equal(model_bart$eventvar, "status")
-  expect_equal(model_bart$failcode, 1)
+  expect_equal(model_bart$default_event_code, "1")
   expect_true(is.numeric(model_bart$time_range))
   expect_length(model_bart$time_range, 2)
 })
 
-test_that("CRModel_BART handles different failcode values", {
+test_that("CRModel_BART handles custom event codes", {
   skip_if_not_installed("BART")
 
-  # Test with failcode = 2
+  # Test with event code = 2
   model_bart_2 <- CRModel_BART(data = train_data, expvars = expvars,
-                              timevar = "time", eventvar = "status",
-                              failcode = 2, ntree = 20, ndpost = 50, nskip = 25)
+                               timevar = "time", eventvar = "status",
+                               event_codes = 2, ntree = 20, ndpost = 50, nskip = 25)
 
-  expect_equal(model_bart_2$failcode, 2)
+  expect_equal(model_bart_2$default_event_code, "2")
   expect_s3_class(model_bart_2$bart_model, "criskbart")
 })
 
@@ -103,6 +104,17 @@ test_that("CRModel_BART validates inputs", {
   expect_error(CRModel_BART(data = train_data, expvars = c("x1", "nonexistent"),
                            timevar = "time", eventvar = "status"),
                "expvars not found in data")
+
+  # Test invalid event_codes inputs
+  expect_error(CRModel_BART(data = train_data, expvars = expvars,
+                            timevar = "time", eventvar = "status",
+                            event_codes = character(0)),
+               "'event_codes' must be NULL or a non-empty vector")
+
+  expect_error(CRModel_BART(data = train_data, expvars = expvars,
+                            timevar = "time", eventvar = "status",
+                            event_codes = 999),
+               "not present in training data")
 })
 
 # --- Tests for Predict_CRModel_BART ---
@@ -130,6 +142,11 @@ test_that("Predict_CRModel_BART returns predictions in correct format", {
 
   # Check that time 0 has CIF = 0
   expect_true(all(predictions$CIFs[1, ] == 0))
+
+  # Requesting unsupported event should error
+  expect_error(Predict_CRModel_BART(modelout = model_bart, newdata = test_data,
+                                    event_of_interest = 2),
+               "BART models can only predict")
 })
 
 test_that("Predict_CRModel_BART handles custom time points", {

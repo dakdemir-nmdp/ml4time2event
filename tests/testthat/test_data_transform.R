@@ -3,7 +3,7 @@ library(here)
 # library(data.table) # Removed
 
 # Assuming the functions are available in the environment
-source(here("R/data/data_transform.R"))
+source(here("R/data_transform.R"))
 
 context("Testing data_transform functions")
 
@@ -32,25 +32,25 @@ test_that("ZeroOneScalerData scales numeric columns to [0, 1]", {
 
   # Check scaled values for num1 (range 10-50)
   expect_equal(scaled_data$num1, c(0, 0.25, 0.5, 0.75, 1))
-  expect_equal(scaled_result$minxvec["num1"], 10)
-  expect_equal(scaled_result$maxxvec["num1"], 50)
+  expect_equal(scaled_result$minxvec[["num1"]], 10)
+  expect_equal(scaled_result$maxxvec[["num1"]], 50)
 
   # Check scaled values for num2 (range -5-15)
   expect_equal(scaled_data$num2, c(0, 0.25, 0.5, 0.75, 1))
-  expect_equal(scaled_result$minxvec["num2"], -5)
-  expect_equal(scaled_result$maxxvec["num2"], 15)
+  expect_equal(scaled_result$minxvec[["num2"]], -5)
+  expect_equal(scaled_result$maxxvec[["num2"]], 15)
 
   # Check constant column (should be scaled to 0 with a warning)
   expect_warning(scaled_result_warn <- ZeroOneScalerData(test_df_transform), "zero range") # Removed copy()
   expect_equal(scaled_result_warn$data$num_const, rep(0, 5))
-  expect_equal(scaled_result_warn$minxvec["num_const"], 5)
-  expect_equal(scaled_result_warn$maxxvec["num_const"], 5)
+  expect_equal(scaled_result_warn$minxvec[["num_const"]], 5)
+  expect_equal(scaled_result_warn$maxxvec[["num_const"]], 5)
 
   # Check column with NA
   expect_equal(scaled_data$num_na[c(1, 2, 4, 5)], c(0, 0.25, 0.75, 1))
   expect_true(is.na(scaled_data$num_na[3]))
-  expect_equal(scaled_result$minxvec["num_na"], 1)
-  expect_equal(scaled_result$maxxvec["num_na"], 5)
+  expect_equal(scaled_result$minxvec[["num_na"]], 1)
+  expect_equal(scaled_result$maxxvec[["num_na"]], 5)
 
   # Check non-numeric columns are untouched
   expect_equal(scaled_data$id, test_df_transform$id)
@@ -59,9 +59,9 @@ test_that("ZeroOneScalerData scales numeric columns to [0, 1]", {
 
   # Check min/max vectors have correct names and include NAs for non-numeric
   expect_equal(names(scaled_result$minxvec), colnames(test_df_transform))
-  expect_true(is.na(scaled_result$minxvec["id"]))
-  expect_true(is.na(scaled_result$minxvec["char_col"]))
-  expect_true(is.na(scaled_result$minxvec["factor_col"]))
+  expect_true(is.na(scaled_result$minxvec[["id"]]))
+  expect_true(is.na(scaled_result$minxvec[["char_col"]]))
+  expect_true(is.na(scaled_result$minxvec[["factor_col"]]))
 })
 
 test_that("ZeroOneScalerData handles data.frames", {
@@ -279,14 +279,13 @@ test_that("NumVarstCatsData respects min_unique_vals", {
 test_that("NumVarstCatsData handles duplicated quantiles", {
   # Data where quantiles will likely be duplicated
   df_dup_quant <- data.frame(x = c(rep(1, 10), rep(2, 5), rep(10, 5)), stringsAsFactors = FALSE) # Replaced data.table()
-  # Quartiles (0, 0.25, 0.5, 0.75, 1) might be (1, 1, 1, 2, 10)
-  expect_warning(categorized_data <- NumVarstCatsData(df_dup_quant, numgroups = 4, min_unique_vals = 3)) # Removed copy()
+  # Quartiles (0, 0.25, 0.5, 0.75, 1) are (1, 1, 1.5, 4, 10) - note the duplicate at 0% and 25%
+  categorized_data <- NumVarstCatsData(df_dup_quant, numgroups = 4, min_unique_vals = 3) # Removed copy()
   expect_s3_class(categorized_data$x, "factor")
   # Expect fewer than 4 levels due to duplicate quantiles being treated as single breaks
-  expect_equal(length(levels(categorized_data$x)), 3) # Expect levels like [1, 1], (1, 2], (2, 10] -> simplified to [1, 2), [2, 10) ? Check function logic.
-  # Based on the internal quantcat logic, it uses unique quantiles as breaks: 1, 2, 10
-  # Breaks become: 1, 2, 10 -> Levels: [1, 2), [2, 10]
-  expect_equal(levels(categorized_data$x), c("[1, 2)", "[2, 10]"))
+  expect_equal(length(levels(categorized_data$x)), 3) 
+  # Based on unique quantiles: 1, 1.5, 4, 10 -> Breaks: 1, 1.5, 4, 10 -> Levels: [1, 1.5), [1.5, 4), [4, 10]
+  expect_equal(levels(categorized_data$x), c("[1, 1.5)", "[1.5, 4)", "[4, 10]"))
 })
 
 

@@ -6,7 +6,9 @@
 #' @param expvars character vector of names of explanatory variables in data
 #' @param timevar character name of time variable in data
 #' @param eventvar character name of event variable in data (coded 0=censored, 1=cause1, 2=cause2, etc.)
-#' @param failcode integer, the code for the event of interest (default: 1)
+#' @param event_codes character or numeric vector identifying the event code(s)
+#'   to model. If NULL (default), all non-zero event codes observed in the data
+#'   are used. The first entry defines the default event of interest.
 #' @param dist distribution for the parametric model, one of "weibull", "exponential", "gaussian", "logistic","lognormal" or "loglogistic".
 #' @param ntimes integer, number of time points to use for prediction grid (default: 50)
 #' @param verbose logical, print progress messages (default: FALSE)
@@ -19,14 +21,17 @@
 #'   \item{expvars}{character vector of explanatory variables used}
 #'   \item{timevar}{character name of time variable}
 #'   \item{eventvar}{character name of event variable}
-#'   \item{failcode}{the event code for the outcome of interest}
+#'   \item{event_codes}{character vector of event codes included in the model}
+#'   \item{event_codes_numeric}{numeric vector of event codes included}
+#'   \item{default_event_code}{character scalar for the default event code}
+#'   \item{default_event_code_numeric}{numeric scalar for the default event code}
 #'   \item{time_range}{vector with min and max observed event times}
 #'   \item{dist}{the distribution used for the parametric model}
 #'
 #' @importFrom survival survreg Surv
 #' @importFrom stats AIC as.formula predict quantile
 #' @export
-CRModel_SurvReg <- function(data, expvars, timevar, eventvar, failcode = 1,
+CRModel_SurvReg <- function(data, expvars, timevar, eventvar, event_codes = NULL,
                            dist = "exponential", ntimes = 50, verbose = FALSE) {
 
   # ============================================================================
@@ -48,8 +53,8 @@ CRModel_SurvReg <- function(data, expvars, timevar, eventvar, failcode = 1,
   if (length(missing_vars) > 0) {
     stop("The following expvars not found in data: ", paste(missing_vars, collapse=", "))
   }
-  if (!is.numeric(failcode) || length(failcode) != 1 || failcode < 1) {
-    stop("'failcode' must be a positive integer")
+  if (!is.null(event_codes) && length(event_codes) == 0) {
+    stop("'event_codes' must be NULL or a non-empty vector")
   }
 
   # ============================================================================
@@ -75,20 +80,46 @@ CRModel_SurvReg <- function(data, expvars, timevar, eventvar, failcode = 1,
     stop("Insufficient data after removing missing values. Need at least 10 observations.")
   }
 
+  available_events <- sort(unique(as.character(XYTrain[[eventvar]][XYTrain[[eventvar]] != 0])))
+  if (length(available_events) == 0) {
+    stop("No events found in the training data.")
+  }
+
+  if (is.null(event_codes)) {
+    event_codes <- available_events
+  }
+
+  event_codes <- as.character(event_codes)
+
+  missing_codes <- setdiff(event_codes, available_events)
+  if (length(missing_codes) > 0) {
+    stop("The following event_codes are not present in the data: ",
+         paste(missing_codes, collapse = ", "))
+  }
+
+  event_codes_numeric <- suppressWarnings(as.numeric(event_codes))
+  if (any(is.na(event_codes_numeric))) {
+    stop("SurvReg competing risks requires numeric event codes. Unable to coerce: ",
+         paste(event_codes[is.na(event_codes_numeric)], collapse = ", "))
+  }
+
+  primary_event_code <- event_codes[1]
+  primary_event_numeric <- event_codes_numeric[1]
+
   # Get unique event times for the event of interest
-  event_times <- XYTrain[[timevar]][XYTrain[[eventvar]] == failcode]
+  event_times <- XYTrain[[timevar]][XYTrain[[eventvar]] == primary_event_numeric]
   if (length(event_times) == 0) {
-    stop("No events of type ", failcode, " in training data. Cannot fit competing risks model.")
+    stop("No events of type ", primary_event_code, " in training data. Cannot fit competing risks model.")
   }
 
   # Store event time range for reference
-  time_range <- c(0, max(event_times))
+  time_range <- range(c(0, XYTrain[[timevar]][XYTrain[[eventvar]] %in% event_codes_numeric]), na.rm = TRUE)
 
   # ============================================================================
   # Model Fitting - Cause-Specific SurvReg Models for ALL Competing Events
   # ============================================================================
   # Identify all unique event types (excluding censoring = 0)
-  all_event_types <- sort(unique(XYTrain[[eventvar]][XYTrain[[eventvar]] != 0]))
+  all_event_types <- event_codes_numeric
 
   if (verbose) {
     cat("Fitting cause-specific SurvReg models for all event types:", paste(all_event_types, collapse = ", "), "\n")
@@ -115,7 +146,7 @@ CRModel_SurvReg <- function(data, expvars, timevar, eventvar, failcode = 1,
     # ============================================================================
     # Forward Selection with AIC (adapted for cause-specific modeling)
     # ============================================================================
-    if (verbose && cause == failcode) cat("Performing forward selection with AIC for event", cause, "...\n")
+  if (verbose && cause == primary_event_numeric) cat("Performing forward selection with AIC for event", cause, "...\n")
 
     selected_vars <- c()
     candidate_vars <- expvars
@@ -136,10 +167,10 @@ CRModel_SurvReg <- function(data, expvars, timevar, eventvar, failcode = 1,
     }
     
     best_aic <- stats::AIC(null_model)
-    if (verbose && cause == failcode) print(paste("Initial AIC (Intercept only):", round(best_aic, 2)))
+  if (verbose && cause == primary_event_numeric) print(paste("Initial AIC (Intercept only):", round(best_aic, 2)))
 
     # Only do variable selection for the main event to save time
-    if (cause == failcode) {
+  if (cause == primary_event_numeric) {
       while (length(candidate_vars) > 0) {
         aic_values <- numeric(length(candidate_vars))
         names(aic_values) <- candidate_vars
@@ -201,7 +232,7 @@ CRModel_SurvReg <- function(data, expvars, timevar, eventvar, failcode = 1,
       )
     } else {
       # If no variables selected, use the intercept-only model
-      if (verbose && cause == failcode) warning("No variables selected by forward selection. Using intercept-only model.")
+  if (verbose && cause == primary_event_numeric) warning("No variables selected by forward selection. Using intercept-only model.")
       final_model_cause <- tryCatch(
         survival::survreg(null_formula, data = XYTrain_cause, dist = dist, x = TRUE, y = TRUE),
         error = function(e) {
@@ -249,10 +280,10 @@ CRModel_SurvReg <- function(data, expvars, timevar, eventvar, failcode = 1,
   }
 
   # The main model for the event of interest
-  final_model <- survreg_models_all_causes[[as.character(failcode)]]
+  final_model <- survreg_models_all_causes[[as.character(primary_event_numeric)]]
 
   if (is.null(final_model)) {
-    stop("Failed to fit SurvReg model for the event of interest (failcode = ", failcode, ")")
+  stop("Failed to fit SurvReg model for the event of interest (event_code = ", primary_event_code, ")")
   }
 
   # ============================================================================
@@ -263,14 +294,16 @@ CRModel_SurvReg <- function(data, expvars, timevar, eventvar, failcode = 1,
   result <- list(
     survreg_model = final_model,
     survreg_models_all_causes = survreg_models_all_causes,  # All cause-specific models for Aalen-Johansen
-    all_event_types = all_event_types,  # Event type codes
     times = sort(unique(event_times)),
     varprof = varprof,
     model_type = "cr_survreg",
     expvars = expvars,
     timevar = timevar,
     eventvar = eventvar,
-    failcode = failcode,
+    event_codes = event_codes,
+    event_codes_numeric = event_codes_numeric,
+    default_event_code = primary_event_code,
+    default_event_code_numeric = primary_event_numeric,
     time_range = time_range,
     dist = dist
   )
@@ -288,8 +321,8 @@ CRModel_SurvReg <- function(data, expvars, timevar, eventvar, failcode = 1,
 #' @param newtimes optional numeric vector of time points for prediction.
 #'   If NULL (default), uses the times from the training data.
 #'   Can be any positive values - interpolation handles all time points.
-#' @param failcode integer, the code for the event of interest for CIF prediction.
-#'   If NULL (default), uses the failcode from the model training.
+#' @param event_of_interest character or numeric scalar indicating the event code
+#'   to predict. If NULL (default), uses the event code stored during training.
 #'
 #' @return a list containing:
 #'   \item{CIFs}{predicted cumulative incidence function matrix
@@ -298,7 +331,7 @@ CRModel_SurvReg <- function(data, expvars, timevar, eventvar, failcode = 1,
 #'
 #' @importFrom stats predict
 #' @export
-Predict_CRModel_SurvReg <- function(modelout, newdata, newtimes = NULL, failcode = NULL) {
+Predict_CRModel_SurvReg <- function(modelout, newdata, newtimes = NULL, event_of_interest = NULL) {
 
   # ============================================================================
   # Input Validation
@@ -317,24 +350,23 @@ Predict_CRModel_SurvReg <- function(modelout, newdata, newtimes = NULL, failcode
          paste(missing_vars, collapse = ", "))
   }
 
-  # Handle failcode parameter
-  if (is.null(failcode)) {
-    failcode <- modelout$failcode  # Use the failcode from training
-  } else {
-    if (!is.numeric(failcode) || length(failcode) != 1 || failcode < 1) {
-      stop("'failcode' must be a positive integer")
-    }
-    if (!failcode %in% modelout$all_event_types) {
-      stop("failcode ", failcode, " was not present in training data. Available event types: ",
-           paste(modelout$all_event_types, collapse = ", "))
-    }
+  # Handle event_of_interest parameter
+  if (is.null(event_of_interest)) {
+    event_of_interest <- modelout$default_event_code
   }
 
-  # Generate default times if not specified
-  if (is.null(newtimes)) {
-    # Create a reasonable default grid: include 0 and event times
-    newtimes <- sort(unique(c(0, modelout$times)))
-  } else {
+  event_of_interest <- as.character(event_of_interest)
+  event_idx <- match(event_of_interest, modelout$event_codes)
+
+  if (is.na(event_idx)) {
+    stop("event_of_interest ", event_of_interest, " was not present in training data. Available event codes: ",
+         paste(modelout$event_codes, collapse = ", "))
+  }
+
+  target_event_numeric <- modelout$event_codes_numeric[event_idx]
+
+  use_native_times <- is.null(newtimes)
+  if (!use_native_times) {
     if (!is.numeric(newtimes) || any(newtimes < 0)) {
       stop("'newtimes' must be a numeric vector of non-negative values")
     }
@@ -382,11 +414,12 @@ Predict_CRModel_SurvReg <- function(modelout, newdata, newtimes = NULL, failcode
   # Make Predictions using Aalen-Johansen Estimator
   # ============================================================================
   # Get survival predictions from ALL cause-specific SurvReg models
-  cause_specific_survs <- vector("list", length(modelout$all_event_types))
-  names(cause_specific_survs) <- as.character(modelout$all_event_types)
+  cause_specific_survs <- vector("list", length(modelout$event_codes_numeric))
+  names(cause_specific_survs) <- as.character(modelout$event_codes_numeric)
 
   # Predict survival for each cause
-  for (cause in modelout$all_event_types) {
+  surv_times <- NULL
+  for (cause in modelout$event_codes_numeric) {
     cause_char <- as.character(cause)
 
     if (is.null(modelout$survreg_models_all_causes[[cause_char]])) {
@@ -423,9 +456,12 @@ Predict_CRModel_SurvReg <- function(modelout, newdata, newtimes = NULL, failcode
       next
     }
 
+    if (is.null(surv_times)) {
+      surv_times <- sf_cause$time
+    }
+
     # Extract survival probabilities
     surv_probs_cause <- sf_cause$surv
-    surv_times_cause <- sf_cause$time
 
     # Ensure matrix format
     if (!is.matrix(surv_probs_cause)) {
@@ -443,30 +479,118 @@ Predict_CRModel_SurvReg <- function(modelout, newdata, newtimes = NULL, failcode
     stop("No valid cause-specific survival predictions could be generated")
   }
 
-  # Get the time grid from the first model (they should all have similar times)
-  surv_times <- sf_cause$time
+  if (is.null(surv_times)) {
+    stop("Unable to derive survival time grid from cause-specific models")
+  }
 
-  # Use Aalen-Johansen estimator to calculate proper CIF
-  cif_matrix <- aalenJohansenCIF(
-    cause_specific_survs = cause_specific_survs,
-    times = surv_times,
-    event_of_interest = failcode
-  )
-
-  # ============================================================================
-  # ============================================================================
-  # Apply Interpolation
-  # ============================================================================
-  if (!is.null(newtimes)) {
-    # Interpolate to new time points
-    if (!is.numeric(newtimes) || any(newtimes < 0)) {
-      stop("'newtimes' must be a numeric vector of non-negative values")
+  # Use proper Aalen-Johansen approach by calculating overall survival first  
+  # Similar to XGBoost approach since SurvReg also uses baseline Cox models
+  n_obs <- nrow(newdata_prepared)
+  n_times <- length(surv_times)
+  
+  # Calculate cumulative hazards for each cause and each observation
+  cum_hazards_all_causes <- array(0, dim = c(n_times, n_obs, length(modelout$event_codes_numeric)))
+  
+  for (i in seq_along(modelout$event_codes_numeric)) {
+    cause <- modelout$event_codes_numeric[i]
+    cause_char <- as.character(cause)
+    
+    if (!is.null(modelout$survreg_models_all_causes[[cause_char]])) {
+      # Get linear predictors from SurvReg
+      linear_preds <- stats::predict(
+        modelout$survreg_models_all_causes[[cause_char]],
+        newdata = newdata_prepared,
+        type = "linear"
+      )
+      
+      # Convert to risk scores (negate since higher linear pred = longer survival)
+      risk_scores <- -linear_preds
+      
+      # Get baseline cumulative hazard from survfit  
+      sf_baseline <- survival::survfit(
+        modelout$survreg_models_all_causes[[cause_char]]$baseline_model,
+        newdata = data.frame("score" = rep(0, 1)) # Baseline hazard
+      )
+      
+      # Check if sf_baseline has valid data
+      if (length(sf_baseline$time) == 0 || any(is.na(sf_baseline$surv))) {
+        # If no valid baseline data, assume no events for this cause
+        baseline_cum_hazard <- rep(0, n_times)
+      } else {
+        # Interpolate baseline cumulative hazard to our time grid
+        baseline_cum_hazard <- stats::approx(
+          x = c(0, sf_baseline$time),
+          y = c(0, -log(pmax(sf_baseline$surv, 1e-10))), # Avoid log(0)
+          xout = surv_times,
+          method = "constant",
+          f = 0,
+          rule = 2
+        )$y
+      }
+      
+      # Apply individual risk factors: Λ_j(t|x) = Λ_0j(t) * exp(risk_score)
+      for (j in 1:n_obs) {
+        cum_hazards_all_causes[, j, i] <- baseline_cum_hazard * exp(risk_scores[j])
+      }
     }
-    newtimes <- sort(unique(newtimes))
+  }
+  
+  # Step 2: Calculate overall survival S(t) = exp(-Σ_j Λ_j(t))
+  overall_cum_hazard <- apply(cum_hazards_all_causes, c(1, 2), sum)
+  overall_survival <- exp(-overall_cum_hazard)
+  
+  # Step 3: Calculate CIF using Aalen-Johansen formula
+  cif_matrix <- matrix(0, nrow = n_times, ncol = n_obs)
+  event_idx_numeric <- which(modelout$event_codes_numeric == target_event_numeric)
+  
+  if (length(event_idx_numeric) > 0) {
+    target_cum_hazards <- cum_hazards_all_causes[, , event_idx_numeric]
+    
+    for (j in seq_len(n_obs)) {
+      for (t in seq_len(n_times)) {
+        if (t == 1) {
+          # For first time point, CIF = hazard increment
+          target_hazard_increment <- target_cum_hazards[t, j]
+          cif_matrix[t, j] <- 1.0 * target_hazard_increment
+        } else {
+          # CIF(t) = CIF(t-1) + S(t-1) * Δλ_j(t)
+          target_hazard_increment <- target_cum_hazards[t, j] - target_cum_hazards[t-1, j]
+          cif_matrix[t, j] <- cif_matrix[t-1, j] + overall_survival[t-1, j] * target_hazard_increment
+        }
+      }
+    }
+  }
+  
+  # Ensure bounds and monotonicity
+  # Use matrix() to preserve dimensions after pmax/pmin operations
+  original_dims <- dim(cif_matrix)
+  cif_matrix <- matrix(pmax(0, pmin(as.vector(cif_matrix), 1)), 
+                       nrow = original_dims[1], ncol = original_dims[2])
+  for (j in 1:n_obs) {
+    cif_matrix[, j] <- cummax(cif_matrix[, j])
+  }
 
-    # Use the standard CIF interpolation utility function
+  # ============================================================================
+  # ==========================================================================
+  # Apply Interpolation
+  # ==========================================================================
+  # Ensure time zero included with zero CIF
+  if (!any(abs(surv_times) < .Machine$double.eps)) {
+    surv_times <- c(0, surv_times)
+    cif_matrix <- rbind(rep(0, n_obs), cif_matrix)
+  } else {
+    zero_idx <- which.min(abs(surv_times))
+    cif_matrix[zero_idx, ] <- 0
+  }
+
+  if (use_native_times) {
+    # Return predictions in native time grid: [times, observations]
+    result_cifs <- cif_matrix  # cif_matrix is already [times, observations]
+    result_times <- surv_times
+  } else {
+    # Interpolate to new time points using standard CIF interpolation utility
     pred_cifs <- cifMatInterpolaltor(
-      probsMat = t(cif_matrix),  # cifMatInterpolaltor expects [observations, times]
+      probsMat = t(cif_matrix),  # expects [observations, times]
       times = surv_times,
       newtimes = newtimes
     )
@@ -474,10 +598,6 @@ Predict_CRModel_SurvReg <- function(modelout, newdata, newtimes = NULL, failcode
     # cifMatInterpolaltor returns [newtimes, observations], keep as [times, observations]
     result_cifs <- pred_cifs
     result_times <- newtimes
-  } else {
-    # Return predictions in native time grid: [times, observations]
-    result_cifs <- cif_matrix  # cif_matrix is already [times, observations]
-    result_times <- surv_times
   }
 
   # ============================================================================

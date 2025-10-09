@@ -54,14 +54,17 @@ test_that("CRModel_SurvReg fits basic model", {
     expvars = expvars_numeric,
     timevar = "time",
     eventvar = "event",
-    failcode = 1,
+    event_codes = 1,
     dist = "exponential"
   )
 
   # Check output structure
   expect_type(model, "list")
-  expect_named(model, c("survreg_model", "survreg_models_all_causes", "all_event_types", "times", "varprof", "model_type",
-                       "expvars", "timevar", "eventvar", "failcode", "time_range", "dist"))
+  expect_named(model, c(
+    "survreg_model", "survreg_models_all_causes", "times", "varprof", "model_type",
+    "expvars", "timevar", "eventvar", "event_codes", "event_codes_numeric",
+    "default_event_code", "default_event_code_numeric", "time_range", "dist"
+  ))
 
   # Check model type
   expect_equal(model$model_type, "cr_survreg")
@@ -82,8 +85,11 @@ test_that("CRModel_SurvReg fits basic model", {
   expect_true(is.list(model$varprof))
   expect_equal(length(model$varprof), length(expvars_numeric))
 
-  # Check failcode and dist
-  expect_equal(model$failcode, 1)
+  # Check event metadata and dist
+  expect_equal(model$event_codes, "1")
+  expect_equal(model$event_codes_numeric, 1)
+  expect_equal(model$default_event_code, "1")
+  expect_equal(model$default_event_code_numeric, 1)
   expect_equal(model$dist, "exponential")
 })
 
@@ -94,7 +100,7 @@ test_that("CRModel_SurvReg handles different distributions", {
     expvars = expvars_numeric,
     timevar = "time",
     eventvar = "event",
-    failcode = 1,
+    event_codes = 1,
     dist = "weibull"
   )
   expect_equal(model_weibull$dist, "weibull")
@@ -106,25 +112,28 @@ test_that("CRModel_SurvReg handles different distributions", {
     expvars = expvars_numeric,
     timevar = "time",
     eventvar = "event",
-    failcode = 1,
+    event_codes = 1,
     dist = "lognormal"
   )
   expect_equal(model_lognormal$dist, "lognormal")
   expect_s3_class(model_lognormal$survreg_model, "survreg")
 })
 
-test_that("CRModel_SurvReg handles different failcodes", {
-  # Test failcode = 2
+test_that("CRModel_SurvReg handles different event codes", {
+  # Use event code 2 as the default event of interest with additional competing code
   model <- CRModel_SurvReg(
     data = train_data,
     expvars = expvars_numeric,
     timevar = "time",
     eventvar = "event",
-    failcode = 2,
+    event_codes = c(2, 1),
     dist = "exponential"
   )
 
-  expect_equal(model$failcode, 2)
+  expect_equal(model$event_codes, c("2", "1"))
+  expect_equal(model$event_codes_numeric, c(2, 1))
+  expect_equal(model$default_event_code, "2")
+  expect_equal(model$default_event_code_numeric, 2)
   expect_s3_class(model$survreg_model, "survreg")
 })
 
@@ -159,10 +168,14 @@ test_that("CRModel_SurvReg validates inputs", {
                               timevar = "time", eventvar = "event"),
                "'expvars' must be a non-empty character vector")
 
-  # Invalid failcode
+  # Invalid event_codes value
   expect_error(CRModel_SurvReg(data = train_data, expvars = expvars_numeric,
-                              timevar = "time", eventvar = "event", failcode = 0),
-               "'failcode' must be a positive integer")
+                               timevar = "time", eventvar = "event", event_codes = character(0)),
+               "'event_codes' must be NULL or a non-empty vector")
+
+  expect_error(CRModel_SurvReg(data = train_data, expvars = expvars_numeric,
+                               timevar = "time", eventvar = "event", event_codes = "A"),
+               "event_codes are not present in the data")
 
   # Non-existent timevar
   expect_error(CRModel_SurvReg(data = train_data, expvars = expvars_numeric,
@@ -191,7 +204,7 @@ test_that("CRModel_SurvReg handles missing data", {
       expvars = expvars_numeric,
       timevar = "time",
       eventvar = "event",
-      failcode = 1,
+  event_codes = 1,
       dist = "exponential"
     ),
     "Removed .* rows with missing values"
@@ -209,7 +222,7 @@ test_that("CRModel_SurvReg handles insufficient data", {
     expvars = expvars_numeric,
     timevar = "time",
     eventvar = "event",
-    failcode = 1,
+  event_codes = 1,
     dist = "exponential"
   ), "Insufficient data")
 })
@@ -224,7 +237,7 @@ test_that("Predict_CRModel_SurvReg works with basic model", {
     expvars = expvars_numeric,
     timevar = "time",
     eventvar = "event",
-    failcode = 1,
+  event_codes = 1,
     dist = "exponential"
   )
 
@@ -252,7 +265,7 @@ test_that("Predict_CRModel_SurvReg handles custom times", {
     expvars = expvars_numeric,
     timevar = "time",
     eventvar = "event",
-    failcode = 1,
+  event_codes = 1,
     dist = "exponential"
   )
 
@@ -269,7 +282,7 @@ test_that("Predict_CRModel_SurvReg handles factor variables in newdata", {
     expvars = expvars_all,
     timevar = "time",
     eventvar = "event",
-    failcode = 1,
+  event_codes = 1,
     dist = "exponential"
   )
 
@@ -289,7 +302,7 @@ test_that("Predict_CRModel_SurvReg validates inputs", {
     expvars = expvars_numeric,
     timevar = "time",
     eventvar = "event",
-    failcode = 1,
+  event_codes = 1,
     dist = "exponential"
   )
 
@@ -331,7 +344,7 @@ test_that("Predict_CRModel_SurvReg handles missing factor levels", {
     expvars = expvars_all,
     timevar = "time",
     eventvar = "event",
-    failcode = 1,
+  event_codes = 1,
     dist = "exponential"
   )
 
@@ -349,8 +362,8 @@ test_that("CR SurvReg CIFs have correct properties", {
     data = train_data,
     expvars = expvars_numeric,
     timevar = "time",
-    eventvar = "event",
-    failcode = 1,
+  eventvar = "event",
+  event_codes = 1,
     dist = "exponential"
   )
 
@@ -382,7 +395,7 @@ test_that("CR SurvReg has similar interface to other CR models", {
     expvars = expvars_numeric,
     timevar = "time",
     eventvar = "event",
-    failcode = 1,
+    event_codes = c(1, 2),
     dist = "exponential"
   )
 
@@ -392,14 +405,21 @@ test_that("CR SurvReg has similar interface to other CR models", {
     expvars = expvars_numeric,
     timevar = "time",
     eventvar = "event",
-    failcode = 1
+    event_codes = c(1, 2)
   )
 
   # Both should have similar output structure
-  expect_named(survreg_model, c("survreg_model", "survreg_models_all_causes", "all_event_types", "times", "varprof", "model_type",
-                               "expvars", "timevar", "eventvar", "failcode", "time_range", "dist"))
-  expect_named(gam_model, c("gam_model", "gam_models_all_causes", "all_event_types", "times", "varprof", "model_type",
-                           "expvars", "timevar", "eventvar", "failcode", "time_range"))
+  expect_true(all(c(
+    "survreg_model", "survreg_models_all_causes", "times", "varprof", "model_type",
+    "expvars", "timevar", "eventvar", "event_codes", "event_codes_numeric",
+    "default_event_code", "default_event_code_numeric", "time_range", "dist"
+  ) %in% names(survreg_model)))
+
+  expect_true(all(c(
+    "gam_model", "gam_models_all_causes", "times", "varprof", "model_type",
+    "expvars", "timevar", "eventvar", "event_codes", "event_codes_numeric",
+    "default_event_code", "default_event_code_numeric", "time_range"
+  ) %in% names(gam_model)))
 
   # Both should produce valid predictions
   survreg_preds <- Predict_CRModel_SurvReg(survreg_model, test_data)
@@ -412,38 +432,33 @@ test_that("CR SurvReg has similar interface to other CR models", {
 })
 
 # ==============================================================================
-# Tests for failcode parameter
+# Tests for event_of_interest parameter
 # ==============================================================================
 
-test_that("Predict_CRModel_SurvReg works with different failcode values", {
-  # Fit model (should fit models for all event types)
+test_that("Predict_CRModel_SurvReg supports event_of_interest selection", {
   model <- CRModel_SurvReg(
     data = train_data,
     expvars = expvars_numeric,
     timevar = "time",
     eventvar = "event",
-    failcode = 1,
+    event_codes = c(1, 2),
     dist = "exponential"
   )
-  
-  # Test prediction for different event types
-  preds_event1 <- Predict_CRModel_SurvReg(model, test_data, failcode = 1)
-  preds_event2 <- Predict_CRModel_SurvReg(model, test_data, failcode = 2)
-  
-  # Should return different CIFs for different events
+
+  preds_event1 <- Predict_CRModel_SurvReg(model, test_data, event_of_interest = 1)
+  preds_event2 <- Predict_CRModel_SurvReg(model, test_data, event_of_interest = 2)
+
   expect_false(identical(preds_event1$CIFs, preds_event2$CIFs))
-  
-  # Both should be properly bounded
   expect_true(all(preds_event1$CIFs >= 0 & preds_event1$CIFs <= 1))
   expect_true(all(preds_event2$CIFs >= 0 & preds_event2$CIFs <= 1))
-  
-  # Test invalid failcode
+
+  # Invalid event_of_interest should error
   expect_error(
-    Predict_CRModel_SurvReg(model, test_data, failcode = 99),
-    "failcode 99 was not present in training data"
+    Predict_CRModel_SurvReg(model, test_data, event_of_interest = 99),
+    "event_of_interest 99 was not present in training data"
   )
-  
-  # Test that default uses model's failcode
+
+  # Default should match first event in training metadata
   preds_default <- Predict_CRModel_SurvReg(model, test_data)
   expect_identical(preds_default$CIFs, preds_event1$CIFs)
 })
