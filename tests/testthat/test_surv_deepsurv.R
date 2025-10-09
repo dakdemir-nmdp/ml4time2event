@@ -11,6 +11,7 @@ source("/Users/dakdemir/Library/CloudStorage/OneDrive-NMDP/Year2025/Github/ml4ti
 source("/Users/dakdemir/Library/CloudStorage/OneDrive-NMDP/Year2025/Github/ml4time2event/R/surv_interpolation.R")
 source("/Users/dakdemir/Library/CloudStorage/OneDrive-NMDP/Year2025/Github/ml4time2event/R/surv_deepsurv.R")
 source("/Users/dakdemir/Library/CloudStorage/OneDrive-NMDP/Year2025/Github/ml4time2event/R/surv_ensemble.R")
+source("/Users/dakdemir/Library/CloudStorage/OneDrive-NMDP/Year2025/Github/ml4time2event/R/survival_target_builder.R")
 
 # ==============================================================================
 # Test Data Setup
@@ -218,7 +219,7 @@ test_that("DeepSurv works in PredictSurvModels ensemble", {
   )
 
   # Check DeepSurv predictions are available
-  expect_true("newprobsdeepsurv_Model" %in% names(predictions$ModelPredictions))
+  expect_true("deepsurv_Model" %in% names(predictions$ModelPredictions))
   expect_true(!is.null(predictions$NewProbs))
 })
 

@@ -20,8 +20,9 @@ Predict_CRModel_rulefit(
 If NULL (default), uses the model's native time points.
 Can be any positive values - interpolation handles all time points.}
 
-\item{event_of_interest}{character or numeric scalar indicating the event code to
-predict. If NULL (default), uses the event code stored during training.}
+\item{event_of_interest}{character or numeric scalar indicating the event code
+to predict. RuleFit models currently support only the event code used during
+training.}
 }
 \value{
 a list containing:

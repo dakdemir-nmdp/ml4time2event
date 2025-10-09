@@ -15,15 +15,18 @@ probs_single <- c(0.9, 0.7, 0.6, 0.5)
 new_times_single <- c(0, 1, 2, 3, 4, 5, 6, 7, 8, 9)
 
 # For survprobMatInterpolator & survprobMatListAveraging
+# Note: Function expects rows=times, cols=observations
 times_mat <- c(2, 5, 10)
 probs_mat1 <- matrix(c(
-  0.9, 0.7, 0.5, # Subject 1
-  0.8, 0.6, 0.3  # Subject 2
-), nrow = 2, byrow = TRUE)
+  0.9, 0.8, # t=2: Subject 1 = 0.9, Subject 2 = 0.8
+  0.7, 0.6, # t=5: Subject 1 = 0.7, Subject 2 = 0.6
+  0.5, 0.3  # t=10: Subject 1 = 0.5, Subject 2 = 0.3
+), nrow = 3, byrow = TRUE)
 probs_mat2 <- matrix(c(
-  0.85, 0.75, 0.55, # Subject 1
-  0.82, 0.55, 0.35  # Subject 2
-), nrow = 2, byrow = TRUE)
+  0.85, 0.82, # t=2
+  0.75, 0.55, # t=5
+  0.55, 0.35  # t=10
+), nrow = 3, byrow = TRUE)
 
 new_times_mat <- c(0, 1, 2, 3, 4, 5, 8, 10, 12)
 
@@ -71,7 +74,7 @@ test_that("survprobMatInterpolator interpolates matrix correctly", {
 
   # Check dimensions: rows = newtimes, cols = observations
   expect_equal(nrow(interpolated_mat), length(new_times_mat))
-  expect_equal(ncol(interpolated_mat), nrow(probs_mat1))
+  expect_equal(ncol(interpolated_mat), ncol(probs_mat1))  # ncol(probs_mat1) = num observations
 
   # Check interpolation for subject 1 (probs: 0.9@t=2, 0.7@t=5, 0.5@t=10)
   # Expected at new_times_mat = c(0, 1, 2, 3, 4, 5, 8, 10, 12)
@@ -91,7 +94,7 @@ test_that("survprobMatInterpolator handles time 0 correctly", {
 
   # Case 2: time 0 is in input times
   times_with_zero <- c(0, times_mat)
-  probs_with_zero <- cbind(rep(1, nrow(probs_mat1)), probs_mat1)
+  probs_with_zero <- rbind(rep(1, ncol(probs_mat1)), probs_mat1)  # Add row for time 0
   interpolated_mat_zero <- survprobMatInterpolator(probs_with_zero, times_with_zero, new_times_mat)
   expect_equal(interpolated_mat_zero[, 1], c(1, 1, 0.9, 0.9, 0.9, 0.7, 0.7, 0.5, 0.5))
   expect_equal(interpolated_mat_zero[, 2], c(1, 1, 0.8, 0.8, 0.8, 0.6, 0.6, 0.3, 0.3))
@@ -99,7 +102,8 @@ test_that("survprobMatInterpolator handles time 0 correctly", {
 
 test_that("survprobMatInterpolator enforces monotonicity", {
   # Create a matrix where interpolation might initially increase
-  probs_nonmono <- matrix(c(0.9, 0.7, 0.8), nrow = 1) # Increases from 0.7 to 0.8
+  # Format: rows=times, cols=observations (1 observation)
+  probs_nonmono <- matrix(c(0.9, 0.7, 0.8), nrow = 3, ncol = 1) # Increases from 0.7 to 0.8
   times_nonmono <- c(2, 5, 10)
   new_times_nonmono <- c(1, 3, 6, 11)
   # Initial interpolation: 1, 0.9, 0.7, 0.8
@@ -112,7 +116,7 @@ test_that("survprobMatInterpolator handles single new time", {
    interpolated_mat <- survprobMatInterpolator(probs_mat1, times_mat, newtimes = 4)
    expect_true(is.matrix(interpolated_mat))
    expect_equal(nrow(interpolated_mat), 1)
-   expect_equal(ncol(interpolated_mat), nrow(probs_mat1))
+   expect_equal(ncol(interpolated_mat), ncol(probs_mat1))  # ncol = num observations
    # Expected at t=4: Subj1=0.9, Subj2=0.8
    expect_equal(as.vector(interpolated_mat), c(0.9, 0.8))
 })
@@ -121,20 +125,18 @@ test_that("survprobMatInterpolator handles single new time", {
 # --- Tests for survprobMatListAveraging ---
 
 test_that("survprobMatListAveraging averages correctly on cumulative hazard scale", {
-  list_mats <- list(probs_mat1, probs_mat2)
-  # Transpose because survprobMatInterpolator output has times as rows
-  list_mats_transposed <- list(t(survprobMatInterpolator(probs_mat1, times_mat, new_times_mat)),
-                               t(survprobMatInterpolator(probs_mat2, times_mat, new_times_mat)))
+  # Both output format: rows=times, cols=observations
+  list_mats <- list(survprobMatInterpolator(probs_mat1, times_mat, new_times_mat),
+                    survprobMatInterpolator(probs_mat2, times_mat, new_times_mat))
 
-  averaged_mat <- survprobMatListAveraging(list_mats_transposed)
+  averaged_mat <- survprobMatListAveraging(list_mats)
 
-  # Check dimensions (should match input matrix dims: newtimes x observations)
-  expect_equal(dim(averaged_mat), dim(list_mats_transposed[[1]]))
+  # Check dimensions (should match input matrix dims: rows=newtimes, cols=observations)
+  expect_equal(dim(averaged_mat), dim(list_mats[[1]]))
 
   # Check a specific value (e.g., Subject 1 at newtime = 8)
-  # Mat1: S(8) = 0.7
-  # Mat2: S(8) = 0.55 (interpolated between 0.75@t=5 and 0.55@t=10 -> step down at 10 -> 0.75)
-  # Let's re-run interpolation for mat2, subj 1: times=c(0,2,5,10), probs=c(1,0.85,0.75,0.55) -> S(8)=0.75
+  # Mat1: S(8) = 0.7 (step function: holds value from t=5)
+  # Mat2: S(8) = 0.75 (step function: holds value from t=5)
   # H1 = -log(0.7) ~= 0.3567
   # H2 = -log(0.75) ~= 0.2877
   # Mean H = (0.3567 + 0.2877) / 2 ~= 0.3222
@@ -156,7 +158,7 @@ test_that("survprobMatListAveraging averages correctly on cumulative hazard scal
 })
 
 test_that("survprobMatListAveraging handles list with one matrix", {
-  list_one <- list(t(survprobMatInterpolator(probs_mat1, times_mat, new_times_mat)))
+  list_one <- list(survprobMatInterpolator(probs_mat1, times_mat, new_times_mat))
   averaged_mat <- survprobMatListAveraging(list_one)
   expect_equal(averaged_mat, list_one[[1]])
 })
@@ -166,8 +168,8 @@ test_that("survprobMatListAveraging handles empty list", {
 })
 
 test_that("survprobMatListAveraging handles inconsistent dimensions", {
-  mat_wrong_dim <- matrix(1:6, nrow=3) # Different rows
-  list_inconsistent <- list(t(survprobMatInterpolator(probs_mat1, times_mat, new_times_mat)),
+  mat_wrong_dim <- matrix(1:6, nrow=3) # Different dimensions
+  list_inconsistent <- list(survprobMatInterpolator(probs_mat1, times_mat, new_times_mat),
                             mat_wrong_dim)
   expect_error(survprobMatListAveraging(list_inconsistent), "must have the same dimensions")
 })
@@ -178,14 +180,14 @@ test_that("survprobMatListAveraging handles NAs (na.omit behavior)", {
    mat3 <- matrix(c(NA, NA, 0.5, 0.3), nrow=2)
    list_na <- list(mat1, mat2, mat3)
 
-   averaged <- survprobMatListAveraging(list_na)
+   averaged <- survprobMatListAveraging(list_na, na.rm = TRUE)
 
-   # Check element [1, 1]: mean(-log(0.8), -log(0.7)) = exp(-(-0.2231 - 0.3567)/2) = exp(0.2899) = 0.748
+   # Check element [1, 1]: mat1=0.8, mat2=0.7, mat3=NA -> mean(-log(0.8), -log(0.7))
    expect_equal(averaged[1,1], exp(-mean(c(-log(0.8), -log(0.7)))))
-   # Check element [1, 2]: only mat1 has value -> should be mat1 value
-   expect_equal(averaged[1,2], mat1[1,2])
-   # Check element [2, 1]: mean(-log(0.7), -log(0.6), -log(0.5))
-   expect_equal(averaged[2,1], exp(-mean(c(-log(0.7), -log(0.6), -log(0.5)))))
-   # Check element [2, 2]: mean(-log(0.5), -log(0.4), -log(0.3))
+   # Check element [1, 2]: mat1=0.7, mat2=0.6, mat3=0.5 -> mean(-log(0.7), -log(0.6), -log(0.5))
+   expect_equal(averaged[1,2], exp(-mean(c(-log(0.7), -log(0.6), -log(0.5)))))
+   # Check element [2, 1]: mat1=0.6, mat2=NA, mat3=NA -> only 0.6, so result = 0.6
+   expect_equal(averaged[2,1], 0.6)
+   # Check element [2, 2]: mat1=0.5, mat2=0.4, mat3=0.3 -> mean(-log(0.5), -log(0.4), -log(0.3))
    expect_equal(averaged[2,2], exp(-mean(c(-log(0.5), -log(0.4), -log(0.3)))))
 })

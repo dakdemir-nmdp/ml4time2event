@@ -24,7 +24,9 @@ CRModel_SurvReg(
 
 \item{eventvar}{character name of event variable in data (coded 0=censored, 1=cause1, 2=cause2, etc.)}
 
-\item{event_codes}{character or numeric vector identifying the event code(s) to model. If NULL (default), all non-zero codes observed in the data are used. The first entry defines the default event of interest.}
+\item{event_codes}{character or numeric vector identifying the event code(s)
+to model. If NULL (default), all non-zero event codes observed in the data
+are used. The first entry defines the default event of interest.}
 
 \item{dist}{distribution for the parametric model, one of "weibull", "exponential", "gaussian", "logistic","lognormal" or "loglogistic".}
 
@@ -40,11 +42,11 @@ a list with the following components:
   \item{model_type}{character string "cr_survreg"}
   \item{expvars}{character vector of explanatory variables used}
   \item{timevar}{character name of time variable}
-  \\item{eventvar}{character name of event variable}
-  \\item{event_codes}{character vector of event codes included in the model}
-  \\item{event_codes_numeric}{numeric vector of event codes included}
-  \\item{default_event_code}{character scalar for the default event code}
-  \\item{default_event_code_numeric}{numeric scalar for the default event code}
+  \item{eventvar}{character name of event variable}
+  \item{event_codes}{character vector of event codes included in the model}
+  \item{event_codes_numeric}{numeric vector of event codes included}
+  \item{default_event_code}{character scalar for the default event code}
+  \item{default_event_code_numeric}{numeric scalar for the default event code}
   \item{time_range}{vector with min and max observed event times}
   \item{dist}{the distribution used for the parametric model}
 }

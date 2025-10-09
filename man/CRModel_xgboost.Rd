@@ -9,7 +9,7 @@ CRModel_xgboost(
   expvars,
   timevar,
   eventvar,
-  failcode = 1,
+  event_codes = NULL,
   eta = 0.01,
   max_depth = 5,
   nrounds = 100,
@@ -27,7 +27,10 @@ CRModel_xgboost(
 
 \item{eventvar}{character name of event variable in data (coded 0=censored, 1=cause1, 2=cause2, etc.)}
 
-\item{failcode}{integer, the code for the event of interest (default: 1)}
+\item{event_codes}{character or numeric vector identifying the event codes to
+model. XGBoost competing risks supports modeling multiple causes
+simultaneously. If NULL (default), all non-zero event codes observed in the
+data are used. The first entry defines the default event of interest.}
 
 \item{eta}{learning rate (default: 0.01)}
 
@@ -44,13 +47,16 @@ CRModel_xgboost(
 \value{
 a list with the following components:
   \item{xgb_model}{the fitted cause-specific XGBoost model object}
-  \item{times}{vector of unique event times in the training data for the event of interest}
+  \item{xgb_models_all_causes}{list of cause-specific XGBoost models}
+  \item{event_codes}{character vector of event codes included in the model}
+  \item{event_codes_numeric}{numeric vector of event codes included}
+  \item{default_event_code}{character scalar for the default event code}
+  \item{times}{vector of unique event times for the default event of interest}
   \item{varprof}{variable profile list containing factor levels and numeric ranges}
   \item{model_type}{character string "cr_xgboost"}
   \item{expvars}{character vector of explanatory variables used}
   \item{timevar}{character name of time variable}
   \item{eventvar}{character name of event variable}
-  \item{failcode}{the event code for the outcome of interest}
   \item{time_range}{vector with min and max observed event times}
   \item{feature_names}{character vector of feature names used in XGBoost}
 }

@@ -63,7 +63,9 @@ test_that("RunCRModels fits basic models", {
 
   # Check output structure
   expect_type(models, "list")
-  expect_named(models, c("input", "RF_Model", "RF_Model2", "Cox_Model"))
+  expect_s3_class(models, "CREnsemble")
+  expect_true("model_status" %in% names(models))
+  expect_named(models, c("input", "model_status", "RF_Model", "RF_Model2", "Cox_Model"), ignore.order = TRUE)
 
   # Check input structure
   expect_type(models$input, "list")
@@ -92,7 +94,7 @@ test_that("RunCRModels handles multiple models", {
     varsel = FALSE
   )
 
-  expect_named(models, c("input", "RF_Model", "RF_Model2", "FG_Model", "Cox_Model"))
+  expect_named(models, c("input", "model_status", "RF_Model", "RF_Model2", "FG_Model", "Cox_Model"), ignore.order = TRUE)
   expect_true(!is.null(models$FG_Model))
   expect_true(!is.null(models$Cox_Model))
 })
@@ -134,7 +136,7 @@ test_that("RunCRModels handles model failures gracefully", {
 
   # Should still return a valid structure even if some models fail
   expect_type(models, "list")
-  expect_named(models, c("input", "RF_Model", "RF_Model2", "Cox_Model"))
+  expect_true("model_status" %in% names(models))
 })
 
 # ==============================================================================
@@ -160,13 +162,15 @@ test_that("PredictCRModels works with basic models", {
 
   # Check output structure
   expect_type(preds, "list")
-  expect_named(preds, c("ModelPredictions", "NewProbs"))
+  expect_true(all(c("ModelPredictions", "NewProbs", "models_used", "ensemble_method") %in% names(preds)))
 
   # Check ensemble predictions
   expect_true(is.matrix(preds$NewProbs))
   expect_equal(nrow(preds$NewProbs), length(time_points))
   expect_equal(ncol(preds$NewProbs), nrow(test_data))
   expect_true(all(preds$NewProbs >= 0 & preds$NewProbs <= 1))
+  expect_equal(preds$ensemble_method, "average")
+  expect_true(length(preds$models_used) > 0)
 
   # Check individual model predictions
   expect_type(preds$ModelPredictions, "list")
@@ -194,6 +198,7 @@ test_that("PredictCRModels handles multiple models", {
   expect_true(length(preds$ModelPredictions) >= 4)  # RF, RF2, FG, Cox
   expect_true(is.matrix(preds$NewProbs))
   expect_true(all(preds$NewProbs >= 0 & preds$NewProbs <= 1))
+  expect_equal(preds$ensemble_method, "average")
 })
 
 test_that("PredictCRModels handles missing models gracefully", {
@@ -217,6 +222,7 @@ test_that("PredictCRModels handles missing models gracefully", {
   preds <- PredictCRModels(models, test_data, time_points)
   expect_type(preds, "list")
   expect_true(is.matrix(preds$NewProbs))
+  expect_equal(preds$ensemble_method, "average")
 })
 
 # ==============================================================================

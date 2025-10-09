@@ -112,9 +112,15 @@ BrierScore <- function(predsurv, predsurvtimes, obstimes, obsevents,
 
   # Create a list object that pec can use
   # pec expects a list with survfit-like structure
+  # Need to add required attributes for survfit objects
   pred_obj <- list(
     time = predsurvtimes,
-    surv = predsurv
+    surv = predsurv,
+    type = "right",
+    n = ncol(predsurv),
+    n.event = rep(0, length(predsurvtimes)),
+    n.censor = rep(0, length(predsurvtimes)),
+    n.risk = rep(ncol(predsurv), length(predsurvtimes))
   )
   class(pred_obj) <- c("survfit", "list")
 

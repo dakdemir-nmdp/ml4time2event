@@ -4,6 +4,9 @@
 
 library(testthat)
 
+# Load the package
+devtools::load_all()
+
 # ==============================================================================
 # Test Data Setup
 # ==============================================================================
@@ -380,7 +383,8 @@ test_that("CR XGBoost interface aligns with CR GAM", {
     expvars = expvars_numeric,
     timevar = "time",
     eventvar = "event",
-    failcode = 1
+    event_of_interest = 1,
+    event_codes = c(1, 2) # Ensure event_of_interest is part of event_codes
   )
 
   expect_named(xgb_model, c(
@@ -390,8 +394,9 @@ test_that("CR XGBoost interface aligns with CR GAM", {
   ))
 
   expect_named(gam_model, c(
-    "gam_model", "gam_models_all_causes", "all_event_types", "times", "varprof",
-    "model_type", "expvars", "timevar", "eventvar", "failcode", "time_range"
+    "gam_model", "gam_models_all_causes", "event_codes", "event_codes_numeric",
+    "default_event_code", "default_event_code_numeric", "times", "varprof",
+    "model_type", "expvars", "timevar", "eventvar", "time_range"
   ))
 
   xgb_preds <- Predict_CRModel_xgboost(xgb_model, test_data)

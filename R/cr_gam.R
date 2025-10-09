@@ -38,6 +38,9 @@ score2proba <-
 #' @param shrinkTreshold integer value, minimum number of factor levels for factor variables to be considered for shrinkage ('re' basis).
 #' @param ntimes integer, number of time points to use for prediction grid (default: 50)
 #' @param verbose logical, print progress messages (default: FALSE)
+#' @param event_of_interest optional character or numeric scalar indicating a specific event code
+#'   that should be prioritized as the primary event of interest. If provided, this
+#'   event code must be one of the codes specified in 'event_codes'.
 #'
 #' @return a list with the following components:
 #'   \item{gam_model}{the fitted cause-specific GAM model object from mgcv::gam}
@@ -57,7 +60,7 @@ score2proba <-
 #' @importFrom stats as.formula predict
 #' @export
 CRModel_GAM <- function(data, expvars, timevar, eventvar, event_codes = NULL,
-                        shrinkTreshold = 10, ntimes = 50, verbose = FALSE) {
+                        shrinkTreshold = 10, ntimes = 50, verbose = FALSE, event_of_interest = NULL) {
 
   # ============================================================================
   # Input Validation
@@ -116,6 +119,11 @@ CRModel_GAM <- function(data, expvars, timevar, eventvar, event_codes = NULL,
 
   event_codes <- as.character(event_codes)
 
+  # Validate event_of_interest AFTER event_codes is determined
+  if (!is.null(event_of_interest) && !as.character(event_of_interest) %in% event_codes) {
+    stop("'event_of_interest' must be one of the specified event_codes")
+  }
+
   missing_event_codes <- setdiff(event_codes, available_events)
   if (length(missing_event_codes) > 0) {
     stop("The following event_codes are not present in the data: ",
@@ -130,6 +138,12 @@ CRModel_GAM <- function(data, expvars, timevar, eventvar, event_codes = NULL,
 
   primary_event_code <- event_codes[1]
   primary_event_numeric <- event_codes_numeric[1]
+
+  # If event_of_interest is provided, prioritize it as the primary event code
+  if (!is.null(event_of_interest)) {
+    primary_event_code <- as.character(event_of_interest)
+    primary_event_numeric <- as.numeric(event_of_interest)
+  }
 
   # Get unique event times for the event of interest
   event_times <- XYTrain[[timevar]][XYTrain[[eventvar]] == primary_event_numeric]

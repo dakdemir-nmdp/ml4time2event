@@ -24,7 +24,10 @@ CRModel_GAM(
 
 \item{eventvar}{character name of event variable in data (coded 0=censored, 1=cause1, 2=cause2, etc.)}
 
-\item{event_codes}{character or numeric vector identifying the event code(s) to model. If NULL (default), all non-zero event codes in the data are used. The first entry defines the default event of interest.}
+\item{event_codes}{character or numeric vector identifying the event code(s) to
+model. GAM competing risks can fit multiple causes simultaneously. If NULL
+(default), all non-zero event codes observed in the data are used. The first
+entry defines the default event of interest.}
 
 \item{shrinkTreshold}{integer value, minimum number of factor levels for factor variables to be considered for shrinkage ('re' basis).}
 
@@ -44,7 +47,7 @@ a list with the following components:
   \item{event_codes}{character vector of event codes included in the model}
   \item{event_codes_numeric}{numeric vector of event codes included}
   \item{default_event_code}{character scalar for the default event code}
-  \item{default_event_code_numeric}{numeric scalar for the default event code}
+  \\item{default_event_code_numeric}{numeric scalar for the default event code}
   \item{time_range}{vector with min and max observed event times}
 }
 \description{

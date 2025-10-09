@@ -37,7 +37,9 @@ applied before fitting models "FG", "rulefit", "bart", "cox", "xgboost", "gam", 
 a list of two items. First is a list containing ExpVars: all of the explanatory vars,
  ExpVars2: a subset of the explanatory variables selected by random forest,
  timevar: time variable,
- eventvar: event variable. The second is also a list that contain the individual model outputs.
+ eventvar: event variable,
+ model_status: Named logical vector indicating which models succeeded (TRUE) or failed (FALSE).
+ The second is also a list that contain the individual model outputs.
 }
 \description{
 utility function to run several CR models at the same time

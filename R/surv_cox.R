@@ -362,9 +362,16 @@ Predict_SurvModel_Cox <- function(modelout, newdata, newtimes = NULL) {
     }
   }
 
-  # Check for NAs
-  if (any(is.na(newdata_prepared))) {
-    warning("Missing values in newdata will result in NA predictions")
+  # Check for NAs and count complete cases
+  has_missing <- any(is.na(newdata_prepared))
+  n_complete_cases <- sum(complete.cases(newdata_prepared))
+
+  if (has_missing) {
+    warning(sprintf(
+      "Missing values detected in %d observation(s). ",
+      nrow(newdata_prepared) - n_complete_cases),
+      "survfit will drop incomplete cases."
+    )
   }
 
   # ============================================================================
@@ -435,9 +442,57 @@ Predict_SurvModel_Cox <- function(modelout, newdata, newtimes = NULL) {
   pred_probs <- survfit_obj$surv
   pred_times <- survfit_obj$time
 
-  # Ensure matrix format (handle single observation case)
+  # Determine expected number of observations
+  n_expected_obs <- nrow(newdata_prepared)
+
+  # Ensure matrix format
   if (!is.matrix(pred_probs)) {
-    pred_probs <- matrix(pred_probs, ncol = 1)
+    # survfit returned a vector - this happens when:
+    # 1. Single observation (expected)
+    # 2. Multiple observations but survfit collapsed to single curve (unexpected)
+
+    if (n_expected_obs == 1) {
+      # Single observation case - shape as column vector
+      pred_probs <- matrix(pred_probs, ncol = 1)
+    } else {
+      # Multiple observations but got vector - this suggests survfit encountered issues
+      # (e.g., many observations with NAs, identical risk scores, etc.)
+      # Interpret as single survival curve for all observations
+      warning(sprintf(
+        "survfit returned a vector for %d observations. This may indicate:\n",
+        n_expected_obs),
+        "  - Observations have identical covariate patterns\n",
+        "  - Multiple observations had missing values\n",
+        "Treating as single survival curve replicated across all observations."
+      )
+      # Create matrix: replicate the single curve for all observations
+      pred_probs <- matrix(rep(pred_probs, n_expected_obs),
+                          nrow = length(pred_probs),
+                          ncol = n_expected_obs)
+    }
+  }
+
+  # Validate dimensions
+  n_returned_obs <- ncol(pred_probs)
+
+  if (n_returned_obs != n_expected_obs) {
+    # Check if the mismatch is due to missing values (expected)
+    if (has_missing && n_returned_obs == n_complete_cases) {
+      # This is expected - survfit dropped incomplete cases
+      # Expand predictions to match original newdata by filling with NAs
+      full_pred_probs <- matrix(NA, nrow = nrow(pred_probs), ncol = n_expected_obs)
+      complete_idx <- which(complete.cases(newdata_prepared))
+      full_pred_probs[, complete_idx] <- pred_probs
+      pred_probs <- full_pred_probs
+    } else {
+      # Unexpected mismatch
+      stop(sprintf(
+        "Dimension mismatch: survfit returned %d observation(s) but expected %d.\n",
+        n_returned_obs, n_expected_obs),
+        sprintf("Complete cases: %d. ", n_complete_cases),
+        "This indicates an unexpected issue in survfit call or data preparation."
+      )
+    }
   }
 
   # Use the standard interpolation utility function

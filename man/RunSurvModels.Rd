@@ -40,6 +40,7 @@ A list containing:
   - input: list with ExpVars, ExpVars2 (top N vars), timevar, eventvar.
   - RF_Model: Output from SurvModel_RF using all ExpVars.
   - RF_Model2: Output from SurvModel_RF using top ExpVars2.
+  - model_status: Named logical vector indicating which models succeeded (TRUE) or failed (FALSE).
   - ... other fitted model outputs named according to the 'models' input (e.g., glmnet_Model, CPH_Model).
 }
 \description{

@@ -4,7 +4,12 @@
 \alias{Predict_CRModel_xgboost}
 \title{Predict_CRModel_xgboost}
 \usage{
-Predict_CRModel_xgboost(modelout, newdata, newtimes = NULL)
+Predict_CRModel_xgboost(
+  modelout,
+  newdata,
+  newtimes = NULL,
+  event_of_interest = NULL
+)
 }
 \arguments{
 \item{modelout}{the output from 'CRModel_xgboost'}
@@ -14,6 +19,10 @@ Predict_CRModel_xgboost(modelout, newdata, newtimes = NULL)
 \item{newtimes}{optional numeric vector of time points for prediction.
 If NULL (default), uses the times from the training data.
 Can be any positive values - interpolation handles all time points.}
+
+\item{event_of_interest}{character or numeric scalar indicating the event code
+for which CIFs should be returned. If NULL (default), the model's default
+event code (the first entry in `event_codes`) is used.}
 }
 \value{
 a list containing:

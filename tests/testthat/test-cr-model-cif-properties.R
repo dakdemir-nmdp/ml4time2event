@@ -1,6 +1,9 @@
 library(survival)
 library(testthat)
 
+# Load the package to make all CR model functions available
+devtools::load_all()
+
 # Helper function to check for non-monotonicity in a CIF matrix
 # A valid CIF must be non-decreasing.
 # This function returns TRUE if any CIF curve is non-monotonic.
@@ -133,15 +136,15 @@ test_that("CRModel_GAM produces monotonic CIFs", {
     timevar = time_var,
     eventvar = event_var,
     expvars = exp_vars,
-    failcode = 2
+    event_of_interest = 2
   )
-  
+
   # Predict CIFs
   gam_preds <- Predict_CRModel_GAM(
     modelout = gam_model_out,
     newdata = test_data,
     newtimes = eval_times,
-    failcode = 2
+    event_of_interest = 2
   )
   
   # Check for monotonicity
@@ -277,15 +280,15 @@ test_that("CRModel_GAM produces monotonic CIFs", {
     timevar = time_var,
     eventvar = event_var,
     expvars = exp_vars,
-    failcode = 2
+    event_of_interest = 2
   )
-  
+
   # Predict CIFs
   gam_preds <- Predict_CRModel_GAM(
     modelout = gam_model_out,
     newdata = test_data,
     newtimes = eval_times,
-    failcode = 2
+    event_of_interest = 2
   )
   
   # Check for monotonicity

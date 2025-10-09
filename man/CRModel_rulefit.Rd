@@ -28,7 +28,9 @@ CRModel_rulefit(
 
 \item{eventvar}{character name of event variable in data (coded 0,1,2 where 0=censored, 1=event of interest, 2=competing event)}
 
-\item{event_codes}{character or numeric vector identifying the event code to model. RuleFit currently supports a single event code. If NULL (default), the first non-zero event code observed in the data is used.}
+\item{event_codes}{character or numeric vector identifying the event code to
+model. RuleFit currently supports a single event code. If NULL (default),
+the first non-zero event code observed in the data is used.}
 
 \item{ntree}{number of trees to fit to extract rules (default: 300)}
 

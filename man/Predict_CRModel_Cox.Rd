@@ -4,7 +4,12 @@
 \alias{Predict_CRModel_Cox}
 \title{Predict_CRModel_Cox}
 \usage{
-Predict_CRModel_Cox(modelout, newdata, newtimes = NULL)
+Predict_CRModel_Cox(
+  modelout,
+  newdata,
+  newtimes = NULL,
+  event_of_interest = NULL
+)
 }
 \arguments{
 \item{modelout}{the output from 'CRModel_Cox'}
@@ -14,10 +19,12 @@ Predict_CRModel_Cox(modelout, newdata, newtimes = NULL)
 \item{newtimes}{optional numeric vector of time points for prediction.
 If NULL (default), uses the times from the training data.
 Can be any positive values - interpolation handles all time points.}
+
+\item{event_of_interest}{integer, the code for the event of interest for CIF prediction.
+If NULL (default), uses the failcode from the model training.}
 }
 \value{
 a list containing:
-  \item{cph_modelTestPredict}{the raw survfit object from prediction}
   \item{CIFs}{predicted cumulative incidence function matrix
     (rows=times, cols=observations)}
   \item{Times}{the times at which CIFs are calculated}

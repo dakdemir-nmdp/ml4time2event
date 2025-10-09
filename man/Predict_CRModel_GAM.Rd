@@ -20,8 +20,8 @@ Predict_CRModel_GAM(
 If NULL (default), uses the times from the training data.
 Can be any positive values - interpolation handles all time points.}
 
-\item{event_of_interest}{character or numeric scalar indicating the event code to
-predict. If NULL (default), uses the event code stored during training.}
+\item{event_of_interest}{character or numeric scalar indicating which event code
+to predict. If NULL (default), uses the event code stored during training.}
 }
 \value{
 a list containing:

@@ -9,7 +9,7 @@ CRModel_RF(
   expvars,
   timevar,
   eventvar,
-  failcode = 1,
+  event_codes = NULL,
   ntree = 300,
   samplesize = 500,
   nsplit = 5,
@@ -26,9 +26,11 @@ CRModel_RF(
 
 \item{timevar}{character name of time variable in data}
 
-\item{eventvar}{character name of event variable in data (coded 0,1,2 where 0=censored, 1=event of interest, 2=competing event)}
+\item{eventvar}{character name of event variable in data (coded 0=censored, 1=cause1, 2=cause2, ...)}
 
-\item{failcode}{integer, the code for the event of interest (default: 1)}
+\item{event_codes}{character vector identifying the event code(s) to model.
+Random forest competing risks currently supports a single event code. If
+NULL (default), the first non-zero event code observed in the data is used.}
 
 \item{ntree}{integer value, number of trees to grow (default: 300)}
 

@@ -1,10 +1,11 @@
 #' @title cifInterpolator
-#' @description Interpolate Cumulative Incidence Function (CIF) for new times.
+#' @description Interpolate Cumulative Incidence Function (CIF) for new times using linear interpolation.
+#'   Properly propagates NAs: if interpolating between points where any endpoint is NA, result is NA.
 #' @param x new times for interpolation
-#' @param probs vector of CIF probabilities
+#' @param probs vector of CIF probabilities (may contain NAs)
 #' @param times vector of times corresponding to probs
 #' @return interpolated CIF values at times x
-#' @importFrom stats approxfun
+#' @importFrom stats approx
 #' @noRd
 cifInterpolator<-function(x, probs, times){
   # Sort times and probs together to handle unsorted input
@@ -13,24 +14,51 @@ cifInterpolator<-function(x, probs, times){
     times <- times[sort_order]
     probs <- probs[sort_order]
   }
-  
+
   # Handle single time/prob case by adding (0, 0) point if needed
   if (length(times) == 1 && length(probs) == 1) {
     if (times[1] == 0) {
       # If the single point is at time 0, extrapolate with constant value
       return(rep(probs[1], length(x)))
     } else {
-      # Add (0, 0) point for proper interpolation
+      # Add (0, 0) point for proper linear interpolation
       times <- c(0, times)
       probs <- c(0, probs)
     }
   }
-  
-  # Create an interpolation function based on existing times and probabilities
-  # Use the last (rightmost) probability value for extrapolation, not the maximum
-  f<-stats::approxfun(times, probs, method = "linear", yleft = 0, yright = probs[length(probs)], rule = 2, na.rm = FALSE) # Ensure rule=2 to extrapolate using nearest value
-  # Apply the interpolation function to the new times
-  sapply(x, function(xi)f(xi))
+
+  # Use stats::approx with ties = "ordered" and rule = 2 for proper handling
+  # This will interpolate but stats::approx doesn't propagate NAs correctly
+  # We need to post-process to handle NA propagation
+  result <- stats::approx(x = times, y = probs, xout = x,
+                          method = "linear", yleft = 0,
+                          yright = probs[length(probs)],
+                          rule = 2, ties = "ordered")$y
+
+  # Post-process to propagate NAs: if interpolating between any NA endpoint, set to NA
+  for (i in seq_along(x)) {
+    xi <- x[i]
+    # Find the two surrounding time points
+    if (xi <= times[1]) {
+      # Before first point - already handled by yleft
+      next
+    } else if (xi >= times[length(times)]) {
+      # After last point - check if last point is NA
+      if (is.na(probs[length(probs)])) {
+        result[i] <- NA
+      }
+    } else {
+      # Between points - find surrounding indices
+      idx_after <- which(times > xi)[1]
+      idx_before <- idx_after - 1
+      # If either endpoint is NA, result should be NA
+      if (is.na(probs[idx_before]) || is.na(probs[idx_after])) {
+        result[i] <- NA
+      }
+    }
+  }
+
+  result
 }
 
 #' @title cifMatInterpolaltor
@@ -51,21 +79,24 @@ cifMatInterpolaltor<-function(probsMat, times,newtimes){
         times_aug <- times
         probs_row_aug <- probs_row
     }
-    # Interpolate using the single-vector function
+    # Interpolate using the single-vector function (now uses linear interpolation)
     cifInterpolator(newtimes, probs_row_aug, times_aug)
   }
   # Apply the interpolation function to each row of the probability matrix
   # Note: apply returns matrix with rows=newtimes, cols=observations
   probsMat1<-apply(probsMat, 1, interpolate1)
-  
+
   # Ensure probsMat1 is always a matrix (when newtimes has length 1, apply returns a vector)
   if (!is.matrix(probsMat1)) {
     probsMat1 <- matrix(probsMat1, nrow = length(newtimes), ncol = nrow(probsMat))
   }
 
-  # The monotonicity and NA handling has been removed. The function now returns
-  # the raw interpolated values. Models should be responsible for producing
-  # valid CIFs.
+  # Enforce monotonicity (CIF should be non-decreasing)
+  # This is crucial for correctness, even if models should ideally produce this.
+  for (i in 1:ncol(probsMat1)) {
+    probsMat1[, i] <- cummax(probsMat1[, i])
+  }
+
   probsMat1
 }
 
@@ -75,21 +106,42 @@ cifMatInterpolaltor<-function(probsMat, times,newtimes){
 #' @description Average a list of CIF matrices, either on probability or cumulative hazard scale.
 #' @param listprobsMat list of CIF matrices (each matrix: rows=newtimes, cols=observations)
 #' @param type character, either "CumHaz" (average on cumulative hazard scale) or "prob" (average on probability scale)
+#' @param na.rm logical, whether to remove NAs when averaging.
 #' @return averaged CIF matrix (rows=newtimes, cols=observations)
 #' @noRd
-cifMatListAveraging<-function(listprobsMat, type="CumHaz"){
+cifMatListAveraging<-function(listprobsMat, type="CumHaz", na.rm = FALSE){
   # Validate type parameter first, regardless of list length
   if (!type %in% c("CumHaz", "prob")) {
     stop("Type must be either 'CumHaz' or 'prob'")
   }
-  
+
+  if (length(listprobsMat) == 0) return(NULL)
+  if (length(listprobsMat) == 1) return(listprobsMat[[1]])
+
+  # Filter out NULL entries
+  listprobsMat <- Filter(Negate(is.null), listprobsMat)
+
   if (length(listprobsMat) == 0) return(NULL)
   if (length(listprobsMat) == 1) return(listprobsMat[[1]])
 
   # Check dimensions consistency
   dims <- lapply(listprobsMat, dim)
-  if (length(unique(sapply(dims, paste, collapse="x"))) > 1) {
-      stop("Matrices in listprobsMat must have the same dimensions.")
+  
+  # Handle cases where some predictions might be vectors not matrices
+  is_matrix <- sapply(dims, function(d) !is.null(d) && length(d) == 2)
+  if (!all(is_matrix)) {
+      warning("Some predictions are not matrices and will be excluded.")
+      listprobsMat <- listprobsMat[is_matrix]
+      dims <- dims[is_matrix]
+      if (length(listprobsMat) <= 1) return(if(length(listprobsMat) == 1) listprobsMat[[1]] else NULL)
+  }
+  
+  dim_strings <- sapply(dims, paste, collapse="x")
+
+  # If dimensions are inconsistent, throw error
+  if (length(unique(dim_strings)) > 1) {
+    stop("All matrices in listprobsMat must have the same dimensions. Found dimensions: ",
+         paste(unique(dim_strings), collapse = ", "))
   }
 
   if (type=="CumHaz"){
@@ -101,7 +153,7 @@ cifMatListAveraging<-function(listprobsMat, type="CumHaz"){
       HazzardArray[,,i]<--log(1 - listprobsMat[[i]] + 1e-10)
     }
     # Calculate the mean cumulative hazard across models
-    MeanHazzard<-apply(HazzardArray, c(1,2),function(x)(mean(x, na.rm = FALSE)))
+    MeanHazzard<-apply(HazzardArray, c(1,2),function(x)(mean(x, na.rm = na.rm)))
     # Convert mean cumulative hazard back to probability: 1 - exp(-H)
     NewProbs<-1-exp(-MeanHazzard)
   } else if (type=="prob"){
@@ -111,7 +163,7 @@ cifMatListAveraging<-function(listprobsMat, type="CumHaz"){
       ProbsArray[,,i]<-listprobsMat[[i]]
     }
     # Calculate the mean probability across models
-    NewProbs<-apply(ProbsArray, c(1,2),function(x)(mean(x, na.rm = FALSE)))
+    NewProbs<-apply(ProbsArray, c(1,2),function(x)(mean(x, na.rm = na.rm)))
     # Ensure probabilities are bounded between 0 and 1
     NewProbs <- pmax(pmin(NewProbs, 1.0), 0.0)
   }

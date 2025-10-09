@@ -4,7 +4,12 @@
 \alias{Predict_CRModel_BART}
 \title{Predict_CRModel_BART}
 \usage{
-Predict_CRModel_BART(modelout, newdata, newtimes = NULL)
+Predict_CRModel_BART(
+  modelout,
+  newdata,
+  newtimes = NULL,
+  event_of_interest = NULL
+)
 }
 \arguments{
 \item{modelout}{the output from 'CRModel_BART' (a list containing model and metadata)}
@@ -14,6 +19,11 @@ Predict_CRModel_BART(modelout, newdata, newtimes = NULL)
 \item{newtimes}{optional numeric vector of time points for prediction.
 If NULL (default), uses the model's native time points.
 Can be any positive values - interpolation handles all time points.}
+
+\item{event_of_interest}{character or numeric scalar indicating the event code
+for which CIFs should be returned. If NULL (default), uses the event code
+stored in the fitted model. BART models can only predict the event they were
+trained on.}
 }
 \value{
 a list containing:

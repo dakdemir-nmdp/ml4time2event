@@ -4,7 +4,12 @@
 \alias{Predict_CRModel_SurvReg}
 \title{Predict_CRModel_SurvReg}
 \usage{
- Predict_CRModel_SurvReg(modelout, newdata, newtimes = NULL, event_of_interest = NULL)
+Predict_CRModel_SurvReg(
+  modelout,
+  newdata,
+  newtimes = NULL,
+  event_of_interest = NULL
+)
 }
 \arguments{
 \item{modelout}{the output from 'CRModel_SurvReg'}
@@ -15,7 +20,8 @@
 If NULL (default), uses the times from the training data.
 Can be any positive values - interpolation handles all time points.}
 
-\item{event_of_interest}{character or numeric scalar indicating the event code to predict. If NULL (default), uses the event code stored during training.}
+\item{event_of_interest}{character or numeric scalar indicating the event code
+to predict. If NULL (default), uses the event code stored during training.}
 }
 \value{
 a list containing:

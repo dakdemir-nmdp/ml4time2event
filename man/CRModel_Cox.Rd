@@ -9,7 +9,7 @@ CRModel_Cox(
   expvars,
   timevar,
   eventvar,
-  failcode = 1,
+  event_codes = NULL,
   varsel = "none",
   penalty = "AIC",
   ntimes = 50,
@@ -25,7 +25,9 @@ CRModel_Cox(
 
 \item{eventvar}{character name of event variable in data (coded 0=censored, 1=cause1, 2=cause2, etc.)}
 
-\item{failcode}{integer, the code for the event of interest (default: 1)}
+\item{event_codes}{character vector of event codes for which to fit models.
+If NULL (default), fits a model for each event type found in the data.
+Codes are stored as character strings for downstream consistency.}
 
 \item{varsel}{character string specifying variable selection method:
 "none" (default, no selection),
@@ -41,14 +43,14 @@ CRModel_Cox(
 }
 \value{
 a list with the following components:
-  \item{cph_model}{the fitted cause-specific Cox model object}
+  \item{cph_models_all_causes}{named list of fitted cause-specific Cox model objects for each event code}
   \item{times}{vector of unique event times in the training data}
   \item{varprof}{variable profile list containing factor levels and numeric ranges}
   \item{model_type}{character string "cr_cox"}
   \item{expvars}{character vector of explanatory variables used}
   \item{timevar}{character name of time variable}
   \item{eventvar}{character name of event variable}
-  \item{failcode}{the event code for the outcome of interest}
+  \item{event_codes}{vector of event codes for which models were fitted}
   \item{varsel_method}{character string indicating variable selection method used}
   \item{time_range}{vector with min and max observed event times}
 }

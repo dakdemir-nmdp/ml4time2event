@@ -9,7 +9,7 @@ CRModel_FineGray(
   expvars,
   timevar,
   eventvar,
-  failcode = 1,
+  event_codes = NULL,
   ntimes = 50,
   verbose = FALSE
 )
@@ -21,9 +21,11 @@ CRModel_FineGray(
 
 \item{timevar}{character name of time variable in data}
 
-\item{eventvar}{character name of event variable in data (coded 0,1,2 where 0=censored, 1=event of interest, 2=competing event)}
+\item{eventvar}{character name of event variable in data (coded 0=censored, 1=cause1, 2=cause2, ...)}
 
-\item{failcode}{integer, the code for the event of interest (default: 1)}
+\item{event_codes}{character vector identifying the event code(s) to model.
+Fine-Gray supports exactly one competing event. If NULL (default), the
+first non-zero event code observed in the data is used.}
 
 \item{ntimes}{integer, number of time points to use for prediction grid (default: 50)}
 

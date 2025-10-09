@@ -9,7 +9,7 @@ CRModel_DeepSurv(
   expvars,
   timevar,
   eventvar,
-  failcode = 1,
+  event_codes = NULL,
   size = 5,
   decay = 0.01,
   maxit = 1000,
@@ -25,7 +25,9 @@ CRModel_DeepSurv(
 
 \item{eventvar}{character name of event variable in data (coded 0=censored, 1=cause1, 2=cause2, etc.)}
 
-\item{failcode}{integer, the code for the event of interest (default: 1)}
+\item{event_codes}{character or numeric vector identifying the event code(s) to
+model. DeepSurv competing risks currently supports a single event code. If
+NULL (default), the first non-zero event code observed in the data is used.}
 
 \item{size}{integer, number of units in the hidden layer (default: 5)}
 
@@ -42,9 +44,13 @@ a list with the following components:
   \item{varprof}{variable profile list}
   \item{expvars}{character vector of explanatory variables}
   \item{factor_levels}{list of factor levels for categorical variables}
-  \item{failcode}{the event code for the outcome of interest}
+  \item{event_codes}{character vector of event codes included in the model}
+  \item{event_codes_numeric}{numeric vector of event codes included}
+  \item{default_event_code}{character scalar for the default event code}
+  \item{time_range}{vector with min and max observed event times}
   \item{model_type}{character string "cr_deepsurv"}
 }
 \description{
-Fit a DeepSurv neural network model for competing risks outcomes using Fine-Gray style loss.
+Fit a DeepSurv neural network model for competing risks outcomes
+  using a Fine-Gray style loss.
 }
