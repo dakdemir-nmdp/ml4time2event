@@ -11,6 +11,7 @@
 *.Rds
 *.RDS
 
+
 # md files other than readme.md
 vignettes/*.md
 news/*.md
@@ -76,3 +77,6 @@ CLAUDE.md
 *.pdf
 
 **/.claude/settings.local.json
+
+# any folder that starts with .
+/.*
