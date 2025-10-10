@@ -1,3 +1,4 @@
+# Define prediction errors as Brier scores at median time
 # Comprehensive Survival Analysis Pipeline with ml4time2event
 # Using Follicular Lymphoma Dataset (TestDataFollic.csv)
 # 
@@ -17,7 +18,7 @@ library(ggplot2)
 library(gridExtra)
 
 # Load the package (use devtools::load_all() during development)
-# devtools::load_all()
+devtools::load_all()
 
 # --- 2. Data Loading and Initial Exploration ---
 cat("=== STEP 1: DATA LOADING ===\n")
@@ -79,13 +80,13 @@ print(var_profile$Summary)
 # --- 4. Data Splitting ---
 cat("\n=== STEP 3: DATA SPLITTING ===\n")
 
-# Use package's data splitting function if available, otherwise manual split
+# Use package's data splitting function for consistent, reproducible splits
 #set.seed(123) # For reproducibility
 
-# Create training/test split (70/30)
-train_indices <- sample(nrow(follic_data), floor(0.7 * nrow(follic_data)))
-train_data <- follic_data[train_indices, ]
-test_data <- follic_data[-train_indices, ]
+# Create training/test split (70/30) using package function
+split_data <- t2edata_split(follic_data, prop = 0.7)
+train_data <- split_data$Train
+test_data <- split_data$Test
 
 cat("Training set size:", nrow(train_data), "\n")
 cat("Test set size:", nrow(test_data), "\n")
@@ -367,39 +368,51 @@ for (model_name in names(predictions)) {
   })
 }
 
-# 7.2 Prediction Error (Simplified - use basic approach for vignette)
-cat("\nCalculating basic prediction error metrics...\n")
+# 7.2 Brier Score Evaluation using package function
+cat("\nCalculating Brier scores using package function...\n")
 
 # Define evaluation time points
 eval_times <- quantile(actual_times[actual_events_binary == 1], c(0.25, 0.5, 0.75))
 cat("Evaluation time points:", round(eval_times, 2), "\n")
 
-# Simple prediction error assessment: mean absolute error at median survival time
+# Use median time for Brier score evaluation
 median_time <- eval_times[2]  # 50% quantile
 
-# Initialize error storage
-pred_errors <- list()
+# Initialize Brier score storage
+brier_scores <- list()
 
-# Cox model error
-cox_time_idx <- which.min(abs(cox_pred$Times - median_time))
-cox_pred_at_median <- cox_pred$Probs[cox_time_idx, ]
-cox_error <- mean(abs(cox_pred_at_median - 0.5))
-pred_errors[["Cox"]] <- cox_error
-cat("Cox prediction error (simplified):", round(cox_error, 4), "\n")
+# Cox model Brier score
+cox_brier <- BrierScore(
+  predsurv = cox_pred$Probs,
+  predsurvtimes = cox_pred$Times,
+  obstimes = actual_times,
+  obsevents = actual_events_binary,
+  eval.times = median_time
+)
+brier_scores[["Cox"]] <- cox_brier
+cat("Cox Brier score:", round(cox_brier, 4), "\n")
 
-# Calculate prediction errors for all other models
+
+# Calculate Brier scores for all other models
 for (model_name in names(predictions)) {
   tryCatch({
     pred <- predictions[[model_name]]
-    time_idx <- which.min(abs(pred$Times - median_time))
-    pred_at_median <- pred$Probs[time_idx, ]
-    error_val <- mean(abs(pred_at_median - 0.5))
-    pred_errors[[model_name]] <- error_val
-    cat(model_name, "prediction error (simplified):", round(error_val, 4), "\n")
+    brier_val <- BrierScore(
+      predsurv = pred$Probs,
+      predsurvtimes = pred$Times,
+      obstimes = actual_times,
+      obsevents = actual_events_binary,
+      eval.times = median_time
+    )
+    brier_scores[[model_name]] <- brier_val
+    cat(model_name, "Brier score:", round(brier_val, 4), "\n")
   }, error = function(e) {
-    cat(model_name, "error calculation failed:", e$message, "\n")
+    cat(model_name, "Brier score calculation failed:", e$message, "\n")
   })
 }
+
+# Define prediction errors as Brier scores at median time
+pred_errors <- brier_scores
 
 # --- 8. Ensemble Predictions ---
 cat("\n=== STEP 7: ENSEMBLE PREDICTIONS ===\n")
@@ -408,30 +421,50 @@ cat("\n=== STEP 7: ENSEMBLE PREDICTIONS ===\n")
 top_models <- names(sort(unlist(concordances), decreasing = TRUE))[seq_len(min(3, length(concordances)))]
 cat("Top models for ensemble:", paste(top_models, collapse = ", "), "\n")
 
-# Create ensemble by averaging survival probabilities from top models
-# First, collect all time points from selected models
+
+# --- ENSEMBLE: Align patient order before averaging ---
+# Use rownames or a unique patient ID to ensure columns (patients) are aligned across all models
+# We'll use rownames of test_data as patient IDs (if not present, set them)
+if (is.null(rownames(test_data)) || any(rownames(test_data) == "")) {
+  rownames(test_data) <- as.character(seq_len(nrow(test_data)))
+}
+patient_ids <- rownames(test_data)
+
+# Helper to get patient IDs for a prediction matrix
+get_pred_patient_ids <- function(pred_matrix, data_ref) {
+  # Try to get colnames, else fallback to rownames of data_ref
+  if (!is.null(colnames(pred_matrix))) {
+    return(colnames(pred_matrix))
+  } else if (!is.null(rownames(data_ref))) {
+    return(rownames(data_ref))
+  } else {
+    return(as.character(seq_len(ncol(pred_matrix))))
+  }
+}
+
+# Collect all time points from selected models
 all_times <- cox_pred$Times
 for (model_name in top_models) {
   if (model_name != "Cox" && model_name %in% names(predictions)) {
     all_times <- c(all_times, predictions[[model_name]]$Times)
   }
 }
-
-# Create common time grid
 common_times <- sort(unique(all_times))
 common_times <- common_times[common_times <= max(all_times)]
 
-# Interpolate predictions to common time grid for ensemble models
+# Interpolate and align columns for each model
 ensemble_matrices <- list()
 
 # Cox model (always included as baseline)
 cox_interp <- matrix(NA, nrow = length(common_times), ncol = ncol(cox_pred$Probs))
 for (j in seq_len(ncol(cox_pred$Probs))) {
-  cox_interp[, j] <- approx(cox_pred$Times, cox_pred$Probs[, j], 
-                           xout = common_times, method = "constant", 
+  cox_interp[, j] <- approx(cox_pred$Times, cox_pred$Probs[, j],
+                           xout = common_times, method = "constant",
                            rule = 2, f = 0)$y
 }
-ensemble_matrices[["Cox"]] <- cox_interp
+# Assign patient IDs as colnames
+colnames(cox_interp) <- get_pred_patient_ids(cox_pred$Probs, test_data)
+ensemble_matrices[["Cox"]] <- cox_interp[, patient_ids, drop = FALSE]
 
 # Add other top models
 for (model_name in top_models) {
@@ -439,16 +472,21 @@ for (model_name in top_models) {
     pred <- predictions[[model_name]]
     model_interp <- matrix(NA, nrow = length(common_times), ncol = ncol(pred$Probs))
     for (j in seq_len(ncol(pred$Probs))) {
-      model_interp[, j] <- approx(pred$Times, pred$Probs[, j], 
-                                 xout = common_times, method = "constant", 
+      model_interp[, j] <- approx(pred$Times, pred$Probs[, j],
+                                 xout = common_times, method = "constant",
                                  rule = 2, f = 0)$y
     }
-    ensemble_matrices[[model_name]] <- model_interp
+    # Assign patient IDs as colnames
+    colnames(model_interp) <- get_pred_patient_ids(pred$Probs, test_data)
+    # Align columns to patient_ids
+    aligned_interp <- model_interp[, patient_ids, drop = FALSE]
+    ensemble_matrices[[model_name]] <- aligned_interp
   }
 }
 
-# Create ensemble by averaging predictions
+# Create ensemble by averaging predictions (now columns are aligned)
 if (length(ensemble_matrices) > 1) {
+  # All matrices have columns in the same order (patient_ids)
   ensemble_probs <- Reduce("+", ensemble_matrices) / length(ensemble_matrices)
 } else {
   ensemble_probs <- ensemble_matrices[[1]]
@@ -456,6 +494,7 @@ if (length(ensemble_matrices) > 1) {
 
 cat("Ensemble predictions created for", ncol(ensemble_probs), "subjects using", 
     length(ensemble_matrices), "models\n")
+
 
 # Evaluate ensemble
 ensemble_concordance_obj <- timedepConcordance(
@@ -465,76 +504,133 @@ ensemble_concordance_obj <- timedepConcordance(
   obsevents = actual_events_binary
 )
 ensemble_concordance <- mean(ensemble_concordance_obj$AppCindex$matrix, na.rm = TRUE)
+# Add ensemble concordance to concordances list for downstream tables/printing
+concordances[["Ensemble"]] <- ensemble_concordance
 
-# Calculate ensemble prediction error
-ensemble_time_idx <- which.min(abs(common_times - median_time))
-ensemble_pred_at_median <- ensemble_probs[ensemble_time_idx, ]
-ensemble_brier <- mean(abs(ensemble_pred_at_median - 0.5))
+# Calculate ensemble Brier score using package function
+ensemble_brier <- BrierScore(
+  predsurv = ensemble_probs,
+  predsurvtimes = common_times,
+  obstimes = actual_times,
+  obsevents = actual_events_binary,
+  eval.times = median_time
+)
 
 cat("Ensemble concordance:", round(ensemble_concordance, 3), "\n")
-cat("Ensemble integrated Brier score:", round(ensemble_brier, 4), "\n")
+cat("Ensemble Brier score:", round(ensemble_brier, 4), "\n")
 
 # --- 9. Expected Time Lost Calculations ---
 cat("\n=== STEP 8: EXPECTED TIME LOST ANALYSIS ===\n")
 
+
 # Calculate expected time lost using the package function
-max_time <- max(actual_times)
-cat("Maximum follow-up time:", round(max_time, 2), "\n")
+max_time <- as.numeric(quantile(actual_times, 0.9, na.rm = TRUE))
+cat("90th percentile follow-up time:", round(max_time, 2), "\n")
 
 # Calculate expected time lost for all models
 etl_results <- list()
 
-# Cox model expected time lost
-cox_pred_formatted <- list(NewProbs = cox_pred$Probs)
-cox_etl_list <- CalculateExpectedTimeLost(
-  PredictedCurves = list(cox_pred_formatted),
-  modeltypes = c("SURV"),
-  times = cox_pred$Times,
-  UL = max_time
-)
-cox_etl <- cox_etl_list[[1]]
-etl_results[["Cox"]] <- cox_etl
-cat("Cox expected time lost - mean:", round(mean(cox_etl), 2), 
-    "range:", round(range(cox_etl), 2), "\n")
 
-# Expected time lost for all other models
+
+# Harmonized ETL calculation: interpolate all model survival curves to common_times, then calculate ETL
+model_interp_list <- list()
+
+# Print diagnostic info for time grid and UL
+cat("\n[DIAGNOSTIC] common_times range:", range(common_times), "length:", length(common_times), "\n")
+cat("[DIAGNOSTIC] max_time (UL):", max_time, "\n")
+
+# Ensure UL does not exceed the max of common_times
+UL_fixed <- min(max_time, max(common_times, na.rm=TRUE))
+cat("[DIAGNOSTIC] Using UL_fixed:", UL_fixed, "\n")
+
+# Cox model
+cox_interp <- matrix(NA, nrow = length(common_times), ncol = ncol(cox_pred$Probs))
+for (j in seq_len(ncol(cox_pred$Probs))) {
+  cox_interp[, j] <- approx(cox_pred$Times, cox_pred$Probs[, j],
+                           xout = common_times, method = "constant",
+                           rule = 2, f = 0)$y
+}
+cat("[DIAGNOSTIC] Cox interp dim:", dim(cox_interp), "\n")
+model_interp_list[["Cox"]] <- cox_interp
+
+# Other models
 for (model_name in names(predictions)) {
-  tryCatch({
-    pred <- predictions[[model_name]]
-    pred_formatted <- list(NewProbs = pred$Probs)
-    etl_list <- CalculateExpectedTimeLost(
-      PredictedCurves = list(pred_formatted),
-      modeltypes = c("SURV"),
-      times = pred$Times,
-      UL = max_time
-    )
-    etl_values <- etl_list[[1]]
-    etl_results[[model_name]] <- etl_values
-    cat(model_name, "expected time lost - mean:", round(mean(etl_values), 2), 
-        "range:", round(range(etl_values), 2), "\n")
-  }, error = function(e) {
-    cat(model_name, "ETL calculation failed:", e$message, "\n")
-  })
+  pred <- predictions[[model_name]]
+  model_interp <- matrix(NA, nrow = length(common_times), ncol = ncol(pred$Probs))
+  for (j in seq_len(ncol(pred$Probs))) {
+    model_interp[, j] <- approx(pred$Times, pred$Probs[, j],
+                               xout = common_times, method = "constant",
+                               rule = 2, f = 0)$y
+  }
+  cat("[DIAGNOSTIC]", model_name, "interp dim:", dim(model_interp), "\n")
+  model_interp_list[[model_name]] <- model_interp
 }
 
-# Ensemble expected time lost
-ensemble_pred_formatted <- list(NewProbs = ensemble_probs)
+# Calculate ETL for all models on common_times and fixed UL
+for (model_name in names(model_interp_list)) {
+  interp_probs <- model_interp_list[[model_name]]
+  interp_formatted <- list(NewProbs = interp_probs)
+  etl_list <- CalculateExpectedTimeLost(
+    PredictedCurves = list(interp_formatted),
+    modeltypes = c("SURV"),
+    times = common_times,
+    UL = UL_fixed
+  )
+  etl_results[[model_name]] <- etl_list[[1]]
+  cat(model_name, "expected time lost - mean:", round(mean(etl_list[[1]]), 2),
+      "range:", round(range(etl_list[[1]]), 2), "\n")
+}
+
+
+
+# --- ENSEMBLE ETL: Ensure patient order and time grid match exactly, and UL matches ---
+ensemble_probs_aligned <- ensemble_probs[, patient_ids, drop = FALSE]
+cat("[DIAGNOSTIC] Ensemble probs dim:", dim(ensemble_probs_aligned), "\n")
+ensemble_pred_formatted <- list(NewProbs = ensemble_probs_aligned)
 ensemble_etl_list <- CalculateExpectedTimeLost(
   PredictedCurves = list(ensemble_pred_formatted),
   modeltypes = c("SURV"),
   times = common_times,
-  UL = max_time
+  UL = UL_fixed
 )
 ensemble_etl <- ensemble_etl_list[[1]]
 etl_results[["Ensemble"]] <- ensemble_etl
 cat("Ensemble expected time lost - mean:", round(mean(ensemble_etl), 2), 
     "range:", round(range(ensemble_etl), 2), "\n")
 
+
+
+# --- 10. Diagnostic: Plot survival curves for top models and ensemble for a few patients ---
+cat("\n=== DIAGNOSTIC: Plotting survival curves for top models and ensemble ===\n")
+library(reshape2)
+num_patients_to_plot <- min(3, ncol(ensemble_probs))
+diagnostic_plots <- list()
+for (i in 1:num_patients_to_plot) {
+  plot_df <- data.frame(Time = common_times)
+  # Add each top model's survival for patient i
+  for (model_name in names(ensemble_matrices)) {
+    plot_df[[model_name]] <- ensemble_matrices[[model_name]][, i]
+  }
+  plot_df$Ensemble <- ensemble_probs[, i]
+  plot_df_melt <- reshape2::melt(plot_df, id.vars = "Time", variable.name = "Model", value.name = "Survival")
+  p_diag <- ggplot(plot_df_melt, aes(x = Time, y = Survival, color = Model)) +
+    geom_step() +
+    ggtitle(paste("Survival curves for patient", i, "(top models + ensemble)")) +
+    theme_minimal()
+  diagnostic_plots[[i]] <- p_diag
+}
+if (length(diagnostic_plots) > 0) {
+  pdf("diagnostic_survival_curves.pdf", width = 7, height = 5)
+  for (p in diagnostic_plots) print(p)
+  dev.off()
+  cat("Diagnostic plots saved to diagnostic_survival_curves.pdf\n")
+}
+
 # --- 10. Visualization ---
 cat("\n=== STEP 9: VISUALIZATION ===\n")
 
 # 10.1 Model Performance Comparison Plot
-all_model_names <- c("Cox", names(predictions))
+all_model_names <- unique(c("Cox", names(predictions), "Ensemble"))
 performance_df <- data.frame(
   Model = all_model_names,
   Concordance = sapply(all_model_names, function(x) {
@@ -553,134 +649,83 @@ print(performance_df)
 # 10.2 Survival Curves for Selected Patients
 cat("\nPlotting survival curves for first 3 test patients...\n")
 
-# Create survival curve data for plotting
-plot_patients <- seq_len(min(3, nrow(test_data)))
-survival_plot_data <- data.frame()
+# Create plots using the package plotting functions
+# Plot with all 3 patients
+p1 <- plot_survival_curves(
+  predictions = c(list(Cox = cox_pred), predictions, list(Ensemble = list(Times = common_times, Probs = ensemble_probs))),
+  patients_to_plot = seq_len(min(3, nrow(test_data))),
+  highlight_ensemble = TRUE,
+  title = "Predicted Survival Curves - All Models Comparison"
+)
 
-for (patient in plot_patients) {
-  # Cox model
-  cox_data <- data.frame(
-    Time = cox_pred$Times,
-    Survival = cox_pred$Probs[, patient],
-    Model = "Cox",
-    Patient = paste("Patient", patient)
-  )
-  survival_plot_data <- rbind(survival_plot_data, cox_data)
-  
-  # Add ALL models with predictions
-  for (model_name in names(predictions)) {
-    pred <- predictions[[model_name]]
-    model_data <- data.frame(
-      Time = pred$Times,
-      Survival = pred$Probs[, patient],
-      Model = model_name,
-      Patient = paste("Patient", patient)
-    )
-    survival_plot_data <- rbind(survival_plot_data, model_data)
-  }
-  
-  # Ensemble
-  ensemble_data <- data.frame(
-    Time = common_times,
-    Survival = ensemble_probs[, patient],
-    Model = "Ensemble",
-    Patient = paste("Patient", patient)
-  )
-  survival_plot_data <- rbind(survival_plot_data, ensemble_data)
-}
+# Focused plot for Patient 1 only
+p1_single <- plot_survival_curves(
+  predictions = c(list(Cox = cox_pred), predictions, list(Ensemble = list(Times = common_times, Probs = ensemble_probs))),
+  patients_to_plot = 1,
+  highlight_ensemble = TRUE,
+  title = "Survival Curves - All Models (Patient 1)"
+)
 
-# Get unique models for consistent colors
-unique_models <- unique(survival_plot_data$Model)
-cat("Plotting", length(unique_models), "models:", paste(unique_models, collapse = ", "), "\n")
-
-# Create custom color palette with ensemble in black
-model_colors <- rainbow(length(unique_models))
-names(model_colors) <- unique_models
-if("Ensemble" %in% unique_models) {
-  model_colors["Ensemble"] <- "black"
-  cat("✅ Ensemble predictions will be drawn in BLACK\n")
-}
-
-# Create survival curves plot with all models
-p1 <- ggplot(survival_plot_data, aes(x = Time, y = Survival, color = Model)) +
-  geom_line(linewidth = 0.8, alpha = 0.8) +
-  facet_wrap(~Patient, ncol = 3) +
-  scale_color_manual(values = model_colors) +
-  labs(title = "Predicted Survival Curves - All Models Comparison",
-       subtitle = paste("Comparing", length(unique_models), "models across first 3 test patients"),
-       x = "Time", y = "Survival Probability") +
-  theme_minimal() +
-  theme(legend.position = "bottom",
-        legend.text = element_text(size = 8),
-        strip.text = element_text(size = 10, face = "bold")) +
-  guides(color = guide_legend(ncol = 5))  # Multi-column legend for better space usage
-
-# Create a focused plot for Patient 1 with all models
-patient1_data <- survival_plot_data[survival_plot_data$Patient == "Patient 1", ]
-
-p1_single <- ggplot(patient1_data, aes(x = Time, y = Survival, color = Model)) +
-  geom_line(linewidth = 1.2) +
-  scale_color_manual(values = model_colors) +
-  labs(title = "Survival Curves - All Models (Patient 1)",
-       subtitle = paste("Comparison of", length(unique_models), "survival models"),
-       x = "Time", y = "Survival Probability") +
-  theme_minimal() +
-  theme(legend.position = "right",
-        plot.title = element_text(size = 14, face = "bold"),
-        plot.subtitle = element_text(size = 12)) +
-  guides(color = guide_legend(ncol = 1))
 
 # 10.3 Expected Time Lost Distribution
-etl_plot_data <- data.frame()
-
-# Add Cox model
-cox_etl_df <- data.frame(ETL = etl_results[["Cox"]], Model = "Cox")
-etl_plot_data <- rbind(etl_plot_data, cox_etl_df)
-
-# Add all other models
-for (model_name in names(etl_results)) {
-  if (model_name != "Cox") {
-    model_etl_df <- data.frame(ETL = etl_results[[model_name]], Model = model_name)
-    etl_plot_data <- rbind(etl_plot_data, model_etl_df)
+# Prepare ETL and concordance summary for plotting function (mean ETL and concordance per model)
+# Compute ETL means
+etl_means <- sapply(names(etl_results), function(m) mean(etl_results[[m]]))
+# Compute concordance, handling Ensemble separately
+concordance_vals <- sapply(names(etl_results), function(m) {
+  if (m == "Ensemble") {
+    round(ensemble_concordance, 3)
+  } else if (m %in% names(concordances)) {
+    round(concordances[[m]], 3)
+  } else {
+    NA
   }
-}
-
-# Add ensemble
-ensemble_etl_df <- data.frame(ETL = ensemble_etl, Model = "Ensemble")
-etl_plot_data <- rbind(etl_plot_data, ensemble_etl_df)
-
-p2 <- ggplot(etl_plot_data, aes(x = Model, y = ETL, fill = Model)) +
-  geom_boxplot() +
-  labs(title = "Expected Time Lost Distribution by Model",
-       x = "Model", y = "Expected Time Lost") +
+})
+performance_etl_df <- data.frame(
+  Model = names(etl_results),
+  Expected_Time_Lost = as.numeric(etl_means),
+  Concordance = concordance_vals
+)
+# Custom plots: ETL and Concordance barplots as separate figures
+library(ggplot2)
+# ETL barplot
+p2_etl <- ggplot(performance_etl_df, aes(x = reorder(Model, Expected_Time_Lost), y = Expected_Time_Lost, fill = Model == "Ensemble")) +
+  geom_bar(stat = "identity", show.legend = FALSE) +
+  coord_flip() +
+  labs(title = "Model Performance: Expected Time Lost (ETL)",
+    x = "Model", y = "Expected Time Lost") +
+  scale_fill_manual(values = c("TRUE" = "black", "FALSE" = "steelblue")) +
   theme_minimal() +
-  theme(legend.position = "none")
+  theme(plot.title = element_text(size = 12, face = "bold"))
+# Concordance barplot
+p2_c <- ggplot(performance_etl_df, aes(x = reorder(Model, Concordance), y = Concordance, fill = Model == "Ensemble")) +
+  geom_bar(stat = "identity", show.legend = FALSE) +
+  coord_flip() +
+  labs(title = "Model Performance: Concordance Index (C)",
+    x = "Model", y = "Concordance Index") +
+  scale_fill_manual(values = c("TRUE" = "black", "FALSE" = "steelblue")) +
+  theme_minimal() +
+  theme(plot.title = element_text(size = 12, face = "bold"))
 
-# 10.4 Combined Plot: Survival Curves with Expected Time Lost
-# For the first patient, show survival curve with expected time lost annotation
-first_patient_data <- survival_plot_data[survival_plot_data$Patient == "Patient 1", ]
-
-p3 <- ggplot(first_patient_data, aes(x = Time, y = Survival, color = Model)) +
-  geom_line(linewidth = 1.2) +
-  scale_color_manual(values = model_colors) +
-  geom_hline(yintercept = 0.5, linetype = "dashed", alpha = 0.7) +
-  annotate("text", x = max(first_patient_data$Time) * 0.7, y = 0.8,
-           label = paste("Cox ETL:", round(etl_results[["Cox"]][1], 2)), 
-           color = "red", size = 3) +
-  annotate("text", x = max(first_patient_data$Time) * 0.7, y = 0.75,
-           label = paste("Best ETL:", round(etl_results[[unique_models[1]]][1], 2)), 
-           color = "green", size = 3) +
-  annotate("text", x = max(first_patient_data$Time) * 0.7, y = 0.7,
-           label = paste("Ensemble ETL:", round(ensemble_etl[1], 2)), 
-           color = "black", size = 3) +
-  labs(title = "Survival Curves with Expected Time Lost (Patient 1)",
-       x = "Time", y = "Survival Probability") +
-  theme_minimal()
+# 10.4 Combined Plot: Survival Curves with Expected Time Lost (Patient 1)
+# Use p1_single and add ETL annotation for Patient 1
+cox_etl1 <- round(etl_results[["Cox"]][1], 2)
+ensemble_etl1 <- round(ensemble_etl[1], 2)
+best_model <- names(sort(sapply(etl_results, function(x) mean(x, na.rm=TRUE))))[1]
+best_etl1 <- round(etl_results[[best_model]][1], 2)
+p3 <- p1_single +
+  ggplot2::annotate("text", x = Inf, y = 0.8, hjust = 1.1,
+           label = paste("Cox ETL:", cox_etl1), color = "red", size = 3) +
+  ggplot2::annotate("text", x = Inf, y = 0.75, hjust = 1.1,
+           label = paste("Best ETL:", best_etl1), color = "green", size = 3) +
+  ggplot2::annotate("text", x = Inf, y = 0.7, hjust = 1.1,
+           label = paste("Ensemble ETL:", ensemble_etl1), color = "black", size = 3)
 
 # Display plots
 print(p1)  # All models, 3 patients
 print(p1_single)  # All models, Patient 1 only
-print(p2)  # ETL distribution
+print(p2_etl)  # ETL distribution
+print(p2_c)     # Concordance distribution
 print(p3)  # Patient 1 with ETL annotations
 
 # Save plots
@@ -688,14 +733,14 @@ if (requireNamespace("gridExtra", quietly = TRUE)) {
   # Create comprehensive plot layout
   combined_plot <- gridExtra::grid.arrange(
     p1,          # Top: All models, 3 patients
-    gridExtra::grid.arrange(p1_single, p2, ncol = 2),  # Middle: Single patient + ETL
+    gridExtra::grid.arrange(p1_single, p2_etl, p2_c, ncol = 3),  # Middle: Single patient + ETL + Concordance
     p3,          # Bottom: Patient 1 with annotations
     ncol = 1, heights = c(2, 1.5, 1.5)
   )
   
   # Save to file
   ggsave("follic_survival_analysis.pdf", combined_plot, 
-         width = 16, height = 20, units = "in")
+         width = 20, height = 20, units = "in")
   cat("Plots saved to follic_survival_analysis.pdf\n")
 }
 
@@ -763,33 +808,45 @@ cat("Model Performance (Concordance Index):\n")
 for (model_name in names(concordances)) {
   cat("-", model_name, ":", round(concordances[[model_name]], 3), "\n")
 }
-cat("- Ensemble:", round(ensemble_concordance, 3), "\n\n")
 
-cat("Model Performance (Prediction Error - simplified):\n")
-for (model_name in names(pred_errors)) {
-  cat("-", model_name, ":", round(pred_errors[[model_name]], 4), "\n")
-}
-cat("- Ensemble:", round(ensemble_brier, 4), "\n\n")
+        # Harmonized ETL calculation: interpolate all model survival curves to common_times, then calculate ETL
+        model_interp_list <- list()
 
-cat("Expected Time Lost (Mean):\n")
-for (model_name in names(etl_results)) {
-  cat("-", model_name, ":", round(mean(etl_results[[model_name]]), 2), "time units\n")
-}
-cat("- Ensemble:", round(mean(ensemble_etl), 2), "time units\n\n")
+        # Cox model
+        cox_interp <- matrix(NA, nrow = length(common_times), ncol = ncol(cox_pred$Probs))
+        for (j in seq_len(ncol(cox_pred$Probs))) {
+          cox_interp[, j] <- approx(cox_pred$Times, cox_pred$Probs[, j],
+                                   xout = common_times, method = "constant",
+                                   rule = 2, f = 0)$y
+        }
+        model_interp_list[["Cox"]] <- cox_interp
 
-# Show best performing model
-best_model <- names(sort(unlist(concordances), decreasing = TRUE))[1]
-cat("Best Performing Model (by C-index):", best_model, 
-    "with concordance:", round(concordances[[best_model]], 3), "\n\n")
+        # Other models
+        for (model_name in names(predictions)) {
+          pred <- predictions[[model_name]]
+          model_interp <- matrix(NA, nrow = length(common_times), ncol = ncol(pred$Probs))
+          for (j in seq_len(ncol(pred$Probs))) {
+            model_interp[, j] <- approx(pred$Times, pred$Probs[, j],
+                                       xout = common_times, method = "constant",
+                                       rule = 2, f = 0)$y
+          }
+          model_interp_list[[model_name]] <- model_interp
+        }
 
-cat("Output Files Generated:\n")
-cat("- Model files:", paste(saved_models, collapse = ", "), "\n")
-cat("- Visualization: follic_survival_analysis.pdf\n\n")
-
-cat("This analysis demonstrates the complete ml4time2event workflow:\n")
-cat("✓ Data loading and preprocessing\n")
-cat("✓ Multiple survival models\n")
-cat("✓ Model evaluation and comparison\n")
+        # Calculate ETL for all models on common_times
+        for (model_name in names(model_interp_list)) {
+          interp_probs <- model_interp_list[[model_name]]
+          interp_formatted <- list(NewProbs = interp_probs)
+          etl_list <- CalculateExpectedTimeLost(
+            PredictedCurves = list(interp_formatted),
+            modeltypes = c("SURV"),
+            times = common_times,
+            UL = max_time
+          )
+          etl_results[[model_name]] <- etl_list[[1]]
+          cat(model_name, "expected time lost - mean:", round(mean(etl_list[[1]]), 2),
+              "range:", round(range(etl_list[[1]]), 2), "\n")
+        }
 cat("✓ Ensemble methods\n")
 cat("✓ Expected time lost calculations\n")
 cat("✓ Comprehensive visualization\n")

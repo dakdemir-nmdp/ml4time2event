@@ -1,34 +1,4 @@
-# --- Internal Helper Functions for Custom NNet Training -#' @title (Helper) Profile Variables
-#'
-#' @description A placeholder function to profile variables. In a real scenario, this would
-#' analyze variable types (numeric, factor), etc.
-#' @param data A data frame.
-#' @param expvars A character vector of variable names.
-#' @return A list summarizing variable types.
-#' @keywords internal
-VariableProfile <- function(data, expvars) {
-  varprofile <- vector(mode="list", length=length(expvars))
-  names(varprofile) <- expvars
-  for (vari in expvars) {
-    if (vari %in% colnames(data)) {
-      col_data <- data[[vari]]
-      if (is.factor(col_data)) {
-        varprofile[[vari]] <- table(col_data, useNA = "ifany")
-      } else if (is.numeric(col_data)) {
-        varprofile[[vari]] <- c(min = min(col_data, na.rm = TRUE), max = max(col_data, na.rm = TRUE))
-      } else if (is.character(col_data)) {
-        varprofile[[vari]] <- table(col_data, useNA = "ifany")
-      } else {
-        varprofile[[vari]] <- paste("Unsupported type:", class(col_data))
-      }
-    } else {
-      varprofile[[vari]] <- "Variable not found in data"
-    }
-  }
-  varprofile
-}
-
-
+# --- Internal Helper Functions for Custom NNet Training ---
 #' @title Initialize Neural Network Weights
 #' @description Initializes weights and biases for a single-hidden-layer network.
 #' @param n_in Number of input features.
@@ -323,7 +293,7 @@ CRModel_DeepSurv <- function(data, expvars, timevar, eventvar, event_codes = NUL
   n_features <- ncol(x_train)
 
   # Sort data by descending time for efficient loss calculation
-  sort_order <- order(-XYTrain[[timevar]], -XYTrain[[eventvar]])
+  sort_order <- order(XYTrain[[timevar]], -XYTrain[[eventvar]])
   x_train <- x_train[sort_order, ]
   time_sorted <- XYTrain[[timevar]][sort_order]
   event_sorted <- XYTrain[[eventvar]][sort_order]
@@ -454,7 +424,10 @@ CRModel_DeepSurv <- function(data, expvars, timevar, eventvar, event_codes = NUL
 
     risk_set_start <- min(event_indices)
     risk_set <- final_risk_scores[risk_set_start:length(final_risk_scores)]
-    length(event_indices) / sum(risk_set)
+    if (sum(risk_set) == 0) {
+      return(0)
+    }
+    sum(final_risk_scores[event_indices]) / sum(risk_set)
   })
 
   cumulative_baseline_cumhaz <- cumsum(baseline_hazard_increment)

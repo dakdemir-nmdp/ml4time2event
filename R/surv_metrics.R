@@ -137,7 +137,28 @@ BrierScore <- function(predsurv, predsurvtimes, obstimes, obsevents,
     verbose = FALSE
   )
 
-  return(brier_result)
+  # Always extract Brier scores for requested eval.times
+  if (!is.null(brier_result$AppErr)) {
+    # brier_result$time gives the times for which Brier scores are available
+    # brier_result$AppErr$model gives the Brier scores at those times
+    brier_times <- as.numeric(brier_result$time)
+    brier_values <- as.numeric(brier_result$AppErr$model)
+    # Match requested eval.times to available times (allowing for floating point imprecision)
+    req_times <- as.numeric(eval.times)
+    idx <- vapply(req_times, function(t) {
+      which.min(abs(brier_times - t))
+    }, integer(1))
+    # If the closest time is not close enough, set NA
+    tol <- 1e-8
+    matched <- abs(brier_times[idx] - req_times) < tol | brier_times[idx] == req_times
+    out <- rep(NA_real_, length(req_times))
+    out[matched] <- brier_values[idx[matched]]
+    names(out) <- as.character(req_times)
+    # Return scalar if only one time requested
+    if (length(out) == 1) return(out[[1]])
+    return(out)
+  }
+  stop("Could not extract Brier scores from pec object")
 }
 
 

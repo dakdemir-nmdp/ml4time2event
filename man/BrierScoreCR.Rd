@@ -4,7 +4,14 @@
 \alias{BrierScoreCR}
 \title{BrierScoreCR}
 \usage{
-BrierScoreCR(SurvObj, Predictions, time, cause = 1, TestMat = NULL)
+BrierScoreCR(
+  SurvObj,
+  Predictions,
+  time,
+  cause = 1,
+  TestMat = NULL,
+  pred_times = NULL
+)
 }
 \arguments{
 \item{SurvObj}{survival object (Surv(time, status))}
@@ -16,6 +23,8 @@ BrierScoreCR(SurvObj, Predictions, time, cause = 1, TestMat = NULL)
 \item{cause}{cause of interest (1 or 2)}
 
 \item{TestMat}{test dataset (optional, used if formula needs predictors)}
+
+\item{pred_times}{optional numeric vector of times corresponding to columns in `Predictions`}
 }
 \value{
 Brier score value

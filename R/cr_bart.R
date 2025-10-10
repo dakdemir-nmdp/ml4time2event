@@ -290,9 +290,19 @@ Predict_CRModel_BART <- function(modelout, newdata, newtimes = NULL, event_of_in
   N <- nrow(x_test)  # Number of actual test observations
   K <- modelout$bart_model$K  # Number of time points
   
-  # cif.test.mean has length N*K (but we duplicated test data, so it's 2N*K total)
-  # Take only the first N observations (not the duplicated ones)
-  cif_vector <- pred$cif.test.mean[1:(N*K)]
+  total_len <- length(pred$cif.test.mean)
+  expected_len <- N * K
+  if (total_len < expected_len) {
+    stop("Unexpected length of BART CIF predictions. Expected at least ", expected_len, " values, got ", total_len, ".")
+  } else if (total_len > expected_len) {
+    duplication_factor <- total_len / expected_len
+    if (!duplication_factor %in% c(2, 1)) {
+      warning("Unexpected duplication factor (", duplication_factor, ") in BART predictions; using first N*K entries.")
+    }
+  }
+
+  # cif.test.mean often includes duplicated test rows; retain only the first N*K entries
+  cif_vector <- pred$cif.test.mean[seq_len(expected_len)]
   
   # Reshape to matrix [observations, times]
   cif_matrix <- matrix(cif_vector, nrow = N, ncol = K, byrow = TRUE)

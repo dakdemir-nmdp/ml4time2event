@@ -49,6 +49,12 @@ RunCRModels<-function(datatrain, ExpVars, timevar, eventvar, models=c("FG", "rul
       datatrainFact[,i]<-as.factor(datatrainFact[,i])
     }
   }
+
+  available_events <- sort(unique(datatrainFact[[eventvar]][datatrainFact[[eventvar]] != 0]))
+  if (length(available_events) == 0) {
+    stop("No non-zero event codes found in training data for competing risks models.")
+  }
+  default_event_code <- available_events[1]
   # Assuming CRModel_RF is loaded/available
   RF_Model<-tryCatch(
     CRModel_RF(data=datatrainFact,expvars=ExpVars, timevar=timevar, eventvar=eventvar, samplesize=min(c(500,ceiling(.3*nrow(datatrainFact)))), ntree=ntreeRF),
@@ -122,7 +128,7 @@ RunCRModels<-function(datatrain, ExpVars, timevar, eventvar, models=c("FG", "rul
   }
   if ("xgboost" %in% models){
     # Assuming CRModel_xgboost is loaded/available
-  xgboost_Model<-tryCatch(CRModel_xgboost(data=datatrainFact,expvars=ExpVars, timevar=timevar, eventvar=eventvar, event_codes=1, nrounds=100), error=function(e){
+  xgboost_Model<-tryCatch(CRModel_xgboost(data=datatrainFact,expvars=ExpVars, timevar=timevar, eventvar=eventvar, event_codes=default_event_code, nrounds=100), error=function(e){
        message("Failed fitting XGBoost: ", e$message)
       return(NULL)
     })
@@ -175,7 +181,7 @@ RunCRModels<-function(datatrain, ExpVars, timevar, eventvar, models=c("FG", "rul
      model_status["rulefit_Model"] <- !is.null(rulefit_Model)
    }
    if ("xgboost" %in% models){
-  xgboost_Model<-tryCatch(CRModel_xgboost(data=datatrainFact,expvars=ExpVars2, timevar=timevar, eventvar=eventvar, event_codes=1, nrounds=100), error=function(e){
+  xgboost_Model<-tryCatch(CRModel_xgboost(data=datatrainFact,expvars=ExpVars2, timevar=timevar, eventvar=eventvar, event_codes=default_event_code, nrounds=100), error=function(e){
        message("Failed fitting XGBoost: ", e$message)
        return(NULL)
      })
@@ -259,9 +265,9 @@ ComputeCRSuperLearnerWeights <- function(ensemble_models, training_data, eval_ti
   
   if (is.null(eval_times)) {
     # Use quantiles of observed times as default
-    times_col <- ensemble_models$input[[ensemble_models$input$timevar]]
-    if (!is.null(training_data[[times_col]])) {
-      eval_times <- quantile(training_data[[times_col]], probs = seq(0.1, 0.9, 0.1), na.rm = TRUE)
+    timevar_name <- ensemble_models$input$timevar
+    if (!is.null(training_data[[timevar_name]])) {
+      eval_times <- quantile(training_data[[timevar_name]], probs = seq(0.1, 0.9, 0.1), na.rm = TRUE)
     } else {
       stop("eval_times must be provided or training_data must contain the time variable")
     }
@@ -701,28 +707,4 @@ PredictCRModels<-function(models, newdata, newtimes, models_to_use=NULL,
 
   return(list(ModelPredictions=ModelPredictions, NewProbs=NewProbs, models_used=models_used,
               ensemble_method=ensemble_method))
-}
-
-cifMatListAveraging <- function(list_mats, type = "prob", na.rm = TRUE) {
-  if (length(list_mats) == 0) {
-    return(NULL)
-  }
-
-  # Check for consistent dimensions
-  dims <- lapply(list_mats, dim)
-  if (length(unique(dims)) > 1) {
-    stop("All matrices in the list must have the same dimensions")
-  }
-
-  # Handle NA values
-  if (na.rm) {
-    averaged_mat <- Reduce("+", lapply(list_mats, function(mat) {
-      mat[is.na(mat)] <- 0
-      mat
-    })) / length(list_mats)
-  } else {
-    averaged_mat <- Reduce("+", list_mats) / length(list_mats)
-  }
-
-  return(averaged_mat)
 }

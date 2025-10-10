@@ -407,12 +407,12 @@ Predict_SurvModel_Cox <- function(modelout, newdata, newtimes = NULL) {
 
     # Get predictions using survfit
     survfit_obj <- tryCatch(
-      survival::survfit(
+      glmnet:::survfit.coxnet(
         modelout$cph_model$cv_fit,
-        s = modelout$cph_model$cv_fit$lambda.min,
+        s = "lambda.min",
+        newx = test_mat,
         x = modelout$cph_model$train_matrix,
-        y = modelout$cph_model$y_train,
-        newx = test_mat
+        y = modelout$cph_model$y_train
       ),
       error = function(e) {
         stop("Prediction failed: ", e$message)

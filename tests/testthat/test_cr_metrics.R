@@ -115,16 +115,38 @@ test_that("timedepConcordanceCR handles cases with no events of interest before 
 })
 
 test_that("timedepConcordanceCR handles cases with no comparable pairs", {
-  # e.g., only one event of interest, or all censored before time t
-  cr_data_few_events <- data.frame(time = c(1, 2, 10, 11), status = c(0, 1, 0, 0), x1=1:4, stringsAsFactors = FALSE)
-  surv_obj_few <- Surv(cr_data_few_events$time, cr_data_few_events$status)
-  preds_few <- matrix(c(0.1, 0.2, 0.3, 0.4), ncol=1)
+  # Scenario 1: Only one subject with event - no comparable pairs
+  cr_data_single <- data.frame(time = c(5), status = c(1), x1 = 1, stringsAsFactors = FALSE)
+  surv_obj_single <- Surv(cr_data_single$time, cr_data_single$status)
+  preds_single <- matrix(c(0.5), ncol=1)
+  
+  c_index_single <- timedepConcordanceCR(surv_obj_single, Predictions = preds_single, time = 10, cause = 1)
+  expect_true(is.na(c_index_single)) # Should return NA when no comparable pairs
+  
+  # Scenario 2: Event happens after all other observations - no comparable pairs
+  cr_data_late_event <- data.frame(time = c(1, 2, 3, 10), status = c(0, 0, 0, 1), x1=1:4, stringsAsFactors = FALSE)
+  surv_obj_late <- Surv(cr_data_late_event$time, cr_data_late_event$status)
+  preds_late <- matrix(c(0.1, 0.2, 0.3, 0.4), ncol=1)
+  
+  c_index_late <- timedepConcordanceCR(surv_obj_late, Predictions = preds_late, time = 15, cause = 1)
+  expect_true(is.na(c_index_late)) # Should return NA when no comparable pairs
 
-  # Only one event type 1, no comparable pairs
-  c_index_no_pairs <- timedepConcordanceCR(surv_obj_few, Predictions = preds_few, time = 5, cause = 1)
-  expect_true(is.na(c_index_no_pairs) || c_index_no_pairs == 0.5) # Expect NA or 0.5
+  # All censored before time t - no events to evaluate
+  cr_data_early_cens <- data.frame(time = c(1, 2, 10, 11), status = c(0, 1, 0, 0), x1=1:4, stringsAsFactors = FALSE)
+  surv_obj_early <- Surv(cr_data_early_cens$time, cr_data_early_cens$status)
+  preds_early <- matrix(c(0.1, 0.2, 0.3, 0.4), ncol=1)
+  
+  c_index_all_cens <- timedepConcordanceCR(surv_obj_early, Predictions = preds_early, time = 0.5, cause = 1)
+  expect_true(is.na(c_index_all_cens)) # Should return NA when no events before time t
+})
 
-  # All censored before time t
-  c_index_all_cens <- timedepConcordanceCR(surv_obj_few, Predictions = preds_few, time = 0.5, cause = 1)
-   expect_true(is.na(c_index_all_cens) || c_index_all_cens == 0.5)
+test_that("timedepConcordanceCR handles cases with zero concordance", {
+  # Case where event has lower prediction than all comparable subjects (all discordant)
+  cr_data_discordant <- data.frame(time = c(1, 2, 10, 11), status = c(0, 1, 0, 0), x1=1:4, stringsAsFactors = FALSE)
+  surv_obj_discordant <- Surv(cr_data_discordant$time, cr_data_discordant$status)
+  preds_discordant <- matrix(c(0.1, 0.2, 0.3, 0.4), ncol=1)  # Event at t=2 has pred=0.2, others at t=10,11 have pred=0.3,0.4
+  
+  c_index_zero <- timedepConcordanceCR(surv_obj_discordant, Predictions = preds_discordant, time = 5, cause = 1)
+  expect_equal(c_index_zero, 0) # Should return 0 when all pairs are discordant
+  expect_false(is.na(c_index_zero)) # Should not be NA since there are comparable pairs
 })

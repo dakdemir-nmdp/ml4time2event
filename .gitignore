@@ -6,6 +6,19 @@
 .RData
 .RDataTmp
 
+# rds files
+*.rds
+*.Rds
+*.RDS
+
+# md files other than readme.md
+vignettes/*.md
+news/*.md
+inst/doc/*.md
+*.md
+!README.md
+
+
 # User-specific files
 .Ruserdata
 

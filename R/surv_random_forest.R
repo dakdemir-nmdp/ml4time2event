@@ -55,8 +55,11 @@ SurvModel_RF<-function(data, expvars, timevar, eventvar, ntree=300, samplesize=5
                              ...)
 
   # Fit final model with optimal parameters
+  nodesize_opt <- if (!is.null(names(o$optimal)) && "nodesize" %in% names(o$optimal)) o$optimal[["nodesize"]] else o$optimal[[1]]
+  mtry_opt <- if (!is.null(names(o$optimal)) && "mtry" %in% names(o$optimal)) o$optimal[["mtry"]] else o$optimal[[2]]
+
   hd.obj <- randomForestSRC::rfsrc(formRF, data = data[,c(timevar, eventvar, expvars), drop=FALSE],
-                                   nodesize = o$optimal[[1]], ntree = ntree, mtry = o$optimal[[2]],
+                                   nodesize = nodesize_opt, ntree = ntree, mtry = mtry_opt,
                                    tree.err = FALSE, importance = TRUE, statistics = TRUE,
                                    do.trace = trace, splitrule = splitrule, samptype = "swor",
                                    sampsize = samplesize, nsplit = nsplit, ...)

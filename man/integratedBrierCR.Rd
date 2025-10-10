@@ -9,7 +9,8 @@ integratedBrierCR(
   Predictions,
   eval.times = NULL,
   cause = 1,
-  TestMat = NULL
+  TestMat = NULL,
+  pred_times = NULL
 )
 }
 \arguments{

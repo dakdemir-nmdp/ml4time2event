@@ -240,7 +240,9 @@ CRModel_GAM <- function(data, expvars, timevar, eventvar, event_codes = NULL,
       formGAM_rhs <- "1" # Intercept only if no predictors
     }
 
-    formGAM <- stats::as.formula(paste(timevar, "~", formGAM_rhs))
+    formGAM <- stats::as.formula(
+      paste0("survival::Surv(", timevar, ", status_cs) ~ ", formGAM_rhs)
+    )
     if (verbose) print(formGAM)
 
     # Fit the GAM model with Cox PH family for cause-specific modeling
@@ -249,7 +251,6 @@ CRModel_GAM <- function(data, expvars, timevar, eventvar, event_codes = NULL,
         formGAM,
         family = mgcv::cox.ph(),
         data = XYTrain_cause,
-        weights = XYTrain_cause$status_cs, # Use cause-specific event indicator as weights
         select = TRUE # Enable shrinkage via double penalty approach
       ),
       error = function(e) {

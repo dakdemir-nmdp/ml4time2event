@@ -111,12 +111,13 @@ for (phase_name in levels(bmt_data$Phase)) {
 # --- 5. Data Splitting ---
 cat("\n=== STEP 4: DATA SPLITTING ===\n")
 
+# Use package's data splitting function for consistent, reproducible splits
 set.seed(123) # For reproducibility
 
-# Create training/test split (70/30)
-train_indices <- sample(nrow(bmt_data), floor(0.7 * nrow(bmt_data)))
-train_data <- bmt_data[train_indices, ]
-test_data <- bmt_data[-train_indices, ]
+# Create training/test split (70/30) using package function
+split_data <- t2edata_split(bmt_data, prop = 0.7)
+train_data <- split_data$Train
+test_data <- split_data$Test
 
 cat("Training set size:", nrow(train_data), "\n")
 cat("Test set size:", nrow(test_data), "\n")
@@ -455,11 +456,15 @@ for (model_name in names(predictions)) {
       stop("CIFs unavailable for model")
     }
 
-    time_idx <- which.min(abs(pred$Times - eval_time))
-    cif_at_eval <- pred$CIFs[time_idx, ]
-
-    observed_outcome <- ifelse(actual_events == 1 & actual_times <= eval_time, 1, 0)
-    brier_score <- mean((cif_at_eval - observed_outcome)^2)
+    # Use package function for consistent Brier score calculation
+    brier_score <- BrierScoreCR(
+      SurvObj = surv_obj,
+      Predictions = t(pred$CIFs),  # BrierScoreCR expects observations x times
+      time = eval_time,
+      cause = 1,
+      TestMat = test_data[, expvars],
+      pred_times = pred$Times
+    )
     brier_scores[[model_name]] <- brier_score
 
     cat(model_name, "Brier score:", round(brier_score, 4), "\n")
@@ -607,19 +612,26 @@ ensemble_concordance <- timedepConcordanceCR(
   TestMat = test_data[, expvars]
 )
 
-observed_outcome_ensemble <- ifelse(actual_events == 1 & actual_times <= eval_time, 1, 0)
-ensemble_brier <- mean((ensemble_cif_at_eval - observed_outcome_ensemble)^2)
+# Use package function for consistent Brier score calculation
+ensemble_brier <- BrierScoreCR(
+  SurvObj = surv_obj,
+  Predictions = t(ensemble_cif),  # BrierScoreCR expects observations x times
+  time = eval_time,
+  cause = 1,
+  TestMat = test_data[, expvars],
+  pred_times = common_times
+)
 
 cat("Ensemble concordance:", round(ensemble_concordance, 3), "\n")
 cat("Ensemble Brier score:", round(ensemble_brier, 4), "\n")
 
 # Calculate integrated concordance for ensemble
 cat("\nCalculating integrated concordance for ensemble (Event 1)...\n")
-tryCatch({
+ensemble_integrated_conc <- tryCatch({
   # ensemble_cif is in format: times x observations, so transpose for integratedConcordanceCR
   ensemble_cif_matrix <- t(ensemble_cif)  # Now: observations x times
 
-  ensemble_integrated_conc <- integratedConcordanceCR(
+  integrated_conc <- integratedConcordanceCR(
     SurvObj = surv_obj,
     Predictions = ensemble_cif_matrix,
     eval.times = common_times,
@@ -627,21 +639,23 @@ tryCatch({
     TestMat = test_data[, expvars]
   )
 
-  integrated_concordances[["Ensemble"]] <- ensemble_integrated_conc
-  cat("Ensemble integrated concordance (Event 1):", round(ensemble_integrated_conc, 3), "\n")
+  integrated_concordances[["Ensemble"]] <- integrated_conc
+  cat("Ensemble integrated concordance (Event 1):", round(integrated_conc, 3), "\n")
+  integrated_conc
 }, error = function(e) {
   cat("Ensemble integrated concordance calculation failed:", e$message, "\n")
+  NA_real_
 })
 
 # --- 10. Expected Time Lost (ETL) Calculation ---
 cat("\n=== STEP 9: EXPECTED TIME LOST ANALYSIS ===\n")
 
-# Calculate expected time lost for competing risks
+# Calculate expected time lost for competing risks using the package function
 # ETL = integral from 0 to UL of CIF(t) dt
 max_time <- max(actual_times)
 cat("Maximum follow-up time:", round(max_time, 2), "months\n")
 
-# Calculate ETL for all models
+# Calculate ETL for all models using CalculateExpectedTimeLost
 etl_results <- list()
 
 for (model_name in names(predictions)) {
@@ -651,29 +665,19 @@ for (model_name in names(predictions)) {
       stop("CIFs unavailable for model")
     }
 
-    etl_values <- numeric(nrow(pred$CIFs))
-    for (j in seq_len(nrow(pred$CIFs))) {
-      # Numerical integration of CIF from 0 to max_time
-      cif_curve <- pred$CIFs[j, ]
-      time_grid <- pred$Times
-
-      # Use trapezoidal rule for integration
-      # ETL = integral of CIF(t) from 0 to max_time
-      # This represents the expected time spent in the "at risk for relapse" state
-
-      # Filter times up to max_time
-      valid_idx <- time_grid <= max_time
-      times_valid <- time_grid[valid_idx]
-      cif_valid <- cif_curve[valid_idx]
-
-      if (length(times_valid) > 1) {
-        etl <- sum(diff(times_valid) * (cif_valid[-1] + cif_valid[-length(cif_valid)])) / 2
-        etl_values[j] <- etl
-      } else {
-        etl_values[j] <- 0
-      }
-    }
-
+    # Format predictions for CalculateExpectedTimeLost function
+    # CIFs matrix is already in correct (times x observations) format
+    pred_formatted <- list(NewProbs = pred$CIFs)
+    
+    # Use the package function for consistent ETL calculation
+    etl_list <- CalculateExpectedTimeLost(
+      PredictedCurves = list(pred_formatted),
+      modeltypes = c("CR"),  # Competing risks model type
+      times = pred$Times,
+      UL = max_time
+    )
+    
+    etl_values <- etl_list[[1]]
     etl_results[[model_name]] <- etl_values
     cat(model_name, "ETL - mean:", round(mean(etl_values, na.rm = TRUE), 2),
         "range:", paste(round(range(etl_values, na.rm = TRUE), 2), collapse = "-"), "\n")
@@ -682,35 +686,48 @@ for (model_name in names(predictions)) {
   })
 }
 
-# Ensemble ETL
-ensemble_etl <- numeric(ncol(ensemble_cif))
-for (j in seq_len(ncol(ensemble_cif))) {
-  cif_curve <- ensemble_cif[, j]
-  time_grid <- common_times
-
-  valid_idx <- time_grid <= max_time
-  times_valid <- time_grid[valid_idx]
-  cif_valid <- cif_curve[valid_idx]
-
-  if (length(times_valid) > 1) {
-    etl <- sum(diff(times_valid) * (cif_valid[-1] + cif_valid[-length(cif_valid)])) / 2
-    ensemble_etl[j] <- etl
-  } else {
-    ensemble_etl[j] <- 0
-  }
-}
-etl_results[["Ensemble"]] <- ensemble_etl
-cat("Ensemble ETL - mean:", round(mean(ensemble_etl), 2),
-    "range:", paste(round(range(ensemble_etl), 2), collapse = "-"), "\n")
+# Ensemble ETL using the package function for consistency
+tryCatch({
+  # Format ensemble predictions for CalculateExpectedTimeLost function
+  # ensemble_cif is already in (times x observations) format
+  ensemble_pred_formatted <- list(NewProbs = ensemble_cif)
+  
+  # Use the package function for consistent ETL calculation
+  ensemble_etl_list <- CalculateExpectedTimeLost(
+    PredictedCurves = list(ensemble_pred_formatted),
+    modeltypes = c("CR"),  # Competing risks model type
+    times = common_times,
+    UL = max_time
+  )
+  
+  ensemble_etl <- ensemble_etl_list[[1]]
+  etl_results[["Ensemble"]] <- ensemble_etl
+  cat("Ensemble ETL - mean:", round(mean(ensemble_etl), 2),
+      "range:", paste(round(range(ensemble_etl), 2), collapse = "-"), "\n")
+}, error = function(e) {
+  cat("Ensemble ETL calculation failed:", e$message, "\n")
+  # Fallback to manual calculation if needed
+  ensemble_etl <- rep(NA, ncol(ensemble_cif))
+  etl_results[["Ensemble"]] <- ensemble_etl
+})
 
 # --- 11. Visualization ---
 cat("\n=== STEP 10: COMPETING RISKS VISUALIZATION ===\n")
 
 # 11.1 Model Performance Comparison
+# Handle case where integrated concordances failed
+int_conc_values <- rep(NA, length(names(concordances)))
+names(int_conc_values) <- names(concordances)
+for (model_name in names(concordances)) {
+  if (model_name %in% names(integrated_concordances)) {
+    int_conc_values[model_name] <- integrated_concordances[[model_name]]
+  }
+}
+
 performance_df <- data.frame(
   Model = names(concordances),
   Concordance = unlist(concordances),
-  Integrated_Concordance = unlist(integrated_concordances[names(concordances)]),
+  Integrated_Concordance = int_conc_values,
   Brier_Score = unlist(brier_scores[names(concordances)]),
   stringsAsFactors = FALSE
 )
@@ -732,44 +749,24 @@ print(performance_df)
 # 11.2 Cumulative Incidence Curves for Selected Patients
 cat("\nCreating CIF plots for first 3 test patients...\n")
 
-plot_patients <- seq_len(min(3, nrow(test_data)))
-cif_plot_data <- data.frame()
+# Create plots using the package plotting functions  
+# Plot with all 3 patients
+p1 <- plot_cif_curves(
+  predictions = c(predictions, list(Ensemble = list(Times = common_times, CIFs = ensemble_cif))),
+  patients_to_plot = seq_len(min(3, nrow(test_data))),
+  highlight_ensemble = TRUE,
+  title = "Predicted Cumulative Incidence Functions (CIF) - All Models"
+)
 
-for (patient in plot_patients) {
-  # Add predictions from all models
-  for (model_name in names(predictions)) {
-    pred <- predictions[[model_name]]
-    if (is.null(pred$CIFs)) {
-      stop("CIFs unavailable for model during plotting")
-    }
-    model_data <- data.frame(
-      Time = pred$Times,
-      CIF = pred$CIFs[, patient],  # Fixed: CIFs matrix is [times, observations]
-      Model = model_name,
-      Patient = paste("Patient", patient),
-      stringsAsFactors = FALSE
-    )
-    cif_plot_data <- rbind(cif_plot_data, model_data)
-  }
+# Focused plot for Patient 1 only
+p2 <- plot_cif_curves(
+  predictions = c(predictions, list(Ensemble = list(Times = common_times, CIFs = ensemble_cif))),
+  patients_to_plot = 1,
+  highlight_ensemble = TRUE,
+  title = "Cumulative Incidence Functions - Patient 1"
+)
 
-  # Ensemble
-  ensemble_data <- data.frame(
-    Time = common_times,
-    CIF = ensemble_cif[, patient],
-    Model = "Ensemble",
-    Patient = paste("Patient", patient),
-    stringsAsFactors = FALSE
-  )
-  cif_plot_data <- rbind(cif_plot_data, ensemble_data)
-}
-
-# Create color palette with ensemble in BLACK
-unique_models <- unique(cif_plot_data$Model)
-model_colors <- rainbow(length(unique_models) - 1)  # -1 for ensemble
-names(model_colors) <- setdiff(unique_models, "Ensemble")
-model_colors["Ensemble"] <- "black"
-
-cat("✓ Color palette created - Ensemble is BLACK\n")
+cat("✓ CIF plots created using package functions\n")
 
 # Print CIF values for first 3 patients at key time points
 cat("\n=== CIF VALUES FOR FIRST 3 TEST PATIENTS ===\n")
@@ -805,61 +802,24 @@ cat("\n✓ CIF values displayed for first 3 patients\n")
 
 # 11.3 Create all plots
 
-# Plot 1: CIF curves for 3 patients, all models
-p1 <- ggplot(cif_plot_data, aes(x = Time, y = CIF, color = Model)) +
-  geom_line(aes(size = Model == "Ensemble"), alpha = 0.8) +
-  facet_wrap(~Patient, ncol = 3) +
-  scale_color_manual(values = model_colors) +
-  scale_size_manual(values = c("TRUE" = 1.5, "FALSE" = 0.8), guide = "none") +
-  labs(title = "Predicted Cumulative Incidence Functions (CIF) - All Models",
-       subtitle = paste("Event of Interest: Relapse |",
-                        "Comparing", length(unique_models), "models | Ensemble in BLACK"),
-       x = "Time (months)", y = "Cumulative Incidence of Relapse") +
-  theme_minimal() +
-  theme(legend.position = "bottom",
-        legend.text = element_text(size = 8),
-        plot.title = element_text(face = "bold", size = 14)) +
-  guides(color = guide_legend(ncol = 5, override.aes = list(size = 1)))
+# Plot 1 and Plot 2 are already created above using package functions
 
-# Plot 2: Focused plot for Patient 1
-patient1_data <- cif_plot_data[cif_plot_data$Patient == "Patient 1", ]
+# Plot 3-5: Performance plots using package function
+p3 <- plot_model_performance(
+  performance_df = performance_df,
+  metric = "concordance",
+  highlight_ensemble = TRUE,
+  title = "Model Performance: Concordance Index"
+)
 
-p2 <- ggplot(patient1_data, aes(x = Time, y = CIF, color = Model)) +
-  geom_line(aes(size = Model == "Ensemble")) +
-  scale_color_manual(values = model_colors) +
-  scale_size_manual(values = c("TRUE" = 1.5, "FALSE" = 1), guide = "none") +
-  labs(title = "Cumulative Incidence Functions - Patient 1",
-       subtitle = "Probability of Relapse Over Time (Ensemble in BLACK)",
-       x = "Time (months)", y = "Cumulative Incidence") +
-  theme_minimal() +
-  theme(legend.position = "right",
-        plot.title = element_text(face = "bold"))
+p4 <- plot_model_performance(
+  performance_df = performance_df,
+  metric = "brier",
+  highlight_ensemble = TRUE,
+  title = "Model Performance: Brier Score"
+)
 
-# Plot 3: Concordance comparison
-p3 <- ggplot(performance_df, aes(x = reorder(Model, Concordance), y = Concordance,
-                                  fill = Model == "Ensemble")) +
-  geom_bar(stat = "identity") +
-  scale_fill_manual(values = c("TRUE" = "black", "FALSE" = "steelblue"), guide = "none") +
-  coord_flip() +
-  labs(title = "Model Performance: Concordance Index",
-       subtitle = "Higher is better | Ensemble in BLACK",
-       x = "Model", y = "Concordance Index") +
-  theme_minimal() +
-  theme(plot.title = element_text(face = "bold"))
-
-# Plot 4: Brier score comparison
-p4 <- ggplot(performance_df, aes(x = reorder(Model, -Brier_Score), y = Brier_Score,
-                                  fill = Model == "Ensemble")) +
-  geom_bar(stat = "identity") +
-  scale_fill_manual(values = c("TRUE" = "black", "FALSE" = "coral"), guide = "none") +
-  coord_flip() +
-  labs(title = "Model Performance: Brier Score",
-       subtitle = "Lower is better | Ensemble in BLACK",
-       x = "Model", y = "Brier Score") +
-  theme_minimal() +
-  theme(plot.title = element_text(face = "bold"))
-
-# Plot 5: Expected Time Lost distribution
+# Plot 5: Expected Time Lost - create data frame for this
 etl_plot_data <- data.frame()
 for (model_name in names(etl_results)) {
   model_etl_df <- data.frame(
@@ -871,16 +831,18 @@ for (model_name in names(etl_results)) {
   etl_plot_data <- rbind(etl_plot_data, model_etl_df)
 }
 
-p5 <- ggplot(etl_plot_data, aes(x = reorder(Model, ETL, FUN = median), y = ETL,
-                                 fill = IsEnsemble)) +
-  geom_boxplot() +
-  scale_fill_manual(values = c("TRUE" = "black", "FALSE" = "lightblue"), guide = "none") +
-  coord_flip() +
-  labs(title = "Expected Time Lost Distribution by Model",
+p5 <- ggplot2::ggplot(etl_plot_data, ggplot2::aes(x = reorder(.data$Model, .data$ETL, FUN = median), y = .data$ETL,
+                                 fill = .data$IsEnsemble)) +
+  ggplot2::geom_boxplot() +
+  ggplot2::scale_fill_manual(values = c("TRUE" = "black", "FALSE" = "lightblue"), guide = "none") +
+  ggplot2::coord_flip() +
+  ggplot2::labs(title = "Expected Time Lost Distribution by Model",
        subtitle = "Ensemble in BLACK",
        x = "Model", y = "Expected Time Lost (months)") +
-  theme_minimal() +
-  theme(plot.title = element_text(face = "bold"))
+  ggplot2::theme_minimal() +
+  ggplot2::theme(plot.title = ggplot2::element_text(face = "bold"))
+
+
 
 # Plot 6: Cumulative Incidence by Disease Phase (from test data)
 test_cif_phase <- cuminc(ftime = test_data$ftime,

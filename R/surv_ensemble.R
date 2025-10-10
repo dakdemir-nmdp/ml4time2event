@@ -68,8 +68,8 @@ RunSurvModels<-function(datatrain, ExpVars, timevar, eventvar, models=c("glmnet"
   model_status["RF_Model"] <- !is.null(RF_Model)
 
   # Select top variables based on importance from the first RF model
-  if (!is.null(RF_Model) && !is.null(RF_Model$hd.obj$importance)) {
-      importance_scores <- RF_Model$hd.obj$importance
+  if (!is.null(RF_Model) && !is.null(RF_Model$model$importance)) {
+      importance_scores <- RF_Model$model$importance
       # Handle different importance structures (matrix or vector)
       if (is.matrix(importance_scores)) {
           # Use first column if matrix (assuming it's the relevant score)
