@@ -43,6 +43,7 @@ CREnsemble <- function(ensemble_list) {
 }
 
 #' @title Check if Object is SurvEnsemble
+#' @description Check if an object is of class SurvEnsemble
 #' @param x Object to check
 #' @return Logical
 #' @export
@@ -51,6 +52,7 @@ is.SurvEnsemble <- function(x) {
 }
 
 #' @title Check if Object is CREnsemble
+#' @description Check if an object is of class CREnsemble
 #' @param x Object to check
 #' @return Logical
 #' @export
@@ -59,6 +61,7 @@ is.CREnsemble <- function(x) {
 }
 
 #' @title Print SurvEnsemble Object
+#' @description Print a summary of a SurvEnsemble object
 #' @param x SurvEnsemble object
 #' @param ... Additional arguments (ignored)
 #' @export
@@ -94,6 +97,7 @@ print.SurvEnsemble <- function(x, ...) {
 }
 
 #' @title Print CREnsemble Object
+#' @description Print a summary of a CREnsemble object
 #' @param x CREnsemble object
 #' @param ... Additional arguments (ignored)
 #' @export
@@ -222,6 +226,7 @@ LoadEnsemble <- function(file) {
 }
 
 #' @title Summary Method for SurvEnsemble
+#' @description Generate a summary of a SurvEnsemble object
 #' @param object SurvEnsemble object
 #' @param ... Additional arguments (ignored)
 #' @export
@@ -258,6 +263,7 @@ summary.SurvEnsemble <- function(object, ...) {
 }
 
 #' @title Summary Method for CREnsemble
+#' @description Generate a summary of a CREnsemble object
 #' @param object CREnsemble object
 #' @param ... Additional arguments (ignored)
 #' @export

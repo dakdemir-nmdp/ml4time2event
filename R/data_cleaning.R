@@ -1,7 +1,7 @@
 
-#' RemoveMonoVarsData
+#' @title RemoveMonoVarsData
 #'
-#' Remove variables (columns) from a data frame that have only one unique non-NA value.
+#' @description Remove variables (columns) from a data frame that have only one unique non-NA value.
 #'
 #' @param data Data frame.
 #' @return Data frame with single-value columns removed.
@@ -27,9 +27,9 @@ RemoveMonoVarsData <- function(data) {
   return(data[, cols_to_keep, drop = FALSE])
 }
 
-#' RemoveAllNAVars
+#' @title RemoveAllNAVars
 #'
-#' Remove variables (columns) from a data frame that consist entirely of NA values.
+#' @description Remove variables (columns) from a data frame that consist entirely of NA values.
 #'
 #' @param data Data frame.
 #' @return Data frame with all-NA columns removed.
@@ -55,8 +55,9 @@ RemoveAllNAVars <- function(data) {
 
 
 #' RemoveMissinVarsData
+#' @title RemoveMissinVarsData
 #'
-#' Remove variables (columns) with a proportion of missing values exceeding a threshold.
+#' @description Remove variables (columns) with a proportion of missing values exceeding a threshold.
 #'
 #' @param data Data frame.
 #' @param maxprop Numeric threshold (0-1) for the maximum allowed proportion of NA values (default: 0.2).
@@ -76,9 +77,9 @@ RemoveMissinVarsData <- function(data, maxprop = .2) {
   return(data[, cols_to_keep, drop = FALSE])
 }
 
-#' RemoveMissinRecordsData
+#' @title RemoveMissinRecordsData
 #'
-#' Remove records (rows) with a proportion of missing values exceeding a threshold.
+#' @description Remove records (rows) with a proportion of missing values exceeding a threshold.
 #'
 #' @param data Data frame.
 #' @param maxprop Numeric threshold (0-1) for the maximum allowed proportion of NA values per row (default: 0.2).
@@ -100,9 +101,9 @@ RemoveMissinRecordsData <- function(data, maxprop = .2) {
 
 
 
-#' getcharcolsData
+#' @title getcharcolsData
 #'
-#' Utility function to get the names of character columns in a data frame.
+#' @description Utility function to get the names of character columns in a data frame.
 #'
 #' @param data Data frame.
 #' @return Character vector with names of character columns.
@@ -123,9 +124,9 @@ getcharcolsData <- function(data) {
 }
 
 
-#' ImputeMissinRecordsData
+#' @title ImputeMissinRecordsData
 #'
-#' Impute missing values in a data frame using missRanger.
+#' @description Impute missing values in a data frame using missRanger.
 #' Excludes specified columns (e.g., character IDs, outcome variables) from the imputation process.
 #'
 #' @param data Data frame to be imputed.
@@ -204,9 +205,9 @@ ImputeMissinRecordsData <- function(data, dontuse = NULL, ...) {
 
 
 
-#' RemoveRareCategoriesData
+#' @title RemoveRareCategoriesData
 #'
-#' Replace rare categories in factor variables with NA.
+#' @description Replace rare categories in factor variables with NA.
 #'
 #' @param data Data frame.
 #' @param minfreq Numeric threshold (0-1). Categories with a frequency below this proportion will be set to NA (default: 0.01).
@@ -239,9 +240,9 @@ RemoveRareCategoriesData <- function(data, minfreq = .01) {
 }
 
 
-#' RemoveRareBinaryVarsData
+#' @title RemoveRareBinaryVarsData
 #'
-#' For binary variables (numeric 0/1, logical, or 2-level factors), replace the rarer category with NA if its frequency is below a threshold.
+#' @description For binary variables (numeric 0/1, logical, or 2-level factors), replace the rarer category with NA if its frequency is below a threshold.
 #'
 #' @param data Data frame.
 #' @param minfreq Numeric threshold (0-1). The rarer category is set to NA if its frequency is below this (default: 0.01).
@@ -286,9 +287,9 @@ RemoveRareBinaryVarsData <- function(data, minfreq = .01) {
 }
 
 
-#' CollapseRareCategoriestoOtherData
+#' @title CollapseRareCategoriestoOtherData
 #'
-#' Collapse rare categories in factor or character variables into a new level called "Other".
+#' @description Collapse rare categories in factor or character variables into a new level called "Other".
 #' Only applies to variables with more than 3 unique levels initially.
 #'
 #' @param data Data frame.
@@ -324,9 +325,9 @@ CollapseRareCategoriestoOtherData <- function(data, minfreq = .01) {
 
 
 
-#' droplevelsoffactorsData
+#' @title droplevelsoffactorsData
 #'
-#' Drop unused factor levels from all factor columns in a data frame.
+#' @description Drop unused factor levels from all factor columns in a data frame.
 #'
 #' @param data Data frame.
 #' @return Data frame with unused factor levels dropped.
@@ -342,9 +343,9 @@ droplevelsoffactorsData <- function(data) {
   return(data_out)
 }
 
-#' findvarsnamesthatrepeatData
+#' @title findvarsnamesthatrepeatData
 #'
-#' Find variable names where one name is a substring of another (potential redundancy).
+#' @description Find variable names where one name is a substring of another (potential redundancy).
 #' This is a simple substring check, not checking for semantic similarity.
 #'
 #' @param data Data frame.
@@ -396,7 +397,9 @@ findvarsnamesthatrepeatData <- function(data) {
 
 #' ReplaceOutlierNumValsData
 #'
-#' Replace outlier values in numeric columns using the IQR method.
+#' @title ReplaceOutlierNumValsData
+#'
+#' @description Replace outlier values in numeric columns using the IQR method.
 #' Outliers are defined as values below Q1 - multIQR * IQR or above Q3 + multIQR * IQR.
 #' Replacement is done by capping at these lower and upper bounds.
 #' Only applies to numeric columns with at least `minnumgroup` unique non-NA values.
@@ -445,9 +448,9 @@ ReplaceOutlierNumValsData<-function(data, multIQR=1.5, minnumgroup=10){
 }
 
 
-#' MakeTestDataConfWithTrainData
+#' @title MakeTestDataConfWithTrainData
 #'
-#' Ensure test data conforms to training data structure and factor levels.
+#' @description Ensure test data conforms to training data structure and factor levels.
 #' 1. Selects only columns present in training data.
 #' 2. For factor columns, replaces values not seen in training with NA.
 #' 3. Re-applies factor levels from training data to ensure consistency.
@@ -539,9 +542,9 @@ MakeTestDataConfWithTrainData<-function(traindata, testdata){
 
 
 
-#' RemoveEmptySpacesData
+#' @title RemoveEmptySpacesData
 #'
-#' Remove leading/trailing whitespace from character columns and factor levels.
+#' @description Remove leading/trailing whitespace from character columns and factor levels.
 #'
 #' @param DATA Data frame.
 #' @return Data frame with whitespace trimmed.

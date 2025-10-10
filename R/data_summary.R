@@ -1,6 +1,6 @@
-#' pairwiserelationshipsDataSummmary
+#' @title pairwiserelationshipsDataSummmary
 #'
-#' Calculate pairwise non-linear correlations among variables using the
+#' @description Calculate pairwise non-linear correlations among variables using the
 #' bias-corrected distance correlation (bcdcor) from the 'energy' package.
 #' Note: This can be computationally intensive for large datasets or many variables.
 #'
@@ -69,9 +69,9 @@ pairwiserelationshipsDataSummmary <- function(data) {
 
 
 
-#' gethighcorvarsDataSummmary
+#' @title gethighcorvarsDataSummmary
 #'
-#' Identify pairs of variables from a correlation matrix with correlation exceeding a threshold.
+#' @description Identify pairs of variables from a correlation matrix with correlation exceeding a threshold.
 #'
 #' @param pmat A symmetric correlation matrix (e.g., output from `pairwiserelationshipsDataSummmary` or standard cor()).
 #' @param corcutoff Numeric correlation cutoff threshold (default: 0.8).
@@ -101,7 +101,9 @@ gethighcorvarsDataSummmary <- function(pmat, corcutoff = .8) {
 
 #' OneAgainstRestCorDataSummmary
 #'
-#' Calculate the distance correlation of each variable against all other variables combined.
+#' @title OneAgainstRestCorDataSummmary
+#'
+#' @description Calculate the distance correlation of each variable against all other variables combined.
 #' Note: This can be computationally intensive.
 #'
 #' @param data Data frame. Factors/characters are converted to dummy variables.
@@ -149,9 +151,9 @@ OneAgainstRestCorDataSummmary <- function(data) {
 
 
 
-#' SummaryTableDataSummmary
+#' @title SummaryTableDataSummmary
 #'
-#' Create a summary table for selected variables using the 'gtsummary' package.
+#' @description Create a summary table for selected variables using the 'gtsummary' package.
 #'
 #' @param data Data frame.
 #' @param UseVars Character vector of variable names to include in the summary.

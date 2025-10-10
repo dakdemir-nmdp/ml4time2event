@@ -1,6 +1,6 @@
-#' PredictAllPossibleOutcomesSurvOrCifs
+#' @title PredictAllPossibleOutcomesSurvOrCifs
 #'
-#' Get predictions (Survival Probs or CIFs) for a given dataset from a list of fitted models.
+#' @description Get predictions (Survival Probs or CIFs) for a given dataset from a list of fitted models.
 #' Handles both survival ('SURV') and competing risks ('CR') models based on `modeltypes`.
 #'
 #' @param data Data frame for which to generate predictions.
@@ -58,9 +58,9 @@ PredictAllPossibleOutcomesSurvOrCifs<-function(data, modelslist, modeltypes, tim
 
 
 
-#' CalculateExpectedTimeLost
+#' @title CalculateExpectedTimeLost
 #'
-#' Calculate Restricted Mean Time Lost (RMTL) from predicted survival or CIF curves.
+#' @description Calculate Restricted Mean Time Lost (RMTL) from predicted survival or CIF curves.
 #' RMTL is the integral of the event probability (1-Survival or CIF) up to a time limit UL.
 #'
 #' @param PredictedCurves A list where each element is the prediction output from

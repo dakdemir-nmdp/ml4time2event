@@ -1,6 +1,6 @@
-#' readData
+#' @title readData
 #'
-#' Import data from csv, xlsx, or sas7bdat file.
+#' @description Import data from csv, xlsx, or sas7bdat file.
 #' Converts column names to lowercase.
 #'
 #' @param file Path to the data file.

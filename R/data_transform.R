@@ -1,6 +1,6 @@
-#' ZeroOneScalerData
+#' @title ZeroOneScalerData
 #'
-#' Scale numeric variables in a data frame to the range [0, 1].
+#' @description Scale numeric variables in a data frame to the range [0, 1].
 #' Records the min and max values used for scaling.
 #'
 #' @param data Data frame with numeric columns to scale.
@@ -51,9 +51,9 @@ ZeroOneScalerData<-function(data){
 
 
 
-#' ZeroOneScalerApplierData
+#' @title ZeroOneScalerApplierData
 #'
-#' Apply a pre-calculated 0-1 scaling to numeric variables in a new data frame.
+#' @description Apply a pre-calculated 0-1 scaling to numeric variables in a new data frame.
 #' Uses minimum and maximum values provided (e.g., from a training set).
 #'
 #' @param data Data frame with numeric columns to scale.
@@ -101,9 +101,9 @@ ZeroOneScalerApplierData<-function(data, mins, maxs){
   return(datanew)
 }
 
-#' UndoZeroOneScalerApplierData
+#' @title UndoZeroOneScalerApplierData
 #'
-#' Reverse a 0-1 scaling transformation on numeric variables using the original min/max values.
+#' @description Reverse a 0-1 scaling transformation on numeric variables using the original min/max values.
 #'
 #' @param data Data frame with scaled numeric columns (values expected between 0 and 1).
 #' @param mins A named numeric vector of the original minimum values used for scaling.
@@ -152,8 +152,9 @@ UndoZeroOneScalerApplierData<-function(data, mins, maxs){
 
 
 #' NumVarstCatsData
+#' @title NumVarstCatsData
 #'
-#' Convert numeric variables to categorical (factor) variables based on quantiles or specified cuts.
+#' @description Convert numeric variables to categorical (factor) variables based on quantiles or specified cuts.
 #'
 #' @param data Data frame containing numeric variables to categorize.
 #' @param numgroups Integer. If specified, numeric variables (with enough unique values) are cut into this many quantile groups.
