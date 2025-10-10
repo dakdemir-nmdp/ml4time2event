@@ -49,14 +49,6 @@ mock_cr_model <- list(model_type = "CR_MOCK", id = 2)
 models_list_pred <- list(surv1 = mock_surv_model, cr1 = mock_cr_model, surv2 = mock_surv_model)
 model_types_pred <- c("SURV", "CR", "SURV")
 
-# NOTE: Removing mock definitions as the actual functions are now sourced.
-# The tests will use the actual PredictSurvModels, PredictCRModels, and Integrator functions.
-# This requires that the mock models passed to PredictAllPossibleOutcomesSurvOrCifs
-# are compatible with the actual prediction functions, or the prediction functions
-# themselves need to be mocked using testthat::with_mock or mockery::stub.
-# For now, we assume the simple list structure of mock models might cause errors
-# in the actual prediction functions, but we test the logic of the wrappers.
-
 
 # --- Tests for PredictAllPossibleOutcomesSurvOrCifs ---
 

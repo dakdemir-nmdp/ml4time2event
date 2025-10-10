@@ -535,13 +535,8 @@ etl_results <- list()
 # Harmonized ETL calculation: interpolate all model survival curves to common_times, then calculate ETL
 model_interp_list <- list()
 
-# Print diagnostic info for time grid and UL
-cat("\n[DIAGNOSTIC] common_times range:", range(common_times), "length:", length(common_times), "\n")
-cat("[DIAGNOSTIC] max_time (UL):", max_time, "\n")
-
 # Ensure UL does not exceed the max of common_times
 UL_fixed <- min(max_time, max(common_times, na.rm=TRUE))
-cat("[DIAGNOSTIC] Using UL_fixed:", UL_fixed, "\n")
 
 # Cox model
 cox_interp <- matrix(NA, nrow = length(common_times), ncol = ncol(cox_pred$Probs))
@@ -550,7 +545,6 @@ for (j in seq_len(ncol(cox_pred$Probs))) {
                            xout = common_times, method = "constant",
                            rule = 2, f = 0)$y
 }
-cat("[DIAGNOSTIC] Cox interp dim:", dim(cox_interp), "\n")
 model_interp_list[["Cox"]] <- cox_interp
 
 # Other models
@@ -562,7 +556,6 @@ for (model_name in names(predictions)) {
                                xout = common_times, method = "constant",
                                rule = 2, f = 0)$y
   }
-  cat("[DIAGNOSTIC]", model_name, "interp dim:", dim(model_interp), "\n")
   model_interp_list[[model_name]] <- model_interp
 }
 
@@ -585,7 +578,6 @@ for (model_name in names(model_interp_list)) {
 
 # --- ENSEMBLE ETL: Ensure patient order and time grid match exactly, and UL matches ---
 ensemble_probs_aligned <- ensemble_probs[, patient_ids, drop = FALSE]
-cat("[DIAGNOSTIC] Ensemble probs dim:", dim(ensemble_probs_aligned), "\n")
 ensemble_pred_formatted <- list(NewProbs = ensemble_probs_aligned)
 ensemble_etl_list <- CalculateExpectedTimeLost(
   PredictedCurves = list(ensemble_pred_formatted),

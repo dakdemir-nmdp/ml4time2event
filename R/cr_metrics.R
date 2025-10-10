@@ -1,16 +1,3 @@
-#' @title timedepConcordanceCR
-#'
-#' @description Get time dependent concordance for competing risk outcomes (only event 1)
-#' @param SurvObj survival object (Surv(time, status))
-#' @param Predictions matrix of predicted CIFs (rows=observations, cols=times) for the cause of interest
-#' @param time evaluation time point
-#' @param cause cause of interest (1 or 2)
-#' @param TestMat test dataset (optional, used if formula needs predictors)
-#'
-#' @return concordance index value
-#' @param pred_times optional numeric vector of times corresponding to columns in `Predictions`
-#' @export
-
 .select_prediction_vector <- function(Predictions, eval_time, pred_times = NULL) {
   mat <- as.matrix(Predictions)
   if (is.null(pred_times)) {
@@ -41,6 +28,18 @@
   list(pred = as.numeric(mat[, idx]), times = pred_times)
 }
 
+#' @title timedepConcordanceCR
+#'
+#' @description Get time dependent concordance for competing risk outcomes (only event 1)
+#' @param SurvObj survival object (Surv(time, status))
+#' @param Predictions matrix of predicted CIFs (rows=observations, cols=times) for the cause of interest
+#' @param time evaluation time point
+#' @param cause cause of interest (1 or 2)
+#' @param TestMat test dataset (optional, used if formula needs predictors)
+#' @param pred_times optional numeric vector of times corresponding to columns in `Predictions`
+#'
+#' @return concordance index value
+#' @export
 timedepConcordanceCR<-function(SurvObj, Predictions, time, cause=1, TestMat=NULL, pred_times = NULL){
   # Input validation
   if (!inherits(SurvObj, "Surv")) {
