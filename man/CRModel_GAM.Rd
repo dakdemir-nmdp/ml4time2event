@@ -12,7 +12,8 @@ CRModel_GAM(
   event_codes = NULL,
   shrinkTreshold = 10,
   ntimes = 50,
-  verbose = FALSE
+  verbose = FALSE,
+  event_of_interest = NULL
 )
 }
 \arguments{
@@ -34,6 +35,10 @@ entry defines the default event of interest.}
 \item{ntimes}{integer, number of time points to use for prediction grid (default: 50)}
 
 \item{verbose}{logical, print progress messages (default: FALSE)}
+
+\item{event_of_interest}{optional character or numeric scalar indicating a specific event code
+that should be prioritized as the primary event of interest. If provided, this
+event code must be one of the codes specified in 'event_codes'.}
 }
 \value{
 a list with the following components:

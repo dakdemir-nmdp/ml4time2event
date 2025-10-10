@@ -13,7 +13,7 @@ EnsemblePredictions(
   sl_actual = NULL,
   sl_loss = "mse",
   sl_weights = NULL,
-  times = NULL,
+  times,
   ...
 )
 }
