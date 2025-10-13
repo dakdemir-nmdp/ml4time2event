@@ -1,0 +1,7 @@
+^.*\.Rproj$
+^\.Rproj\.user$
+^\.Rapp\.history$
+^\.\.Rcheck$
+^\.lintr$
+^Rplots\.pdf$
+^vignettes/Vignette\.Rmd$

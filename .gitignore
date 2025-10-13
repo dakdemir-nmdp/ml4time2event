@@ -1,0 +1,28 @@
+# R-specific files
+.Rproj.user
+.Rhistory
+.RData
+.Ruserdata
+..Rcheck/
+*.Rcheck/
+
+# Compiled binaries
+*.o
+*.so
+*.dll
+
+# OS-specific files
+.DS_Store
+Thumbs.db
+
+# IDE files
+.vscode/
+.idea/
+
+# Temporary files
+*.tmp
+*.bak
+
+# Package build artifacts
+*.tar.gz
+*.tgz

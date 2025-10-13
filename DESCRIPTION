@@ -1,0 +1,48 @@
+Package: ml4time2event
+Type: Package
+Title: Machine learning for time to event analysis
+Version: 0.1.0
+Author: Deniz Akdemir
+Maintainer: Deniz Akdemir <dakdemir@nmdp.org>
+Description: More about what it does (maybe more than one line)
+    Use four spaces when indenting paragraphs within the Description.
+License: file LICENSE
+Encoding: UTF-8
+LazyData: true
+RoxygenNote: 7.3.2
+Imports:
+    BART,
+    dplyr,
+    energy,
+    fastcmprsk,
+    gbm,
+    ggplot2,
+    glmnet,
+    gtsummary,
+    haven,
+    magrittr,
+    methods,
+    mgcv,
+    missRanger,
+    openxlsx,
+    partykit,
+    pbapply,
+    pec,
+    pracma,
+    prodlim,
+    pseudo,
+    randomForestSRC,
+    recipes,
+    rpart,
+    rsample,
+    stats,
+    survival,
+    utils,
+    xgboost
+Suggests:
+    checkmate,
+    forcats,
+    mlr3,
+    mlr3learners,
+    pacman
+Depends: R (>= 3.5.0), base
