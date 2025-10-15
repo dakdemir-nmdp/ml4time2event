@@ -583,6 +583,68 @@ PredictCRModels<-function(models, newdata, newtimes, models_to_use=NULL,
     return(list(ModelPredictions=ModelPredictions, NewProbs=NULL, models_used=character(0),
                 ensemble_method=ensemble_method))
   }
+  
+  # Safety check: Ensure all ModelPredictions are matrices with valid dimensions
+  valid_models <- character(0)
+  invalid_models <- character(0)
+  
+  message("Validating prediction matrices:")
+  for (model_name in names(ModelPredictions)) {
+    pred_mat <- ModelPredictions[[model_name]]
+    message(sprintf(" - Checking %s: %s", model_name, 
+                    if(is.matrix(pred_mat)) 
+                      sprintf("Matrix with dimensions %dx%d", nrow(pred_mat), ncol(pred_mat))
+                    else 
+                      sprintf("Not a matrix: %s", class(pred_mat))))
+                      
+    if (is.matrix(pred_mat) && all(dim(pred_mat) > 0)) {
+      # Check if dimensions match expectations
+      n_times_expected <- length(newtimes)
+      n_obs_expected <- nrow(newdata)
+      
+      if (nrow(pred_mat) == n_times_expected && ncol(pred_mat) == n_obs_expected) {
+        valid_models <- c(valid_models, model_name)
+        message(sprintf("   Valid matrix for %s with correct dimensions", model_name))
+      } else if (nrow(pred_mat) == n_obs_expected && ncol(pred_mat) == n_times_expected) {
+        # Transpose if dimensions are flipped
+        message(sprintf("   Transposing matrix for %s (had rows=observations, cols=times)", model_name))
+        ModelPredictions[[model_name]] <- t(pred_mat)
+        valid_models <- c(valid_models, model_name)
+      } else {
+        invalid_models <- c(invalid_models, model_name)
+        warning(sprintf("Invalid dimensions for model %s: got %dx%d, expected %dx%d (rows=times, cols=observations)", 
+                        model_name, nrow(pred_mat), ncol(pred_mat), n_times_expected, n_obs_expected))
+        ModelPredictions[[model_name]] <- NULL
+      }
+    } else {
+      invalid_models <- c(invalid_models, model_name)
+      warning(sprintf("Invalid prediction matrix for model %s: Not a matrix or invalid dimensions", model_name))
+      # Show more details about what went wrong
+      if (is.matrix(pred_mat)) {
+        warning(sprintf("  Matrix dimensions: %s", paste(dim(pred_mat), collapse="x")))
+      } else {
+        warning(sprintf("  Object class: %s", class(pred_mat)))
+      }
+      ModelPredictions[[model_name]] <- NULL
+    }
+  }
+  
+  if (length(valid_models) > 0) {
+    message(sprintf("Valid models: %s", paste(valid_models, collapse=", ")))
+  } else {
+    message("No valid models found")
+  }
+  
+  if (length(invalid_models) > 0) {
+    message(sprintf("Invalid models: %s", paste(invalid_models, collapse=", ")))
+  }
+  
+  # Check if we still have valid predictions after filtering
+  if (length(ModelPredictions) == 0) {
+    warning("No valid prediction matrices obtained from any model.")
+    return(list(ModelPredictions=ModelPredictions, NewProbs=NULL, models_used=character(0),
+                ensemble_method=ensemble_method))
+  }
 
   models_used <- names(ModelPredictions)
 
