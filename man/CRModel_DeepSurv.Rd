@@ -9,7 +9,7 @@ CRModel_DeepSurv(
   expvars,
   timevar,
   eventvar,
-  event_codes = NULL,
+  event_of_interest = NULL,
   size = 5,
   decay = 0.01,
   maxit = 1000,
@@ -25,7 +25,7 @@ CRModel_DeepSurv(
 
 \item{eventvar}{character name of event variable in data (coded 0=censored, 1=cause1, 2=cause2, etc.)}
 
-\item{event_codes}{character or numeric vector identifying the event code(s) to
+\item{event_of_interest}{character or numeric vector identifying the event code(s) to
 model. DeepSurv competing risks currently supports a single event code. If
 NULL (default), the first non-zero event code observed in the data is used.}
 

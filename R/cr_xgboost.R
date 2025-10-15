@@ -43,23 +43,23 @@ CRModel_xgboost <- function(data, expvars, timevar, eventvar, event_codes = NULL
   # Input Validation
   # ============================================================================
   if (!is.data.frame(data)) {
-    stop("'data' must be a data frame")
+    stop("Input 'data' must be a data frame.")
   }
   if (!is.character(expvars) || length(expvars) == 0) {
-    stop("'expvars' must be a non-empty character vector")
+    stop("Input 'expvars' must be a non-empty character vector.")
   }
   if (!timevar %in% colnames(data)) {
-    stop("'timevar' not found in data: ", timevar)
+    stop("Input 'timevar' not found in data: ", timevar)
   }
   if (!eventvar %in% colnames(data)) {
-    stop("'eventvar' not found in data: ", eventvar)
+    stop("Input 'eventvar' not found in data: ", eventvar)
   }
   missing_vars <- setdiff(expvars, colnames(data))
   if (length(missing_vars) > 0) {
-    stop("The following expvars not found in data: ", paste(missing_vars, collapse=", "))
+    stop("The following 'expvars' not found in data: ", paste(missing_vars, collapse=", "))
   }
   if (!is.null(event_codes) && length(event_codes) == 0) {
-    stop("'event_codes' must be NULL or a non-empty vector")
+    stop("Input 'event_codes' must be NULL or a non-empty vector.")
   }
 
   # ============================================================================
@@ -282,15 +282,23 @@ Predict_CRModel_xgboost <- function(modelout, newdata, newtimes = NULL, event_of
   # ============================================================================
   # Input Validation
   # ============================================================================
+  if (missing(modelout)) {
+    stop("'modelout' is missing")
+  }
+  if (!is.list(modelout) || !all(c("expvars", "default_event_code") %in% names(modelout))) {
+    stop("must be output from CRModel_xgboost")
+  }
+  if (missing(newdata)) {
+    stop("'newdata' is missing")
+  }
   if (!is.data.frame(newdata)) {
-    stop("'newdata' must be a data frame")
+    stop("Input 'newdata' must be a data frame.")
   }
 
   # Check that required variables are present in newdata
   missing_vars <- setdiff(modelout$expvars, colnames(newdata))
   if (length(missing_vars) > 0) {
-    stop("The following variables missing in newdata: ",
-         paste(missing_vars, collapse = ", "))
+    stop("The following 'expvars' are missing in 'newdata': ", paste(missing_vars, collapse = ", "))
   }
 
   # Handle event_of_interest parameter
@@ -301,11 +309,11 @@ Predict_CRModel_xgboost <- function(modelout, newdata, newtimes = NULL, event_of
   event_of_interest <- as.character(event_of_interest)
 
   if (length(event_of_interest) != 1) {
-    stop("'event_of_interest' must be a single event code")
+    stop("Input 'event_of_interest' must be a single event code.")
   }
 
   if (!event_of_interest %in% modelout$event_codes) {
-    stop("Requested event_of_interest ", event_of_interest, " was not present in training data. Available event codes: ",
+    stop("Input 'event_of_interest' was not present in training data. Available event codes: ",
          paste(modelout$event_codes, collapse = ", "))
   }
 
@@ -315,7 +323,7 @@ Predict_CRModel_xgboost <- function(modelout, newdata, newtimes = NULL, event_of
     target_times <- sort(unique(c(0, modelout$times)))
   } else {
     if (!is.numeric(newtimes) || any(newtimes < 0)) {
-      stop("'newtimes' must be a numeric vector of non-negative values")
+      stop("Input 'newtimes' must be a numeric vector of non-negative values.")
     }
     target_times <- sort(unique(newtimes))
   }

@@ -286,13 +286,13 @@ test_that("Predict_CRModel_xgboost validates inputs", {
     nrounds = 10
   )
 
-  expect_error(Predict_CRModel_xgboost(newdata = test_data), "argument \"modelout\" is missing")
-  expect_error(Predict_CRModel_xgboost(modelout = model), "argument \"newdata\" is missing")
+  expect_error(Predict_CRModel_xgboost(newdata = test_data), "'modelout' is missing")
+  expect_error(Predict_CRModel_xgboost(modelout = model), "'newdata' is missing")
   expect_error(Predict_CRModel_xgboost(modelout = "not model", newdata = test_data), "must be output from CRModel_xgboost")
-  expect_error(Predict_CRModel_xgboost(modelout = model, newdata = "not data"), "'newdata' must be a data frame")
+  expect_error(Predict_CRModel_xgboost(modelout = model, newdata = "not data"), "Input 'newdata' must be a data frame.")
 
   test_data_missing <- test_data[, !(names(test_data) %in% c("x1"))]
-  expect_error(Predict_CRModel_xgboost(modelout = model, newdata = test_data_missing), "missing in newdata")
+  expect_error(Predict_CRModel_xgboost(modelout = model, newdata = test_data_missing), "The following 'expvars' are missing in 'newdata': x1")
 
   expect_error(Predict_CRModel_xgboost(modelout = model, newdata = test_data, newtimes = "not numeric"),
                "'newtimes' must be a numeric vector of non-negative values")
@@ -301,7 +301,7 @@ test_that("Predict_CRModel_xgboost validates inputs", {
                "'newtimes' must be a numeric vector of non-negative values")
 
   expect_error(Predict_CRModel_xgboost(modelout = model, newdata = test_data, event_of_interest = "99"),
-               "Requested event_of_interest 99 was not present in training data")
+               "Input 'event_of_interest' was not present in training data. Available event codes: 1, 2")
 })
 
 test_that("Predict_CRModel_xgboost supports factor predictors in newdata", {

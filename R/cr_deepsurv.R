@@ -148,7 +148,7 @@ unpack_weights <- function(w_vec, n_in, n_hidden) {
 #' @param expvars character vector of names of explanatory variables in data
 #' @param timevar character name of time variable in data
 #' @param eventvar character name of event variable in data (coded 0=censored, 1=cause1, 2=cause2, etc.)
-#' @param event_codes character or numeric vector identifying the event code(s) to
+#' @param event_of_interest character or numeric vector identifying the event code(s) to
 #'   model. DeepSurv competing risks currently supports a single event code. If
 #'   NULL (default), the first non-zero event code observed in the data is used.
 #' @param size integer, number of units in the hidden layer (default: 5)
@@ -170,30 +170,33 @@ unpack_weights <- function(w_vec, n_in, n_hidden) {
 #'
 #' @importFrom stats model.matrix as.formula
 #' @export
-CRModel_DeepSurv <- function(data, expvars, timevar, eventvar, event_codes = NULL,
+CRModel_DeepSurv <- function(data, expvars, timevar, eventvar, event_of_interest = NULL,
                              size = 5, decay = 0.01, maxit = 1000, verbose = FALSE) {
 
   # ============================================================================
   # Input Validation
   # ============================================================================
+  if (missing(data)) {
+    stop("Input 'data' is missing")
+  }
   if (!is.data.frame(data)) {
-    stop("'data' must be a data frame")
+    stop("`data` must be a data frame")
   }
   if (!is.character(expvars) || length(expvars) == 0) {
-    stop("'expvars' must be a non-empty character vector")
+    stop("`expvars` must be a non-empty character vector")
   }
   if (!timevar %in% colnames(data)) {
-    stop("'timevar' not found in data: ", timevar)
+    stop(paste0("`timevar` not found in data: ", timevar))
   }
   if (!eventvar %in% colnames(data)) {
-    stop("'eventvar' not found in data: ", eventvar)
+    stop(paste0("`eventvar` not found in data: ", eventvar))
   }
   missing_vars <- setdiff(expvars, colnames(data))
   if (length(missing_vars) > 0) {
-    stop("The following expvars not found in data: ", paste(missing_vars, collapse=", "))
+    stop(paste0("The following `expvars` not found in data: ", paste(missing_vars, collapse=", ")))
   }
-  if (!is.null(event_codes) && length(event_codes) == 0) {
-    stop("'event_codes' must be NULL or a non-empty vector")
+  if (!is.null(event_of_interest) && length(event_of_interest) == 0) {
+    stop("`event_of_interest` must be NULL or a non-empty vector")
   }
 
   # ============================================================================
@@ -232,35 +235,26 @@ CRModel_DeepSurv <- function(data, expvars, timevar, eventvar, event_codes = NUL
     stop("No events found in the training data.")
   }
 
-  if (is.null(event_codes)) {
-    event_codes <- available_events[1]
+  if (is.null(event_of_interest)) {
+    event_of_interest <- available_events[1]
   }
-
-  event_codes <- as.character(event_codes)
-
-  if (length(event_codes) != 1) {
-    stop("CRModel_DeepSurv supports exactly one event code. Received ", length(event_codes), ".")
+  event_of_interest <- as.character(event_of_interest)
+  if (length(event_of_interest) != 1) {
+    stop("`event_of_interest` must be a single value (one event code)")
   }
-
-  if (!event_codes %in% available_events) {
-    stop("Requested event code ", event_codes,
-         " not present in training data. No events of type ", event_codes,
-         " in training data.")
+  if (!event_of_interest %in% available_events) {
+    stop(paste0("`event_of_interest` ", event_of_interest, " not present in training data. No events of type ", event_of_interest, "."))
   }
-
-  event_codes_numeric <- suppressWarnings(as.numeric(event_codes))
+  event_codes_numeric <- suppressWarnings(as.numeric(event_of_interest))
   if (is.na(event_codes_numeric)) {
-    stop("DeepSurv competing risks requires numeric event codes. Unable to coerce '",
-         event_codes, "' to numeric.")
+    stop(paste0("`event_of_interest` must be numeric or coercible to numeric. Unable to coerce '", event_of_interest, "' to numeric."))
   }
-
-  primary_event_code <- event_codes[1]
+  primary_event_code <- event_of_interest[1]
   primary_event_numeric <- event_codes_numeric[1]
-
   # Get unique event times for the event of interest
   event_times <- XYTrain[[timevar]][XYTrain[[eventvar]] == primary_event_numeric]
   if (length(event_times) == 0) {
-    stop("No events of type ", primary_event_code, " in training data. Cannot fit competing risks model.")
+    stop(paste0("No events of type ", primary_event_code, " in training data. Cannot fit competing risks model."))
   }
   times <- sort(unique(event_times))
 
@@ -454,7 +448,7 @@ CRModel_DeepSurv <- function(data, expvars, timevar, eventvar, event_codes = NUL
     varprof = varprof,
     expvars = expvars,
     factor_levels = factor_levels,
-    event_codes = event_codes,
+    event_codes = event_of_interest,
     event_codes_numeric = event_codes_numeric,
     default_event_code = primary_event_code,
     model_type = "cr_deepsurv",
@@ -510,45 +504,41 @@ Predict_CRModel_DeepSurv <- function(modelout, newdata, newtimes = NULL,
   # Input Validation
   # ============================================================================
   if (missing(modelout)) {
-    stop("argument \"modelout\" is missing")
+    stop("`modelout` is missing")
+  }
+  if (!is.list(modelout) || !all(c("expvars", "default_event_code") %in% names(modelout))) {
+    stop("Input 'modelout' must be output from CRModel_DeepSurv")
   }
   if (missing(newdata)) {
-    stop("argument \"newdata\" is missing")
+    stop("`newdata` is missing")
   }
   if (!is.data.frame(newdata)) {
-    stop("'newdata' must be a data frame")
+    stop("`newdata` must be a data frame")
   }
-
   # Check that required variables are present in newdata
   missing_vars <- setdiff(modelout$expvars, colnames(newdata))
   if (length(missing_vars) > 0) {
-    stop("The following variables missing in newdata: ",
-         paste(missing_vars, collapse = ", "))
+    stop(paste0("The following variables are missing in `newdata`: ", paste(missing_vars, collapse = ", ")))
   }
-
   # Handle event_of_interest parameter
   if (is.null(event_of_interest)) {
     event_of_interest <- modelout$default_event_code
   }
-
   event_of_interest <- as.character(event_of_interest)
-
   if (length(event_of_interest) != 1) {
-    stop("DeepSurv competing risks predictions require a single event code")
+    stop("`event_of_interest` must be a single value (one event code)")
   }
-
   if (!identical(event_of_interest, modelout$default_event_code)) {
-    stop("DeepSurv models can only predict for the event they were trained on (event code = ",
-         modelout$default_event_code, "). Requested event code: ", event_of_interest)
+    stop(paste0("DeepSurv models can only predict for the event they were trained on (event code = ",
+                modelout$default_event_code, "). Requested event code: ", event_of_interest))
   }
-
   # Validate newtimes if provided
   if (!is.null(newtimes)) {
     if (!is.numeric(newtimes)) {
-      stop("'newtimes' must be numeric")
+      stop("`newtimes` must be numeric")
     }
     if (any(newtimes < 0)) {
-      stop("'newtimes' must be a numeric vector of non-negative values")
+      stop("`newtimes` must be a numeric vector of non-negative values")
     }
   }
   

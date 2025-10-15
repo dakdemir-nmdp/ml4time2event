@@ -58,23 +58,23 @@ CRModel_Cox <- function(data, expvars, timevar, eventvar, event_codes = NULL,
   # Input Validation
   # ============================================================================
   if (!is.data.frame(data)) {
-    stop("'data' must be a data frame")
+    stop("`data` must be a data frame")
   }
   if (!is.character(expvars) || length(expvars) == 0) {
-    stop("'expvars' must be a non-empty character vector")
+    stop("`expvars` must be a non-empty character vector")
   }
   if (!timevar %in% colnames(data)) {
-    stop("'timevar' not found in data: ", timevar)
+    stop(paste0("`timevar` not found in data: ", timevar))
   }
   if (!eventvar %in% colnames(data)) {
-    stop("'eventvar' not found in data: ", eventvar)
+    stop(paste0("`eventvar` not found in data: ", eventvar))
   }
   missing_vars <- setdiff(expvars, colnames(data))
   if (length(missing_vars) > 0) {
-    stop("The following expvars not found in data: ", paste(missing_vars, collapse=", "))
+    stop(paste0("The following `expvars` not found in data: ", paste(missing_vars, collapse=", ")))
   }
   if (!is.null(event_codes) && length(event_codes) == 0) {
-    stop("'event_codes' must be NULL or a non-empty vector if provided")
+    stop("`event_codes` must be NULL or a non-empty vector if provided")
   }
   varsel <- match.arg(varsel, c("none", "backward", "forward", "both"))
   penalty <- match.arg(penalty, c("AIC", "BIC"))
@@ -124,9 +124,9 @@ CRModel_Cox <- function(data, expvars, timevar, eventvar, event_codes = NULL,
   # Check for sufficient events for each cause
   for (cause in event_codes) {
     event_times <- XYTrain[[timevar]][XYTrain[[eventvar]] == as.numeric(cause)]
-      if (length(event_times) == 0) {
-          stop("No events of type ", cause, " in training data. Cannot fit competing risks model.")
-      }
+    if (length(event_times) == 0) {
+      stop(paste0("No events of type ", cause, " in training data. Cannot fit competing risks model."))
+    }
   }
 
   time_range <- range(XYTrain[[timevar]][XYTrain[[eventvar]] %in% as.numeric(event_codes)], na.rm = TRUE)

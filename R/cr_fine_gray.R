@@ -36,23 +36,23 @@ CRModel_FineGray <- function(data, expvars, timevar, eventvar, event_codes = NUL
   # Input Validation
   # ============================================================================
   if (!is.data.frame(data)) {
-    stop("'data' must be a data frame")
+    stop("`data` must be a data frame")
   }
   if (!is.character(expvars) || length(expvars) == 0) {
-    stop("'expvars' must be a non-empty character vector")
+    stop("`expvars` must be a non-empty character vector")
   }
   if (!timevar %in% colnames(data)) {
-    stop("'timevar' not found in data: ", timevar)
+    stop(paste0("`timevar` not found in data: ", timevar))
   }
   if (!eventvar %in% colnames(data)) {
-    stop("'eventvar' not found in data: ", eventvar)
+    stop(paste0("`eventvar` not found in data: ", eventvar))
   }
   missing_vars <- setdiff(expvars, colnames(data))
   if (length(missing_vars) > 0) {
-    stop("The following expvars not found in data: ", paste(missing_vars, collapse=", "))
+    stop(paste0("The following `expvars` not found in data: ", paste(missing_vars, collapse=", ")))
   }
   if (!is.null(event_codes) && length(event_codes) == 0) {
-    stop("'event_codes' must be NULL or a non-empty vector")
+    stop("`event_codes` must be NULL or a non-empty vector")
   }
 
   # ============================================================================
@@ -90,23 +90,20 @@ CRModel_FineGray <- function(data, expvars, timevar, eventvar, event_codes = NUL
   event_codes <- as.character(event_codes)
 
   if (length(event_codes) != 1) {
-    stop("Fine-Gray model supports exactly one event code. Received ", length(event_codes), ".")
+    stop("`event_codes` must be a single value (one event code)")
   }
-
   if (!event_codes %in% available_events) {
-    stop("Requested event code ", event_codes, " not present in training data. Available codes: ",
-         paste(available_events, collapse = ", "))
+    stop(paste0("`event_codes` ", event_codes, " not present in training data. Available codes: ", paste(available_events, collapse = ", ")))
   }
-
   failcode <- suppressWarnings(as.numeric(event_codes))
   if (is.na(failcode)) {
-    stop("Fine-Gray requires numeric event codes. Unable to coerce '", event_codes, "' to numeric.")
+    stop(paste0("`event_codes` must be numeric or coercible to numeric. Unable to coerce '", event_codes, "' to numeric."))
   }
 
   # Get unique event times for the event of interest
   event_times <- XYTrain[[timevar]][XYTrain[[eventvar]] == failcode]
   if (length(event_times) == 0) {
-    stop("No events of type ", event_codes, " in training data. Cannot fit competing risks model.")
+    stop(paste0("No events of type ", event_codes, " in training data. Cannot fit competing risks model."))
   }
 
   # Store event time range for reference
@@ -213,35 +210,28 @@ Predict_CRModel_FineGray <- function(modelout, newdata, newtimes = NULL, event_o
   # Input Validation
   # ============================================================================
   if (!is.data.frame(newdata)) {
-    stop("'newdata' must be a data frame")
+    stop("`newdata` must be a data frame")
   }
-
   # Check that required variables are present in newdata
   missing_vars <- setdiff(modelout$expvars, colnames(newdata))
   if (length(missing_vars) > 0) {
-    stop("The following variables missing in newdata: ",
-         paste(missing_vars, collapse = ", "))
+    stop(paste0("The following variables are missing in `newdata`: ", paste(missing_vars, collapse = ", ")))
   }
-
   # Handle event_of_interest parameter
   if (is.null(event_of_interest)) {
     event_of_interest <- modelout$event_codes
   }
-
   event_of_interest <- as.character(event_of_interest)
-
   if (length(event_of_interest) != 1) {
-    stop("Fine-Gray models can only return CIFs for a single event of interest")
+    stop("`event_of_interest` must be a single value (one event code)")
   }
-
   if (!identical(event_of_interest, modelout$event_codes)) {
-    stop("Fine-Gray models can only predict for the event they were trained on (event code = ",
-         modelout$event_codes, "). Requested event code: ", event_of_interest)
+    stop(paste0("Fine-Gray models can only predict for the event they were trained on (event code = ",
+                modelout$event_codes, "). Requested event code: ", event_of_interest))
   }
-
   failcode <- suppressWarnings(as.numeric(event_of_interest))
   if (is.na(failcode)) {
-    stop("Fine-Gray requires numeric event codes. Unable to coerce '", event_of_interest, "' to numeric.")
+    stop(paste0("`event_of_interest` must be numeric or coercible to numeric. Unable to coerce '", event_of_interest, "' to numeric."))
   }
 
   # Generate default times if not specified

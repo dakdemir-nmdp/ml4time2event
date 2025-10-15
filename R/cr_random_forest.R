@@ -187,6 +187,15 @@ Predict_CRModel_RF <- function(modelout, newdata, newtimes = NULL, event_of_inte
   # ============================================================================
   # Input Validation
   # ============================================================================
+  if (missing(modelout)) {
+    stop("'modelout' is missing")
+  }
+  if (!is.list(modelout) || !all(c("expvars", "event_codes") %in% names(modelout))) {
+    stop("'modelout' must be output from CRModel_RF")
+  }
+  if (missing(newdata)) {
+    stop("'newdata' is missing")
+  }
   if (!is.data.frame(newdata)) {
     stop("'newdata' must be a data frame")
   }

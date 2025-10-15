@@ -305,17 +305,17 @@ Predict_SurvModel_xgboost <- function(modelout, newdata, newtimes = NULL) {
   )
 
   # Handle dimension mismatch if prediction failed for some observations
-  if (ncol(preds) != n_expected_obs) {
-    if (has_missing && ncol(preds) == n_complete_cases) {
+  if (nrow(preds) != n_expected_obs) {
+    if (has_missing && nrow(preds) == n_complete_cases) {
       # Expand predictions to match original newdata by filling with NAs
-      full_preds <- matrix(NA, nrow = nrow(preds), ncol = n_expected_obs)
+      full_preds <- matrix(NA, nrow = n_expected_obs, ncol = ncol(preds))
       complete_idx <- which(complete.cases(X_new))
-      full_preds[, complete_idx] <- preds
+      full_preds[complete_idx, ] <- preds
       preds <- full_preds
     } else {
       stop(sprintf(
         "Dimension mismatch: predict.xgb.Booster.surv returned %d observation(s) but expected %d.\n",
-        ncol(preds), n_expected_obs),
+        nrow(preds), n_expected_obs),
         sprintf("Complete cases: %d. ", n_complete_cases),
         "This indicates an unexpected issue in XGBoost prediction."
       )

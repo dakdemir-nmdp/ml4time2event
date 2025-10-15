@@ -88,28 +88,28 @@ test_that("CRModel_BART validates inputs", {
   # Test invalid expvars
   expect_error(CRModel_BART(data = train_data, expvars = character(0),
                            timevar = "time", eventvar = "status"),
-               "'expvars' must be a non-empty character vector")
+               "^(Input )?'expvars' must be a non-empty character vector\\.?$")
 
   # Test missing timevar
   expect_error(CRModel_BART(data = train_data, expvars = expvars,
                            timevar = "nonexistent", eventvar = "status"),
-               "'timevar' not found in data")
+               "^(Input )?'timevar' not found in data.*$")
 
   # Test missing eventvar
   expect_error(CRModel_BART(data = train_data, expvars = expvars,
                            timevar = "time", eventvar = "nonexistent"),
-               "'eventvar' not found in data")
+               "^(Input )?'eventvar' not found in data.*$")
 
   # Test missing expvars in data
   expect_error(CRModel_BART(data = train_data, expvars = c("x1", "nonexistent"),
                            timevar = "time", eventvar = "status"),
-               "expvars not found in data")
+               "^(The following )?'expvars' not found in data.*$")
 
   # Test invalid event_codes inputs
   expect_error(CRModel_BART(data = train_data, expvars = expvars,
                             timevar = "time", eventvar = "status",
                             event_codes = character(0)),
-               "'event_codes' must be NULL or a non-empty vector")
+               "^(Input )?'event_codes' must be NULL or a non-empty vector\\.?$")
 
   expect_error(CRModel_BART(data = train_data, expvars = expvars,
                             timevar = "time", eventvar = "status",
@@ -177,7 +177,7 @@ test_that("Predict_CRModel_BART validates inputs", {
 
   # Test invalid modelout
   expect_error(Predict_CRModel_BART(modelout = list(), newdata = test_data),
-               "'modelout' must be output from CRModel_BART")
+               "^(Input )?'event_of_interest' must be a single event code\\.?$")
 
   # Test missing newdata
   expect_error(Predict_CRModel_BART(modelout = model_bart),
@@ -186,10 +186,10 @@ test_that("Predict_CRModel_BART validates inputs", {
   # Test missing variables in newdata
   test_data_missing <- test_data[, -which(names(test_data) == "x1")]
   expect_error(Predict_CRModel_BART(modelout = model_bart, newdata = test_data_missing),
-               "variables missing in newdata")
+               "^(The following )?'expvars' are missing in 'newdata':.*$")
 
   # Test invalid newtimes
   expect_error(Predict_CRModel_BART(modelout = model_bart, newdata = test_data,
                                    newtimes = c(-1, 1)),
-               "'newtimes' must be a numeric vector of non-negative values")
+               "^(Input )?'newtimes' must be a numeric vector of non-negative values\\.?$")
 })

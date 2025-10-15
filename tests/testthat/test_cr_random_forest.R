@@ -178,7 +178,7 @@ test_that("Predict_CRModel_RF validates inputs", {
 
   # Test missing newdata
   expect_error(Predict_CRModel_RF(modelout = model_rf),
-               "argument \"newdata\" is missing, with no default")
+               "'newdata' is missing")
 
   # Test missing variables in newdata
   test_data_missing <- test_data[, -which(names(test_data) == "x1")]

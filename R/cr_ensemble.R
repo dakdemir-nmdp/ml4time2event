@@ -144,7 +144,7 @@ RunCRModels<-function(datatrain, ExpVars, timevar, eventvar, models=c("FG", "rul
   }
   if ("survreg" %in% models){
     # Assuming CRModel_SurvReg is loaded/available
-    survreg_Model<-tryCatch(CRModel_SurvReg(data=datatrainFact,expvars=ExpVars, timevar=timevar, eventvar=eventvar, dist="exponential"), error=function(e){
+  survreg_Model<-tryCatch(CRModel_SurvReg(data=datatrainFact,expvars=ExpVars, timevar=timevar, eventvar=eventvar, dist="exponential", event_of_interest=1), error=function(e){
        message("Failed fitting SurvReg: ", e$message)
       return(NULL)
     })
@@ -195,7 +195,7 @@ RunCRModels<-function(datatrain, ExpVars, timevar, eventvar, models=c("FG", "rul
      model_status["gam_Model"] <- !is.null(gam_Model)
    }
    if ("survreg" %in% models){
-     survreg_Model<-tryCatch(CRModel_SurvReg(data=datatrainFact,expvars=ExpVars2, timevar=timevar, eventvar=eventvar, event_of_interest=1, dist="exponential"), error=function(e){
+  survreg_Model<-tryCatch(CRModel_SurvReg(data=datatrainFact,expvars=ExpVars2, timevar=timevar, eventvar=eventvar, dist="exponential", event_of_interest=1), error=function(e){
        message("Failed fitting SurvReg: ", e$message)
        return(NULL)
      })

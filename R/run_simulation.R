@@ -563,11 +563,11 @@ generate_simulation_report <- function(results, results_dir, verbose = TRUE) {
     "## Best Performing Models",
     "",
     "### Calibration (Prediction Accuracy)",
-    sprintf("- **Best MAE**: %s (%.4f ± %.4f)",
+    sprintf("- **Best MAE**: %s (%.4f +/- %.4f)",
             summary_stats$best_calibration_model$by_mae,
             calib_results[[summary_stats$best_calibration_model$by_mae]]$mae$mean,
             calib_results[[summary_stats$best_calibration_model$by_mae]]$mae$sd),
-    sprintf("- **Best RMSE**: %s (%.4f ± %.4f)",
+    sprintf("- **Best RMSE**: %s (%.4f +/- %.4f)",
             summary_stats$best_calibration_model$by_rmse,
             calib_results[[summary_stats$best_calibration_model$by_rmse]]$rmse$mean,
             calib_results[[summary_stats$best_calibration_model$by_rmse]]$rmse$sd),
@@ -575,7 +575,7 @@ generate_simulation_report <- function(results, results_dir, verbose = TRUE) {
     "### Accuracy (Discrimination)",
     if (!is.null(summary_stats$best_accuracy_model$by_integrated_concordance) &&
         summary_stats$best_accuracy_model$by_integrated_concordance != "") {
-      sprintf("- **Best concordance**: %s (%.4f ± %.4f)",
+      sprintf("- **Best concordance**: %s (%.4f +/- %.4f)",
               summary_stats$best_accuracy_model$by_integrated_concordance,
               acc_results[[summary_stats$best_accuracy_model$by_integrated_concordance]]$integrated_concordance$mean,
               acc_results[[summary_stats$best_accuracy_model$by_integrated_concordance]]$integrated_concordance$sd)
@@ -592,9 +592,9 @@ generate_simulation_report <- function(results, results_dir, verbose = TRUE) {
 
   # Add calibration table rows
   for (model in names(calib_results)) {
-    mae <- sprintf("%.4f ± %.4f", calib_results[[model]]$mae$mean, calib_results[[model]]$mae$sd)
-    rmse <- sprintf("%.4f ± %.4f", calib_results[[model]]$rmse$mean, calib_results[[model]]$rmse$sd)
-    ice <- sprintf("%.4f ± %.4f", calib_results[[model]]$integrated_calibration_error$mean,
+    mae <- sprintf("%.4f +/- %.4f", calib_results[[model]]$mae$mean, calib_results[[model]]$mae$sd)
+    rmse <- sprintf("%.4f +/- %.4f", calib_results[[model]]$rmse$mean, calib_results[[model]]$rmse$sd)
+    ice <- sprintf("%.4f +/- %.4f", calib_results[[model]]$integrated_calibration_error$mean,
                    calib_results[[model]]$integrated_calibration_error$sd)
     report_content <- c(report_content, sprintf("| %s | %s | %s | %s |", model, mae, rmse, ice))
   }
@@ -609,13 +609,13 @@ generate_simulation_report <- function(results, results_dir, verbose = TRUE) {
     conc <- if (is.na(acc_results[[model]]$integrated_concordance$mean)) {
       "N/A"
     } else {
-      sprintf("%.4f ± %.4f", acc_results[[model]]$integrated_concordance$mean,
+      sprintf("%.4f +/- %.4f", acc_results[[model]]$integrated_concordance$mean,
               acc_results[[model]]$integrated_concordance$sd)
     }
     brier <- if (is.na(acc_results[[model]]$integrated_brier_score$mean)) {
       "N/A"
     } else {
-      sprintf("%.4f ± %.4f", acc_results[[model]]$integrated_brier_score$mean,
+      sprintf("%.4f +/- %.4f", acc_results[[model]]$integrated_brier_score$mean,
               acc_results[[model]]$integrated_brier_score$sd)
     }
     report_content <- c(report_content, sprintf("| %s | %s | %s |", model, conc, brier))

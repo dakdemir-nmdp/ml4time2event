@@ -47,20 +47,20 @@ CRModel_rulefit <- function(data, expvars, timevar, eventvar, event_codes = NULL
   # Input Validation
   # ============================================================================
   if (!is.data.frame(data)) {
-    stop("'data' must be a data frame")
+    stop("`data` must be a data frame")
   }
   if (!is.character(expvars) || length(expvars) == 0) {
-    stop("'expvars' must be a non-empty character vector")
+    stop("`expvars` must be a non-empty character vector")
   }
   if (!timevar %in% colnames(data)) {
-    stop("'timevar' not found in data: ", timevar)
+    stop(paste0("`timevar` not found in data: ", timevar))
   }
   if (!eventvar %in% colnames(data)) {
-    stop("'eventvar' not found in data: ", eventvar)
+    stop(paste0("`eventvar` not found in data: ", eventvar))
   }
   if (!all(expvars %in% colnames(data))) {
     missing_vars <- expvars[!expvars %in% colnames(data)]
-    stop("expvars not found in data: ", paste(missing_vars, collapse = ", "))
+    stop(paste0("The following `expvars` not found in data: ", paste(missing_vars, collapse = ", ")))
   }
 
   available_events <- sort(unique(as.character(data[[eventvar]][data[[eventvar]] != 0])))
@@ -71,22 +71,16 @@ CRModel_rulefit <- function(data, expvars, timevar, eventvar, event_codes = NULL
   if (is.null(event_codes)) {
     event_codes <- available_events[1]
   }
-
   event_codes <- as.character(event_codes)
-
   if (length(event_codes) != 1) {
-    stop("CRModel_rulefit currently supports exactly one event code. Provided: ",
-         paste(event_codes, collapse = ", "))
+    stop("`event_codes` must be a single value (one event code)")
   }
-
   if (!event_codes %in% available_events) {
-    stop("The requested event code (", event_codes, ") is not present in the training data. Available event codes: ",
-         paste(available_events, collapse = ", "))
+    stop(paste0("`event_codes` ", event_codes, " is not present in the training data. Available event codes: ", paste(available_events, collapse = ", ")))
   }
-
   event_codes_numeric <- suppressWarnings(as.numeric(event_codes))
   if (is.na(event_codes_numeric)) {
-    stop("CRModel_rulefit requires numeric event codes. Unable to coerce: ", event_codes)
+    stop(paste0("`event_codes` must be numeric or coercible to numeric. Unable to coerce '", event_codes, "' to numeric."))
   }
 
   primary_event_code <- event_codes[1]
@@ -223,8 +217,7 @@ CRModel_rulefit <- function(data, expvars, timevar, eventvar, event_codes = NULL
     data = cbind(TrainMat, data[, colnames(data) %in% c(eventvar, timevar)]),
     expvars = usecols,
     timevar = timevar,
-    eventvar = eventvar,
-    event_codes = primary_event_numeric
+    eventvar = eventvar
   )
 
   # Get unique event times from training data
@@ -289,6 +282,15 @@ Predict_CRModel_rulefit <- function(modelout, newdata, newtimes = NULL, event_of
   # ============================================================================
   # Input Validation
   # ============================================================================
+  if (missing(modelout)) {
+    stop("'modelout' is missing")
+  }
+  if (!is.list(modelout) || !all(c("expvars", "event_codes") %in% names(modelout))) {
+    stop("'modelout' must be output from CRModel_rulefit")
+  }
+  if (missing(newdata)) {
+    stop("'newdata' is missing")
+  }
   if (!is.data.frame(newdata)) {
     stop("'newdata' must be a data frame")
   }
@@ -393,8 +395,7 @@ Predict_CRModel_rulefit <- function(modelout, newdata, newtimes = NULL, event_of
   pred_fg <- Predict_CRModel_FineGray(
     modelout$rulefit_model$CRrulefitModel,
     TestMat,
-    newtimes = newtimes,
-    event_of_interest = event_of_interest
+    newtimes = newtimes
   )
 
   # ============================================================================

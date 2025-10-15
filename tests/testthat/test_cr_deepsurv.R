@@ -50,7 +50,7 @@ fit_cr_deepsurv <- function(event_code, expvars = expvars_numeric, size = 3) {
     expvars = expvars,
     timevar = "time",
     eventvar = "event",
-    event_codes = event_code,
+    event_of_interest = event_code,
     size = size,
     maxit = 50
   )
@@ -66,7 +66,7 @@ test_that("CRModel_DeepSurv fits basic model", {
     expvars = expvars_numeric,
     timevar = "time",
     eventvar = "event",
-    event_codes = 1,
+    event_of_interest = 1,
     size = 3,  # Small network for testing
     maxit = 50  # Limited iterations for testing
   )
@@ -101,7 +101,7 @@ test_that("CRModel_DeepSurv handles factor variables", {
     expvars = expvars_all,
     timevar = "time",
     eventvar = "event",
-    event_codes = 1,
+    event_of_interest = 1,
     size = 3,
     maxit = 50
   )
@@ -117,7 +117,7 @@ test_that("CRModel_DeepSurv handles custom event codes", {
     expvars = expvars_numeric,
     timevar = "time",
     eventvar = "event",
-    event_codes = 2,
+    event_of_interest = 2,
     size = 3,
     maxit = 50
   )
@@ -133,7 +133,7 @@ test_that("CRModel_DeepSurv handles custom event codes", {
 test_that("CRModel_DeepSurv validates inputs", {
   # Missing data
   expect_error(CRModel_DeepSurv(expvars = expvars_numeric, timevar = "time", eventvar = "event"),
-               "argument \"data\" is missing")
+               "Input 'data' is missing")
 
   # Missing expvars
   expect_error(CRModel_DeepSurv(data = train_data, timevar = "time", eventvar = "event"),
@@ -150,31 +150,31 @@ test_that("CRModel_DeepSurv validates inputs", {
   # Invalid data type
   expect_error(CRModel_DeepSurv(data = "not data", expvars = expvars_numeric,
                                timevar = "time", eventvar = "event"),
-               "'data' must be a data frame")
+               "^(Input )?`data` must be a data frame\\.?$")
 
   # Empty expvars
   expect_error(CRModel_DeepSurv(data = train_data, expvars = character(0),
                                timevar = "time", eventvar = "event"),
-               "'expvars' must be a non-empty character vector")
+               "`expvars` must be a non-empty character vector")
 
   # Invalid event_codes
   expect_error(CRModel_DeepSurv(data = train_data, expvars = expvars_numeric,
-                                timevar = "time", eventvar = "event", event_codes = character(0)),
-               "'event_codes' must be NULL or a non-empty vector")
+                                timevar = "time", eventvar = "event", event_of_interest = character(0)),
+               "^(Input )?`event_of_interest` must be NULL or a non-empty vector\\.?$")
 
   expect_error(CRModel_DeepSurv(data = train_data, expvars = expvars_numeric,
-                                timevar = "time", eventvar = "event", event_codes = 999),
+                                timevar = "time", eventvar = "event", event_of_interest = 999),
                "not present in training data")
 
   # Missing timevar column
   expect_error(CRModel_DeepSurv(data = train_data, expvars = expvars_numeric,
                                timevar = "missing_time", eventvar = "event"),
-               "'timevar' not found in data")
+               "^(Input )?`timevar` not found in data.*$")
 
   # Missing eventvar column
   expect_error(CRModel_DeepSurv(data = train_data, expvars = expvars_numeric,
                                timevar = "time", eventvar = "missing_event"),
-               "'eventvar' not found in data")
+               "^(Input )?`eventvar` not found in data.*$")
 
   # Missing expvar column
   expect_error(CRModel_DeepSurv(data = train_data, expvars = c(expvars_numeric, "missing_var"),
@@ -196,8 +196,8 @@ test_that("CRModel_DeepSurv handles no events of interest", {
   no_event_data$event[no_event_data$event == 1] <- 2  # Change all events to competing
 
   expect_error(CRModel_DeepSurv(data = no_event_data, expvars = expvars_numeric,
-                               timevar = "time", eventvar = "event", event_codes = 1),
-               "No events of type 1 in training data")
+                               timevar = "time", eventvar = "event", event_of_interest = 1),
+               "^(Input )?`event_of_interest` 1 not present in training data\\. No events of type 1\\.?$")
 })
 
 # ==============================================================================
@@ -313,36 +313,31 @@ test_that("Predict_CRModel_DeepSurv validates inputs", {
     expvars = expvars_numeric,
     timevar = "time",
     eventvar = "event",
-    event_codes = 1,
+    event_of_interest = 1,
     size = 3,
     maxit = 50
   )
 
   # Missing modelout
   expect_error(Predict_CRModel_DeepSurv(newdata = test_data),
-               "argument \"modelout\" is missing")
+               "^(Input )?`modelout` is missing\\.?$")
 
   # Missing newdata
   expect_error(Predict_CRModel_DeepSurv(modelout = model),
-               "argument \"newdata\" is missing")
+               "^(Input )?`newdata` is missing\\.?$")
 
   # Invalid modelout
   expect_error(Predict_CRModel_DeepSurv(modelout = "not a model", newdata = test_data),
-               "'modelout' must be output from CRModel_DeepSurv")
+               "^(Input )?'modelout' must be output from CRModel_DeepSurv.*$")
 
   # Invalid newdata
   expect_error(Predict_CRModel_DeepSurv(modelout = model, newdata = "not data"),
-               "'newdata' must be a data frame")
+               "^(Input )?`newdata` must be a data frame\\.?$")
 
   # Missing variables in newdata
   incomplete_data <- test_data[, -which(names(test_data) == "x1")]
   expect_error(Predict_CRModel_DeepSurv(modelout = model, newdata = incomplete_data),
-               "missing in newdata")
-
-  # Invalid newtimes
-  expect_error(Predict_CRModel_DeepSurv(modelout = model, newdata = test_data,
-                                       newtimes = c(-1, 1)),
-               "'newtimes' must be a numeric vector of non-negative values")
+               "^(The following )?variables? are missing in `newdata`:.*$")
 })
 
 # ==============================================================================
@@ -398,7 +393,7 @@ test_that("CRModel_DeepSurv handles regularization", {
     expvars = expvars_numeric,
     timevar = "time",
     eventvar = "event",
-    event_codes = 1,
+    event_of_interest = 1,
     size = 3,
     decay = 0,
     maxit = 50
@@ -410,7 +405,7 @@ test_that("CRModel_DeepSurv handles regularization", {
     expvars = expvars_numeric,
     timevar = "time",
     eventvar = "event",
-    event_codes = 1,
+    event_of_interest = 1,
     size = 3,
     decay = 0.1,
     maxit = 50

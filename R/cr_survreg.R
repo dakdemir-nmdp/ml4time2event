@@ -31,30 +31,34 @@
 #' @importFrom survival survreg Surv
 #' @importFrom stats AIC as.formula predict quantile
 #' @export
+
+#' @param event_of_interest optional character or numeric scalar indicating a specific event code
+#'   that should be prioritized as the primary event of interest. If provided, this
+#'   event code must be one of the codes specified in 'event_codes'.
 CRModel_SurvReg <- function(data, expvars, timevar, eventvar, event_codes = NULL,
-                           dist = "exponential", ntimes = 50, verbose = FALSE) {
+                           dist = "exponential", ntimes = 50, verbose = FALSE, event_of_interest = NULL) {
 
   # ============================================================================
   # Input Validation
   # ============================================================================
   if (!is.data.frame(data)) {
-    stop("'data' must be a data frame")
+    stop("`data` must be a data frame")
   }
   if (!is.character(expvars) || length(expvars) == 0) {
-    stop("'expvars' must be a non-empty character vector")
+    stop("`expvars` must be a non-empty character vector")
   }
   if (!timevar %in% colnames(data)) {
-    stop("'timevar' not found in data: ", timevar)
+    stop(paste0("`timevar` not found in data: ", timevar))
   }
   if (!eventvar %in% colnames(data)) {
-    stop("'eventvar' not found in data: ", eventvar)
+    stop(paste0("`eventvar` not found in data: ", eventvar))
   }
   missing_vars <- setdiff(expvars, colnames(data))
   if (length(missing_vars) > 0) {
-    stop("The following expvars not found in data: ", paste(missing_vars, collapse=", "))
+    stop(paste0("The following `expvars` not found in data: ", paste(missing_vars, collapse=", ")))
   }
   if (!is.null(event_codes) && length(event_codes) == 0) {
-    stop("'event_codes' must be NULL or a non-empty vector")
+    stop("`event_codes` must be NULL or a non-empty vector")
   }
 
   # ============================================================================
@@ -85,24 +89,31 @@ CRModel_SurvReg <- function(data, expvars, timevar, eventvar, event_codes = NULL
     stop("No events found in the training data.")
   }
 
+
+  # Handle event_of_interest for consistency
   if (is.null(event_codes)) {
     event_codes <- available_events
   }
-
   event_codes <- as.character(event_codes)
-
   missing_codes <- setdiff(event_codes, available_events)
   if (length(missing_codes) > 0) {
-    stop("The following event_codes are not present in the data: ",
-         paste(missing_codes, collapse = ", "))
+    stop(paste0("The following `event_codes` are not present in the data: ", paste(missing_codes, collapse = ", ")))
   }
-
   event_codes_numeric <- suppressWarnings(as.numeric(event_codes))
   if (any(is.na(event_codes_numeric))) {
-    stop("SurvReg competing risks requires numeric event codes. Unable to coerce: ",
-         paste(event_codes[is.na(event_codes_numeric)], collapse = ", "))
+    stop(paste0("`event_codes` must be numeric or coercible to numeric. Unable to coerce: ", paste(event_codes[is.na(event_codes_numeric)], collapse = ", ")))
   }
 
+  # If event_of_interest is provided, prioritize it as the first event code
+  if (!is.null(event_of_interest)) {
+    event_of_interest <- as.character(event_of_interest)
+    if (!event_of_interest %in% event_codes) {
+      stop(paste0("`event_of_interest` '", event_of_interest, "' is not in `event_codes`."))
+    }
+    # Reorder event_codes so event_of_interest is first
+    event_codes <- c(event_of_interest, setdiff(event_codes, event_of_interest))
+    event_codes_numeric <- suppressWarnings(as.numeric(event_codes))
+  }
   primary_event_code <- event_codes[1]
   primary_event_numeric <- event_codes_numeric[1]
 
@@ -336,6 +347,15 @@ Predict_CRModel_SurvReg <- function(modelout, newdata, newtimes = NULL, event_of
   # ============================================================================
   # Input Validation
   # ============================================================================
+  if (missing(modelout)) {
+    stop("'modelout' is missing")
+  }
+  if (!is.list(modelout) || !all(c("expvars", "default_event_code") %in% names(modelout))) {
+    stop("'modelout' must be output from CRModel_SurvReg")
+  }
+  if (missing(newdata)) {
+    stop("'newdata' is missing")
+  }
   if (!is.data.frame(newdata)) {
     stop("'newdata' must be a data frame")
   }

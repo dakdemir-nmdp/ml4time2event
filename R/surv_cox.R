@@ -304,6 +304,12 @@ Predict_SurvModel_Cox <- function(modelout, newdata, newtimes = NULL) {
   # ============================================================================
   # Input Validation
   # ============================================================================
+  if (missing(modelout)) {
+    stop("'modelout' is missing")
+  }
+  if (!is.list(modelout) || !all(c("expvars", "time_range") %in% names(modelout))) {
+    stop("must be output from SurvModel_Cox")
+  }
   if (!is.data.frame(newdata)) {
     stop("'newdata' must be a data frame")
   }

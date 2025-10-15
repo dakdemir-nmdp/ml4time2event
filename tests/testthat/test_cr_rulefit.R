@@ -70,15 +70,15 @@ test_that("CRModel_rulefit validates inputs", {
   expect_error(CRModel_rulefit(expvars = expvars, timevar = "time", eventvar = "status"),
                "argument \"data\" is missing")
   expect_error(CRModel_rulefit(data = train_data, expvars = character(0), timevar = "time", eventvar = "status"),
-               "'expvars' must be a non-empty character vector")
+               "`expvars` must be a non-empty character vector")
   expect_error(CRModel_rulefit(data = train_data, expvars = expvars, timevar = "missing", eventvar = "status"),
-               "'timevar' not found in data")
+               "`timevar` not found in data")
   expect_error(CRModel_rulefit(data = train_data, expvars = expvars, timevar = "time", eventvar = "missing"),
-               "'eventvar' not found in data")
+               "`eventvar` not found in data")
   expect_error(CRModel_rulefit(data = train_data, expvars = c(expvars, "missing"), timevar = "time", eventvar = "status"),
                "not found in data")
   expect_error(CRModel_rulefit(data = train_data, expvars = expvars, timevar = "time", eventvar = "status", event_codes = c(1, 2)),
-               "supports exactly one event code")
+               "`event_codes` must be a single value \\(one event code\\)")
   expect_error(CRModel_rulefit(data = train_data, expvars = expvars, timevar = "time", eventvar = "status", event_codes = 5),
                "not present in the training data")
   expect_error(CRModel_rulefit(data = train_data, expvars = expvars, timevar = "time", eventvar = "status", event_codes = "A"),
@@ -166,7 +166,7 @@ test_that("Predict_CRModel_rulefit validates inputs", {
   expect_error(Predict_CRModel_rulefit(modelout = list(), newdata = test_data),
                "'modelout' must be output from CRModel_rulefit")
   expect_error(Predict_CRModel_rulefit(modelout = model_rulefit),
-               "argument \"newdata\" is missing")
+               "'newdata' is missing")
   missing_var_data <- test_data[, setdiff(names(test_data), "x1"), drop = FALSE]
   expect_error(Predict_CRModel_rulefit(modelout = model_rulefit, newdata = missing_var_data),
                "missing in newdata")

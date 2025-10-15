@@ -66,23 +66,23 @@ CRModel_GAM <- function(data, expvars, timevar, eventvar, event_codes = NULL,
   # Input Validation
   # ============================================================================
   if (!is.data.frame(data)) {
-    stop("'data' must be a data frame")
+    stop("`data` must be a data frame")
   }
   if (!is.character(expvars) || length(expvars) == 0) {
-    stop("'expvars' must be a non-empty character vector")
+    stop("`expvars` must be a non-empty character vector")
   }
   if (!timevar %in% colnames(data)) {
-    stop("'timevar' not found in data: ", timevar)
+    stop(paste0("`timevar` not found in data: ", timevar))
   }
   if (!eventvar %in% colnames(data)) {
-    stop("'eventvar' not found in data: ", eventvar)
+    stop(paste0("`eventvar` not found in data: ", eventvar))
   }
   missing_vars <- setdiff(expvars, colnames(data))
   if (length(missing_vars) > 0) {
-    stop("The following expvars not found in data: ", paste(missing_vars, collapse=", "))
+    stop(paste0("The following `expvars` not found in data: ", paste(missing_vars, collapse=", ")))
   }
   if (!is.null(event_codes) && length(event_codes) == 0) {
-    stop("'event_codes' must be NULL or a non-empty vector")
+    stop("`event_codes` must be NULL or a non-empty vector")
   }
 
   # ============================================================================
@@ -116,18 +116,14 @@ CRModel_GAM <- function(data, expvars, timevar, eventvar, event_codes = NULL,
   if (is.null(event_codes)) {
     event_codes <- available_events
   }
-
   event_codes <- as.character(event_codes)
-
   # Validate event_of_interest AFTER event_codes is determined
   if (!is.null(event_of_interest) && !as.character(event_of_interest) %in% event_codes) {
-    stop("'event_of_interest' must be one of the specified event_codes")
+    stop("`event_of_interest` must be one of the specified `event_codes`")
   }
-
   missing_event_codes <- setdiff(event_codes, available_events)
   if (length(missing_event_codes) > 0) {
-    stop("The following event_codes are not present in the data: ",
-         paste(missing_event_codes, collapse = ", "))
+    stop(paste0("The following `event_codes` are not present in the data: ", paste(missing_event_codes, collapse = ", ")))
   }
 
   event_codes_numeric <- suppressWarnings(as.numeric(event_codes))
@@ -346,6 +342,15 @@ Predict_CRModel_GAM <- function(modelout, newdata, newtimes = NULL, event_of_int
   # ============================================================================
   # Input Validation
   # ============================================================================
+  if (missing(modelout)) {
+    stop("'modelout' is missing")
+  }
+  if (!is.list(modelout) || !all(c("expvars") %in% names(modelout))) {
+    stop("'modelout' must be output from CRModel_GAM")
+  }
+  if (missing(newdata)) {
+    stop("'newdata' is missing")
+  }
   if (!is.data.frame(newdata)) {
     stop("'newdata' must be a data frame")
   }

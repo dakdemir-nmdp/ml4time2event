@@ -120,16 +120,16 @@ test_that("CRModel_GAM validates inputs", {
 
   expect_error(CRModel_GAM(data = "not data", expvars = expvars_numeric,
                            timevar = "time", eventvar = "event"),
-               "'data' must be a data frame")
+               "`data` must be a data frame")
   expect_error(CRModel_GAM(data = train_data, expvars = character(0),
                            timevar = "time", eventvar = "event"),
-               "'expvars' must be a non-empty character vector")
+               "`expvars` must be a non-empty character vector")
   expect_error(CRModel_GAM(data = train_data, expvars = expvars_numeric,
                            timevar = "missing", eventvar = "event"),
-               "'timevar' not found in data")
+               "`timevar` not found in data")
   expect_error(CRModel_GAM(data = train_data, expvars = expvars_numeric,
                            timevar = "time", eventvar = "missing"),
-               "'eventvar' not found in data")
+               "`eventvar` not found in data")
   expect_error(CRModel_GAM(data = train_data, expvars = c(expvars_numeric, "missing"),
                            timevar = "time", eventvar = "event"),
                "not found in data")
@@ -251,10 +251,10 @@ test_that("Predict_CRModel_GAM validates inputs", {
     event_codes = c(1, 2)
   )
 
-  expect_error(Predict_CRModel_GAM(newdata = test_data), "argument \"modelout\" is missing")
-  expect_error(Predict_CRModel_GAM(modelout = model), "argument \"newdata\" is missing")
+  expect_error(Predict_CRModel_GAM(newdata = test_data), "'modelout' is missing")
+  expect_error(Predict_CRModel_GAM(modelout = model), "'newdata' is missing")
   expect_error(Predict_CRModel_GAM(modelout = "not a model", newdata = test_data),
-               "'modelout' must be output")
+               "'modelout' must be output from CRModel_GAM")
   expect_error(Predict_CRModel_GAM(modelout = model, newdata = "not data"),
                "'newdata' must be a data frame")
 

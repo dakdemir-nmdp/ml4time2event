@@ -161,31 +161,31 @@ test_that("CRModel_SurvReg validates inputs", {
   # Invalid data type
   expect_error(CRModel_SurvReg(data = "not data", expvars = expvars_numeric,
                               timevar = "time", eventvar = "event"),
-               "'data' must be a data frame")
+               "`data` must be a data frame")
 
   # Empty expvars
   expect_error(CRModel_SurvReg(data = train_data, expvars = character(0),
                               timevar = "time", eventvar = "event"),
-               "'expvars' must be a non-empty character vector")
+               "`expvars` must be a non-empty character vector")
 
   # Invalid event_codes value
   expect_error(CRModel_SurvReg(data = train_data, expvars = expvars_numeric,
                                timevar = "time", eventvar = "event", event_codes = character(0)),
-               "'event_codes' must be NULL or a non-empty vector")
+               "`event_codes` must be NULL or a non-empty vector")
 
   expect_error(CRModel_SurvReg(data = train_data, expvars = expvars_numeric,
                                timevar = "time", eventvar = "event", event_codes = "A"),
-               "event_codes are not present in the data")
+               "The following `event_codes` are not present in the data: A")
 
   # Non-existent timevar
   expect_error(CRModel_SurvReg(data = train_data, expvars = expvars_numeric,
                               timevar = "nonexistent", eventvar = "event"),
-               "'timevar' not found in data")
+               "`timevar` not found in data")
 
   # Non-existent eventvar
   expect_error(CRModel_SurvReg(data = train_data, expvars = expvars_numeric,
                               timevar = "time", eventvar = "nonexistent"),
-               "'eventvar' not found in data")
+               "`eventvar` not found in data")
 
   # Non-existent expvars
   expect_error(CRModel_SurvReg(data = train_data, expvars = c("nonexistent"),
@@ -308,11 +308,11 @@ test_that("Predict_CRModel_SurvReg validates inputs", {
 
   # Missing modelout
   expect_error(Predict_CRModel_SurvReg(newdata = test_data),
-               "argument \"modelout\" is missing")
+               "'modelout' is missing")
 
   # Missing newdata
   expect_error(Predict_CRModel_SurvReg(modelout = model),
-               "argument \"newdata\" is missing")
+               "'newdata' is missing")
 
   # Invalid modelout
   expect_error(Predict_CRModel_SurvReg(modelout = "not model", newdata = test_data),
