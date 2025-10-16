@@ -168,7 +168,7 @@ unpack_weights <- function(w_vec, n_in, n_hidden) {
 #'   \item{time_range}{vector with min and max observed event times}
 #'   \item{model_type}{character string "cr_deepsurv"}
 #'
-#' @importFrom stats model.matrix as.formula
+#' @importFrom stats model.matrix as.formula complete.cases
 #' @export
 CRModel_DeepSurv <- function(data, expvars, timevar, eventvar, event_of_interest = NULL,
                              size = 5, decay = 0.01, maxit = 1000, verbose = FALSE) {

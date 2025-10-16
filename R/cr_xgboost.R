@@ -33,7 +33,7 @@
 #'   \item{feature_names}{character vector of feature names used in XGBoost}
 #'
 #' @importFrom xgboost xgb.DMatrix xgb.train
-#' @importFrom stats model.matrix
+#' @importFrom stats model.matrix complete.cases
 #' @export
 CRModel_xgboost <- function(data, expvars, timevar, eventvar, event_codes = NULL,
                            eta = 0.01, max_depth = 5, nrounds = 100,

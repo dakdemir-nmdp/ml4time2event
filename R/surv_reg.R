@@ -12,7 +12,7 @@
 #'  varprof: profile of explanatory variables.
 #'
 #' @importFrom survival survreg Surv
-#' @importFrom stats AIC as.formula predict quantile
+#' @importFrom stats AIC as.formula predict quantile terms
 #' @export
 SurvModel_SurvReg <- function(data, expvars, timevar, eventvar, dist = "exponential") {
   # Assuming VariableProfile and survivalProbsInterpolator are loaded/available

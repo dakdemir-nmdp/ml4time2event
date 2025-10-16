@@ -57,7 +57,7 @@ score2proba <-
 #'   \item{time_range}{vector with min and max observed event times}
 #'
 #' @importFrom mgcv gam cox.ph s
-#' @importFrom stats as.formula predict
+#' @importFrom stats as.formula predict complete.cases
 #' @export
 CRModel_GAM <- function(data, expvars, timevar, eventvar, event_codes = NULL,
                         shrinkTreshold = 10, ntimes = 50, verbose = FALSE, event_of_interest = NULL) {

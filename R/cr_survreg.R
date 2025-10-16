@@ -29,7 +29,7 @@
 #'   \item{dist}{the distribution used for the parametric model}
 #'
 #' @importFrom survival survreg Surv
-#' @importFrom stats AIC as.formula predict quantile
+#' @importFrom stats AIC as.formula predict quantile complete.cases
 #' @export
 
 #' @param event_of_interest optional character or numeric scalar indicating a specific event code

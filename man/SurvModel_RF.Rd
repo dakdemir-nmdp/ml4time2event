@@ -15,6 +15,7 @@ SurvModel_RF(
   trace = TRUE,
   splitrule = "bs.gradient",
   nodesize_try = c(1, 5, 10, 15),
+  importance = "permute",
   ...
 )
 }

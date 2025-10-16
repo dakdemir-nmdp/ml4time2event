@@ -292,6 +292,7 @@ fitMetaLearner <- function(base_predictions, outcomes, meta_learner = "mse") {
 #' @return Combined ensemble predictions
 #' @details When `ensemble_method = "super_learner"`, the returned matrix includes an
 #'   attribute `sl_weights` containing the optimised weights used for the combination.
+#' @importFrom stats median
 #' @export
 EnsemblePredictions <- function(model_predictions,
                                  ensemble_method = "average",
