@@ -5,3 +5,4 @@
 ^\.lintr$
 ^Rplots\.pdf$
 ^vignettes/Vignette\.Rmd$
+^inst/examples$

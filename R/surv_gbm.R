@@ -19,6 +19,7 @@
 #'
 #' @importFrom gbm gbm gbm.perf basehaz.gbm
 #' @importFrom survival Surv
+#' @importFrom stats complete.cases
 #' @export
 SurvModel_gbm<-function(data,expvars, timevar, eventvar, ntree=200, max.depth=3, bag.fraction=.3, train.fraction=.3, learninrate=.01){
   if (missing(data)) stop("argument \"data\" is missing")

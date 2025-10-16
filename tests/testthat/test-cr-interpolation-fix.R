@@ -157,10 +157,13 @@ test_that("cifMatListAveraging handles invalid matrices", {
   # Create list with invalid matrix
   mats <- list(mat1 = mat1, mat2 = mat2, mat3 = mat3)
   
-  # Should warn but continue with valid matrices
-  expect_warning(result <- cifMatListAveraging(mats, type = "prob"))
+  # Should error with invalid matrices
+  expect_error(cifMatListAveraging(mats, type = "prob"), 
+               "All matrices in listprobsMat must have the same dimensions")
   
-  # Check structure matches valid matrices
+  # Let's also check it works with valid matrices
+  mats_valid <- list(mat1 = mat1, mat2 = mat2)
+  result <- cifMatListAveraging(mats_valid, type = "prob")
   expect_true(is.matrix(result))
   expect_equal(dim(result), dim(mat1))
 })

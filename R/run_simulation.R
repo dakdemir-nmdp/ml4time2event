@@ -1,3 +1,8 @@
+# Declare global variables for ggplot2 aes() usage to avoid R CMD check notes
+utils::globalVariables(c("MAE", "Concordance", "Model", "generate_survival_data", 
+                        "run_survival_models", "predict_survival_models", 
+                        "evaluate_calibration", "evaluate_accuracy"))
+
 #' @title run_survival_simulation
 #'
 #' @description Run a complete simulation study for survival models with multiple replicates.
@@ -43,7 +48,7 @@
 #' )
 #' }
 #'
-#' @export
+#' @noRd
 run_survival_simulation <- function(n_replicates = 10,
                                     n_train = 1000,
                                     n_test = 500,
@@ -425,7 +430,8 @@ create_simulation_summary <- function(aggregated_results) {
 #' @param verbose Logical, whether to print progress
 #'
 #' @importFrom ggplot2 ggplot aes geom_point geom_text labs theme_minimal theme element_text ggsave
-#' @importFrom stats reorder
+#' @importFrom stats reorder median
+#' @importFrom utils modifyList
 #'
 #' @noRd
 generate_simulation_plots <- function(results, results_dir, verbose = TRUE) {

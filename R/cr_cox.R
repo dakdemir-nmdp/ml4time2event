@@ -31,7 +31,7 @@
 #'   \item{time_range}{vector with min and max observed event times}
 #'
 #' @importFrom survival coxph Surv
-#' @importFrom stats as.formula
+#' @importFrom stats as.formula complete.cases terms
 #' @export
 #'
 #' @examples

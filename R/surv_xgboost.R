@@ -18,7 +18,7 @@
 #' @return An xgb.Booster object with an added 'baseline_hazard' component.
 #' @importFrom xgboost xgb.DMatrix xgb.train
 #' @importFrom survival coxph Surv basehaz
-#' @importFrom stats optim
+#' @importFrom stats optim complete.cases
 #' @importFrom pec pec crps
 #' @noRd
 xgb.train.surv <- function(params = list(), data, label, weight = NULL, nrounds,

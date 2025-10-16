@@ -34,6 +34,7 @@
 #'
 #' @importFrom rlang .data
 #' @importFrom grDevices rainbow
+#' @importFrom stats median
 #' @export
 plot_survival_curves <- function(predictions,
                                  model_names = NULL,

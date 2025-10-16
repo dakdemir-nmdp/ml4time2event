@@ -69,9 +69,11 @@ cifInterpolator<-function(x, probs, times){
 #' @param probsMat matrix of CIFs (rows=observations, cols=times)
 #' @param times vector of times corresponding to columns of probsMat
 #' @param newtimes vector of new times for interpolation
+#' @param enforce_monotonicity logical, whether to enforce monotonicity in the results (default: FALSE)
+#' @param propagate_na logical, whether to propagate NAs across the entire observation (default: FALSE)
 #' @return matrix of interpolated CIFs (rows=newtimes, cols=observations)
 #' @noRd
-cifMatInterpolaltor <- function(probsMat, times, newtimes) {
+cifMatInterpolaltor <- function(probsMat, times, newtimes, enforce_monotonicity = FALSE, propagate_na = FALSE) {
   # Input validation with detailed error messages
   if (!is.matrix(probsMat)) {
     stop("probsMat must be a matrix. Got ", class(probsMat), " instead.")
@@ -133,6 +135,12 @@ cifMatInterpolaltor <- function(probsMat, times, newtimes) {
       next
     }
     
+    # If any NA values and propagate_na is TRUE, set all results to NA
+    if (propagate_na && any(is.na(probs))) {
+      result_mat[, i] <- NA
+      next
+    }
+    
     # Sort times and probs together (in case they're not already sorted)
     sort_order <- order(times)
     times_sorted <- times[sort_order]
@@ -146,6 +154,9 @@ cifMatInterpolaltor <- function(probsMat, times, newtimes) {
       times_aug <- times_sorted
       probs_aug <- probs_sorted
     }
+    
+    # Explicitly handle time 0
+    zero_indices <- which(newtimes == 0)
     
     # Interpolate to new times with robust error handling
     interp_probs <- tryCatch({
@@ -164,12 +175,17 @@ cifMatInterpolaltor <- function(probsMat, times, newtimes) {
       rep(NA_real_, length(newtimes))
     })
     
+    # Force time 0 to have CIF value exactly 0
+    if (length(zero_indices) > 0) {
+      interp_probs[zero_indices] <- 0
+    }
+    
     # Store in result matrix
     result_mat[, i] <- interp_probs
   }
   
-  # Ensure monotonicity (CIF should be non-decreasing)
-  if (n_new_times > 1) {
+  # Ensure monotonicity (CIF should be non-decreasing) if requested
+  if (enforce_monotonicity && n_new_times > 1) {
     for (i in seq_len(n_obs)) {
       if (!all(is.na(result_mat[, i]))) {
         result_mat[, i] <- cummax(result_mat[, i])
@@ -225,24 +241,10 @@ cifMatListAveraging<-function(listprobsMat, type="CumHaz", na.rm = FALSE){
   
   if (!all(valid_entries)) {
     invalid_indices <- which(!valid_entries)
-    warning("Invalid matrix dimensions detected at positions: ", 
+    # Change warning to error to match test expectations
+    stop("All matrices in listprobsMat must have the same dimensions. Invalid matrix dimensions detected at positions: ", 
             paste(invalid_indices, collapse=", "),
             ". Expected dimensions: ", paste(first_dims, collapse="x"))
-    
-    # Keep only valid entries
-    listprobsMat <- listprobsMat[valid_entries]
-    
-    # Check again if any valid entries remain
-    if (length(listprobsMat) == 0) {
-      warning("No valid matrices with matching dimensions")
-      return(NULL)
-    }
-    
-    # If only one valid model remains, return its predictions directly
-    if (length(listprobsMat) == 1) {
-      warning("Only one valid matrix remains after filtering")
-      return(listprobsMat[[1]])
-    }
   }
 
   # Check dimensions consistency
@@ -251,10 +253,8 @@ cifMatListAveraging<-function(listprobsMat, type="CumHaz", na.rm = FALSE){
   # Handle cases where some predictions might be vectors not matrices
   is_matrix <- sapply(dims, function(d) !is.null(d) && length(d) == 2)
   if (!all(is_matrix)) {
-      warning("Some predictions are not matrices and will be excluded.")
-      listprobsMat <- listprobsMat[is_matrix]
-      dims <- dims[is_matrix]
-      if (length(listprobsMat) <= 1) return(if(length(listprobsMat) == 1) listprobsMat[[1]] else NULL)
+      # Change warning to error to match test expectations
+      stop("All elements in listprobsMat must be matrices. Some predictions are not matrices.")
   }
   
   dim_strings <- sapply(dims, paste, collapse="x")

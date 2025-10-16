@@ -26,7 +26,7 @@
 #'   \item{loadings}{SVD loadings for dimensionality reduction}
 #'
 #' @importFrom fastcmprsk fastCrrp Crisk
-#' @importFrom stats AIC model.matrix quantile sd
+#' @importFrom stats AIC model.matrix quantile sd complete.cases
 #' @importFrom utils head tail
 #' @export
 CRModel_FineGray <- function(data, expvars, timevar, eventvar, event_codes = NULL,

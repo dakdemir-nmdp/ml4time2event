@@ -67,18 +67,62 @@ RunSurvModels<-function(datatrain, ExpVars, timevar, eventvar, models=c("glmnet"
   )
   model_status["RF_Model"] <- !is.null(RF_Model)
 
-  # Select top variables based on importance from the first RF model
-  if (!is.null(RF_Model) && !is.null(RF_Model$model$importance)) {
-      importance_scores <- RF_Model$model$importance
-      # Handle different importance structures (matrix or vector)
-      if (is.matrix(importance_scores)) {
-          # Use first column if matrix (assuming it's the relevant score)
-          ExpVars2<-names(sort(importance_scores[,1], decreasing=TRUE))[seq_len(min(length(ExpVars), nvars))]
-      } else {
-          ExpVars2<-names(sort(importance_scores, decreasing=TRUE))[seq_len(min(length(ExpVars), nvars))]
+  # Debug information about RF_Model structure
+  if (!is.null(RF_Model)) {
+      # Try multiple paths to get variable importance from the model
+      got_importance <- FALSE
+      
+      # Path 1: Direct importance from model
+      if (!got_importance && !is.null(RF_Model$model) && !is.null(RF_Model$model$importance) && !all(is.na(RF_Model$model$importance))) {
+          importance_scores <- RF_Model$model$importance
+          if (!is.null(importance_scores) && (is.matrix(importance_scores) || is.vector(importance_scores))) {
+              if (is.matrix(importance_scores)) {
+                  # Use first column if matrix
+                  ExpVars2 <- names(sort(importance_scores[,1], decreasing=TRUE))[seq_len(min(length(ExpVars), nvars))]
+              } else {
+                  ExpVars2 <- names(sort(importance_scores, decreasing=TRUE))[seq_len(min(length(ExpVars), nvars))]
+              }
+              got_importance <- TRUE
+          }
+      }
+      
+      # Path 2: Try using vimp function if available
+      if (!got_importance && requireNamespace("randomForestSRC", quietly = TRUE) && !is.null(RF_Model$model)) {
+          tryCatch({
+              # Try to get variable importance via vimp function
+              imp_obj <- randomForestSRC::vimp(RF_Model$model)
+              if (!is.null(imp_obj) && !is.null(imp_obj$importance)) {
+                  importance_scores <- imp_obj$importance
+                  if (is.matrix(importance_scores)) {
+                      ExpVars2 <- names(sort(importance_scores[,1], decreasing=TRUE))[seq_len(min(length(ExpVars), nvars))]
+                  } else {
+                      ExpVars2 <- names(sort(importance_scores, decreasing=TRUE))[seq_len(min(length(ExpVars), nvars))]
+                  }
+                  got_importance <- TRUE
+              }
+          }, error = function(e) {
+              # vimp function failed, continue to next method
+          })
+      }
+      
+      # Path 3: Use var.used if available
+      if (!got_importance && !is.null(RF_Model$model$var.used) && length(RF_Model$model$var.used) > 0) {
+          var_freq <- table(RF_Model$model$var.used)
+          var_names <- names(var_freq)
+          if (length(var_names) > 0) {
+              # Create a pseudo-importance based on frequency of variable usage
+              ExpVars2 <- names(sort(var_freq, decreasing=TRUE))[seq_len(min(length(var_names), nvars))]
+              got_importance <- TRUE
+          }
+      }
+      
+      # Fallback if no importance info could be extracted
+      if (!got_importance) {
+          warning("Could not get importance from RF_Model, using all variables for RF_Model2.")
+          ExpVars2 <- ExpVars # Fallback to all variables
       }
   } else {
-      warning("Could not get importance from RF_Model, using all variables for RF_Model2.")
+      warning("RF_Model is NULL, using all variables for RF_Model2.")
       ExpVars2 <- ExpVars # Fallback to all variables
   }
 
