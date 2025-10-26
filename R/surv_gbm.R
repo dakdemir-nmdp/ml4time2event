@@ -56,8 +56,9 @@ SurvModel_gbm<-function(data,expvars, timevar, eventvar, ntree=200, max.depth=3,
   }
 
   # Fit gbm model with error handling
+  message("Fitting Survival GBM model...")
   gbmmodel <- tryCatch({
-    gbm::gbm(formula = formula_gbm,
+    suppressMessages(gbm::gbm(formula = formula_gbm,
              data = gbm_data,
              distribution = "coxph",
              n.trees = ntree,
@@ -68,10 +69,10 @@ SurvModel_gbm<-function(data,expvars, timevar, eventvar, ntree=200, max.depth=3,
              cv.folds = cv_folds,
              n.minobsinnode = max(2, min(5, floor(n_obs/10))), # Adaptive min obs per node
              keep.data = TRUE,
-             verbose = FALSE)
+             verbose = FALSE))
   }, error = function(e) {
     # If still fails, try with very conservative parameters
-    gbm::gbm(formula = formula_gbm,
+    suppressMessages(gbm::gbm(formula = formula_gbm,
              data = gbm_data,
              distribution = "coxph",
              n.trees = min(50, ntree),
@@ -82,7 +83,7 @@ SurvModel_gbm<-function(data,expvars, timevar, eventvar, ntree=200, max.depth=3,
              cv.folds = 0,
              n.minobsinnode = 1,
              keep.data = TRUE,
-             verbose = FALSE)
+             verbose = FALSE))
   })
 
   # Find best iteration based on OOB performance (since CV is disabled)
@@ -122,7 +123,7 @@ SurvModel_gbm<-function(data,expvars, timevar, eventvar, ntree=200, max.depth=3,
 #' Times: the unique times for which the probabilities are calculated (including 0).
 #'
 #' @export
-Predict_SurvModel_gbm <- function(modelout, newdata, newtimes = NULL) {
+Predict_SurvModel_gbm <- function(modelout, newdata, new_times = NULL) {
   # ============================================================================
   # Input Validation
   # ============================================================================
@@ -202,10 +203,10 @@ Predict_SurvModel_gbm <- function(modelout, newdata, newtimes = NULL) {
   Probs <- t(cbind(time_0_probs, survMat)) # Transpose to rows=times, cols=obs
   Times <- c(0, modelout$model$time.interest)
 
-  # If newtimes specified, interpolate to those times
-  if (!is.null(newtimes)) {
-    Probs <- survprobMatInterpolator(probsMat = Probs, times = Times, newtimes = newtimes)
-    Times <- newtimes
+  # If new_times specified, interpolate to those times
+  if (!is.null(new_times)) {
+    Probs <- survprobMatInterpolator(probsMat = Probs, times = Times, new_times = new_times)
+    Times <- new_times
   }
 
   return(list(Probs = Probs, Times = Times))

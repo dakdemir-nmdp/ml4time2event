@@ -39,7 +39,7 @@ test_that("survprobMatInterpolator handles standard input", {
 
   # Interpolate to different times
   custom_times <- c(5, 10, 15, 20, 25)
-  preds2 <- Predict_SurvModel_Cox(model, test_data, newtimes = custom_times)
+  preds2 <- Predict_SurvModel_Cox(model, test_data, new_times = custom_times)
 
   # Check dimensions
   expect_equal(nrow(preds2$Probs), length(custom_times))
@@ -52,7 +52,7 @@ test_that("survprobMatInterpolator maintains monotonicity", {
 
   # Use many time points including some very close together
   dense_times <- sort(c(seq(0, 50, by = 0.5), seq(10, 15, by = 0.1)))
-  preds <- Predict_SurvModel_Cox(model, test_data, newtimes = dense_times)
+  preds <- Predict_SurvModel_Cox(model, test_data, new_times = dense_times)
 
   # Check each observation's survival curve is non-increasing
   for (i in seq_len(ncol(preds$Probs))) {
@@ -68,7 +68,7 @@ test_that("survprobMatInterpolator handles time 0", {
 
   # Request times starting from 0
   times_with_0 <- c(0, 5, 10, 20)
-  preds <- Predict_SurvModel_Cox(model, test_data, newtimes = times_with_0)
+  preds <- Predict_SurvModel_Cox(model, test_data, new_times = times_with_0)
 
   # Time 0 should be included
   expect_true(0 %in% preds$Times)
@@ -85,7 +85,7 @@ test_that("survprobMatInterpolator handles extrapolation", {
   max_observed <- model$time_range[2]
   extrap_times <- c(0, 5, 10, max_observed * 1.5, max_observed * 2)
 
-  preds <- Predict_SurvModel_Cox(model, test_data, newtimes = extrap_times)
+  preds <- Predict_SurvModel_Cox(model, test_data, new_times = extrap_times)
 
   # Should not produce NAs
   expect_true(all(!is.na(preds$Probs)))
@@ -104,7 +104,7 @@ test_that("survprobMatInterpolator handles single time point", {
   model <- SurvModel_Cox(train_data, c("x1", "x2"), "time", "event")
 
   # Single time point
-  preds <- Predict_SurvModel_Cox(model, test_data, newtimes = 10)
+  preds <- Predict_SurvModel_Cox(model, test_data, new_times = 10)
 
   expect_true(is.matrix(preds$Probs))
   expect_equal(nrow(preds$Probs), 1)
@@ -117,7 +117,7 @@ test_that("survprobMatInterpolator handles many time points", {
 
   # Many time points (stress test)
   many_times <- seq(0, model$time_range[2], length.out = 500)
-  preds <- Predict_SurvModel_Cox(model, test_data, newtimes = many_times)
+  preds <- Predict_SurvModel_Cox(model, test_data, new_times = many_times)
 
   expect_equal(nrow(preds$Probs), 500)
   expect_equal(ncol(preds$Probs), nrow(test_data))
@@ -132,7 +132,7 @@ test_that("survprobMatInterpolator handles irregular time grid", {
 
   # Irregular grid with clusters and gaps
   irregular_times <- c(0, 0.1, 0.2, 0.3, 5, 10, 10.1, 10.2, 20, 30, 40)
-  preds <- Predict_SurvModel_Cox(model, test_data, newtimes = irregular_times)
+  preds <- Predict_SurvModel_Cox(model, test_data, new_times = irregular_times)
 
   expect_equal(nrow(preds$Probs), length(irregular_times))
   expect_equal(preds$Times, irregular_times)
@@ -144,7 +144,7 @@ test_that("survprobMatInterpolator handles irregular time grid", {
   }
 })
 
-test_that("Default time grid is generated when newtimes=NULL", {
+test_that("Default time grid is generated when new_times=NULL", {
   model <- SurvModel_Cox(train_data, c("x1", "x2"), "time", "event")
 
   # Don't specify times
@@ -162,20 +162,28 @@ test_that("Default time grid is generated when newtimes=NULL", {
 
 test_that("Interpolation works across different models", {
   # Fit different types of models
-  model1 <- SurvModel_Cox(train_data, c("x1", "x2"), "time", "event",
-                         varsel = "none")
-  model2 <- SurvModel_Cox(train_data, c("x1", "x2"), "time", "event",
-                         varsel = "backward", penalty = "AIC")
+  # Use strong-signal data for penalized Cox
+  set.seed(42)
+  n_train_strong <- 100
+  x1 <- rnorm(n_train_strong)
+  x2 <- rnorm(n_train_strong)
+  linpred <- 2 * x1 - 1 * x2
+  base_haz <- 0.05
+  time <- rexp(n_train_strong, rate = base_haz * exp(linpred))
+  event <- rbinom(n_train_strong, 1, 0.9)
+  train_data_strong <- data.frame(time = time, event = event, x1 = x1, x2 = x2)
+
+  model1 <- SurvModel_Cox(train_data_strong, c("x1", "x2"), "time", "event", varsel = "none")
+  model2 <- SurvModel_Cox(train_data_strong, c("x1", "x2"), "time", "event", varsel = "backward", penalty = "AIC")
 
   skip_if_not_installed("glmnet")
-  model3 <- SurvModel_Cox(train_data, c("x1", "x2"), "time", "event",
-                         varsel = "penalized", nfolds = 3)
+  model3 <- SurvModel_Cox(train_data_strong, c("x1", "x2"), "time", "event", varsel = "penalized", nfolds = 3)
 
   # Use same time grid for all
   common_times <- c(5, 10, 15, 20)
 
-  preds1 <- Predict_SurvModel_Cox(model1, test_data, newtimes = common_times)
-  preds3 <- Predict_SurvModel_Cox(model3, test_data, newtimes = common_times)
+  preds1 <- Predict_SurvModel_Cox(model1, test_data, new_times = common_times)
+  preds3 <- Predict_SurvModel_Cox(model3, test_data, new_times = common_times)
 
   # Compare models 1 and 3
   expect_equal(dim(preds1$Probs), dim(preds3$Probs))
@@ -184,7 +192,7 @@ test_that("Interpolation works across different models", {
 
   # Model 2 only if it has variables
   if (length(coef(model2$cph_model)) > 0) {
-    preds2 <- Predict_SurvModel_Cox(model2, test_data, newtimes = common_times)
+    preds2 <- Predict_SurvModel_Cox(model2, test_data, new_times = common_times)
     expect_equal(dim(preds1$Probs), dim(preds2$Probs))
     expect_equal(preds2$Times, common_times)
   }
@@ -197,16 +205,24 @@ test_that("Interpolation works across different models", {
 test_that("Interpolation enables ensemble averaging", {
   skip_if_not_installed("glmnet")
 
-  # Fit multiple models (use penalized to ensure both work)
-  model1 <- SurvModel_Cox(train_data, c("x1", "x2"), "time", "event",
-                         varsel = "none")
-  model2 <- SurvModel_Cox(train_data, c("x1", "x2"), "time", "event",
-                         varsel = "penalized", alpha = 1, nfolds = 3)
+  # Fit multiple models (use penalized to ensure both work) on strong-signal data
+  set.seed(43)
+  n_train_strong <- 100
+  x1 <- rnorm(n_train_strong)
+  x2 <- rnorm(n_train_strong)
+  linpred <- 2 * x1 - 1 * x2
+  base_haz <- 0.05
+  time <- rexp(n_train_strong, rate = base_haz * exp(linpred))
+  event <- rbinom(n_train_strong, 1, 0.9)
+  train_data_strong <- data.frame(time = time, event = event, x1 = x1, x2 = x2)
+
+  model1 <- SurvModel_Cox(train_data_strong, c("x1", "x2"), "time", "event", varsel = "none")
+  model2 <- SurvModel_Cox(train_data_strong, c("x1", "x2"), "time", "event", varsel = "penalized", alpha = 1, nfolds = 3)
 
   # Get predictions on common grid
   common_times <- seq(0, 30, by = 5)
-  preds1 <- Predict_SurvModel_Cox(model1, test_data, newtimes = common_times)
-  preds2 <- Predict_SurvModel_Cox(model2, test_data, newtimes = common_times)
+  preds1 <- Predict_SurvModel_Cox(model1, test_data, new_times = common_times)
+  preds2 <- Predict_SurvModel_Cox(model2, test_data, new_times = common_times)
 
   # Average predictions (simple average on probability scale)
   avg_probs <- (preds1$Probs + preds2$Probs) / 2
@@ -225,7 +241,7 @@ test_that("Can extract risk scores from interpolated predictions", {
 
   # Get predictions on fine grid
   times <- seq(0, 30, by = 0.5)
-  preds <- Predict_SurvModel_Cox(model, test_data, newtimes = times)
+  preds <- Predict_SurvModel_Cox(model, test_data, new_times = times)
 
   # Calculate AUC (area under 1-S(t) curve) as risk score
   risk_scores <- numeric(ncol(preds$Probs))
@@ -255,7 +271,7 @@ test_that("Interpolation preserves probability at observed times", {
   # Now request interpolation that includes some of those exact times
   times_subset <- preds_default$Times[c(1, 5, 10, 20, 30)]
   preds_interp <- Predict_SurvModel_Cox(model, test_data[1:3, ],
-                                        newtimes = times_subset)
+                                        new_times = times_subset)
 
   # Extract probabilities at matching times
   for (t in times_subset) {

@@ -361,12 +361,12 @@ test_that("Saved ensemble can be used for prediction", {
 
   # Predict with loaded model
   test_data <- surv_data[1:10, ]
-  newtimes <- c(1, 5, 10)
+  new_times <- c(1, 5, 10)
 
   preds <- PredictSurvModels(
     models = loaded_models,
     newdata = test_data,
-    newtimes = newtimes
+    new_times = new_times
   )
 
   # Should work - predictions should be returned

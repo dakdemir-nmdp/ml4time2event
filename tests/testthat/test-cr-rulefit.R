@@ -143,7 +143,7 @@ test_that("Predict_CRModel_rulefit handles custom time grid", {
     nsample = 50
   )
 
-  preds <- Predict_CRModel_rulefit(model_rulefit, test_data, newtimes = custom_times)
+  preds <- Predict_CRModel_rulefit(model_rulefit, test_data, new_times = custom_times)
   expect_equal(length(preds$Times), length(custom_times))
   expect_equal(nrow(preds$CIFs), length(custom_times))
 })
@@ -170,7 +170,7 @@ test_that("Predict_CRModel_rulefit validates inputs", {
   missing_var_data <- test_data[, setdiff(names(test_data), "x1"), drop = FALSE]
   expect_error(Predict_CRModel_rulefit(modelout = model_rulefit, newdata = missing_var_data),
                "missing in newdata")
-  expect_error(Predict_CRModel_rulefit(modelout = model_rulefit, newdata = test_data, newtimes = c(-1, 1)),
+  expect_error(Predict_CRModel_rulefit(modelout = model_rulefit, newdata = test_data, new_times = c(-1, 1)),
                "numeric vector of non-negative")
 })
 

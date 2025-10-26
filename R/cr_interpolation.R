@@ -63,73 +63,48 @@ cifInterpolator<-function(x, probs, times){
 
 #' @title cifMatInterpolaltor
 #' @description Interpolate a matrix of CIFs for new times.
-#'   This function takes a matrix of probabilities where rows are observations and columns are time points.
+#'   This function takes a matrix of probabilities where rows are time points and columns are observations.
 #'   It interpolates the probabilities to new time points and returns a matrix where rows are new time points
 #'   and columns are observations.
-#' @param probsMat matrix of CIFs (rows=observations, cols=times)
-#' @param times vector of times corresponding to columns of probsMat
-#' @param newtimes vector of new times for interpolation
+#' @param probsMat matrix of CIFs (rows=times, cols=observations)
+#' @param times vector of times corresponding to rows of probsMat
+#' @param new_times vector of new times for interpolation
 #' @param enforce_monotonicity logical, whether to enforce monotonicity in the results (default: FALSE)
 #' @param propagate_na logical, whether to propagate NAs across the entire observation (default: FALSE)
-#' @return matrix of interpolated CIFs (rows=newtimes, cols=observations)
+#' @return matrix of interpolated CIFs (rows=new_times, cols=observations)
 #' @noRd
-cifMatInterpolaltor <- function(probsMat, times, newtimes, enforce_monotonicity = FALSE, propagate_na = FALSE) {
-  # Input validation with detailed error messages
+cifMatInterpolaltor <- function(probsMat, times, new_times, enforce_monotonicity = FALSE, propagate_na = FALSE) {
+  # Input validation with strict orientation enforcement
   if (!is.matrix(probsMat)) {
     stop("probsMat must be a matrix. Got ", class(probsMat), " instead.")
   }
-  
   if (nrow(probsMat) == 0 || ncol(probsMat) == 0) {
-    stop("probsMat must have positive dimensions. Got dimensions: ", 
-         paste(dim(probsMat), collapse="x"))
+    stop("probsMat must have positive dimensions. Got dimensions: ", paste(dim(probsMat), collapse="x"))
   }
-  
   if (!is.numeric(times)) {
     stop("times must be numeric. Got ", class(times), " instead.")
   }
-  
   if (length(times) == 0) {
     stop("times must have positive length. Got length 0.")
   }
-  
-  # Check matrix orientation: if #columns == length(times), use as-is
-  # otherwise if #rows == length(times), transpose the matrix
-  # This is a robustness feature to handle transposed matrices
-  if (ncol(probsMat) != length(times)) {
-    if (nrow(probsMat) == length(times)) {
-      warning("probsMat appears to be transposed (rows=times, cols=observations). ",
-              "Auto-transposing to expected orientation (rows=observations, cols=times).")
-      probsMat <- t(probsMat)
-    } else {
-      stop("Neither dimension of probsMat (", paste(dim(probsMat), collapse="x"), 
-           ") matches the length of times (", length(times), ").")
-    }
+  if (nrow(probsMat) != length(times)) {
+    stop(sprintf(
+      "probsMat must have rows=times and cols=observations. Got %dx%d, but length(times) is %d.",
+      nrow(probsMat), ncol(probsMat), length(times)
+    ))
   }
-  
-  if (!is.numeric(newtimes)) {
-    stop("newtimes must be numeric. Got ", class(newtimes), " instead.")
+  if (!is.numeric(new_times)) {
+    stop("new_times must be numeric. Got ", class(new_times), " instead.")
   }
-  
-  if (length(newtimes) == 0) {
-    stop("newtimes must have positive length. Got length 0.")
+  if (length(new_times) == 0) {
+    stop("new_times must have positive length. Got length 0.")
   }
-  
-  # Ensure newtimes is always a vector
-  newtimes <- as.vector(newtimes)
-  
-  # Number of observations and new time points
-  n_obs <- nrow(probsMat)
-  n_new_times <- length(newtimes)
-  
-  # Prepare result matrix
+  new_times <- as.vector(new_times)
+  n_obs <- ncol(probsMat)
+  n_new_times <- length(new_times)
   result_mat <- matrix(NA_real_, nrow=n_new_times, ncol=n_obs)
-  
-  # Process each observation
   for (i in seq_len(n_obs)) {
-    # Get probabilities for this observation
-    probs <- probsMat[i, ]
-    
-    # Handle NA values in the probability vector
+    probs <- probsMat[, i]
     if (all(is.na(probs))) {
       result_mat[, i] <- NA
       next
@@ -156,14 +131,14 @@ cifMatInterpolaltor <- function(probsMat, times, newtimes, enforce_monotonicity 
     }
     
     # Explicitly handle time 0
-    zero_indices <- which(newtimes == 0)
+    zero_indices <- which(new_times == 0)
     
     # Interpolate to new times with robust error handling
     interp_probs <- tryCatch({
       stats::approx(
         x = times_aug,
         y = probs_aug,
-        xout = newtimes,
+        xout = new_times,
         method = "linear",
         yleft = 0,
         yright = if (all(is.na(probs_aug))) NA else utils::tail(probs_aug[!is.na(probs_aug)], 1),
@@ -172,7 +147,7 @@ cifMatInterpolaltor <- function(probsMat, times, newtimes, enforce_monotonicity 
       )$y
     }, error = function(e) {
       warning("Interpolation failed for observation ", i, ": ", e$message)
-      rep(NA_real_, length(newtimes))
+      rep(NA_real_, length(new_times))
     })
     
     # Force time 0 to have CIF value exactly 0
@@ -201,10 +176,10 @@ cifMatInterpolaltor <- function(probsMat, times, newtimes, enforce_monotonicity 
 
 #' @title cifMatListAveraging
 #' @description Average a list of CIF matrices, either on probability or cumulative hazard scale.
-#' @param listprobsMat list of CIF matrices (each matrix: rows=newtimes, cols=observations)
+#' @param listprobsMat list of CIF matrices (each matrix: rows=new_times, cols=observations)
 #' @param type character, either "CumHaz" (average on cumulative hazard scale) or "prob" (average on probability scale)
 #' @param na.rm logical, whether to remove NAs when averaging.
-#' @return averaged CIF matrix (rows=newtimes, cols=observations)
+#' @return averaged CIF matrix (rows=new_times, cols=observations)
 #' @noRd
 cifMatListAveraging<-function(listprobsMat, type="CumHaz", na.rm = FALSE){
   # Validate type parameter first, regardless of list length

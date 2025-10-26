@@ -12,6 +12,8 @@ SurvModel_xgboost(
   eta = 0.01,
   max_depth = 5,
   nrounds = 100,
+  ntimes = 50,
+  verbose = FALSE,
   ...
 )
 }
@@ -30,12 +32,20 @@ SurvModel_xgboost(
 
 \item{nrounds}{number of boosting rounds (default: 100)}
 
+\item{ntimes}{integer, number of time points to use for prediction grid (default: 50)}
+
+\item{verbose}{logical, print progress messages (default: FALSE)}
+
 \item{...}{additional parameters passed to xgboost}
 }
 \value{
-a list of three items: model: fitted xgboost model object (class xgb.Booster.surv),
- times: unique event times from the training data,
- varprof: profile of explanatory variables.
+a list of components:
+  \item{model}{fitted xgboost model object (class xgb.Booster.surv)}
+  \item{times}{vector of time points for prediction grid}
+  \item{varprof}{profile of explanatory variables}
+  \item{expvars}{character vector of explanatory variables used}
+  \item{timevar}{character name of time variable}
+  \item{eventvar}{character name of event variable}
 }
 \description{
 Fit an xgboost model for survival outcomes.

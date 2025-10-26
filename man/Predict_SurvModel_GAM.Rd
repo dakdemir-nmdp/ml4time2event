@@ -4,7 +4,7 @@
 \alias{Predict_SurvModel_GAM}
 \title{Predict_SurvModel_GAM}
 \usage{
-Predict_SurvModel_GAM(modelout, newdata, newtimes = NULL)
+Predict_SurvModel_GAM(modelout, newdata, new_times = NULL)
 }
 \arguments{
 \item{modelout}{the output from 'SurvModel_GAM' (a list containing 'model', 'times', 'varprof', 'expvars')}

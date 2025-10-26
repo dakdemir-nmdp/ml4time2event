@@ -1,0 +1,415 @@
+---
+title: "Comprehensive Survival Analysis with ml4time2event"
+author: "ml4time2event Team"
+date: "`r Sys.Date()`"
+output: 
+  rmarkdown::html_vignette:
+    toc: true
+    toc_depth: 2
+vignette: >
+  %\VignetteIndexEntry{Comprehensive Survival Analysis}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+# Comprehensive Survival Analysis Pipeline with ml4time2event
+
+This vignette demonstrates an end-to-end survival analysis workflow using the
+**ml4time2event** package. We rely on the prepared NCCTG lung cancer dataset
+distributed with the package, build an ensemble of survival models, evaluate
+performance, and visualise predictions.
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+```
+
+# 1. Setup and Load Libraries
+
+```{r load-libraries}
+#library(ml4time2event)
+library(survival)
+library(dplyr)
+library(ggplot2)
+library(gridExtra)
+
+devtools::load_all()
+```
+
+# 2. Load Prepared Dataset
+
+The dataset `lung_survival_prepared` ships with the package and contains the
+imputed and feature-engineered variables used throughout this vignette.
+
+```{r load-data}
+lung_data <- ml4time2event::get_lung_survival_data()
+
+glimpse(lung_data)
+
+summary(lung_data[c("time", "status", "age", "ph.karno", "wt.loss")])
+```
+
+# 3. Explore Baseline Characteristics
+
+We review the event distribution and follow-up horizon to understand the sample.
+
+```{r explore-data}
+status_counts <- dplyr::count(lung_data, status)
+status_counts
+
+event_rate <- mean(lung_data$status == 1)
+time_range <- range(lung_data$time)
+
+data.frame(
+  metric = c("Event rate", "Minimum follow-up (days)", "Maximum follow-up (days)"),
+  value = c(round(event_rate, 3), round(time_range[1], 1), round(time_range[2], 1))
+)
+```
+
+# 4. Variable Profiling with Package Tools
+
+`VariableProfile()` provides quick summaries for candidate predictors.
+
+```{r variable-profile}
+candidate_expvars <- c(
+  "age", "sex", "ph.ecog", "ph.karno", "pat.karno",
+  "meal.cal", "wt.loss", "age_group", "performance_good"
+)
+var_profile <- VariableProfile(lung_data, candidate_expvars)
+var_profile$Summary
+```
+
+# 5. Data Splitting
+
+We create a reproducible 70/30 train-test split using `t2edata_split()`.
+
+```{r split-data}
+#set.seed(123)
+split_data <- t2edata_split(lung_data, prop = 0.7)
+train_data <- split_data[["Train"]]
+test_data <- split_data[["Test"]]
+
+data.frame(
+  dataset = c("Training", "Test"),
+  observations = c(nrow(train_data), nrow(test_data))
+)
+```
+
+# 6. Survival Model Training
+
+`RunSurvModels()` trains multiple survival learners and prepares the ensemble
+object used for downstream prediction.
+
+```{r train-models}
+timevar <- "time"
+eventvar <- "status"
+expvars <- c("age", "sex", "ph.ecog", "ph.karno", "meal.cal", "wt.loss")
+
+data.frame(
+  setting = c("Time variable", "Event variable", "Predictors"),
+  value = c(timevar, eventvar, paste(expvars, collapse = ", "))
+)
+
+models <- RunSurvModels(
+  datatrain = train_data,
+  ExpVars = expvars,
+  timevar = timevar,
+  eventvar = eventvar,
+  models = c("glmnet", "coxph", "rulefit", "xgboost", "gam", "gbm", "ExpSurvReg", "bart", "deepsurv"),
+  ntreeRF = 300,
+  nvars = 20,
+  ntimes = 50  # New parameter: number of time points for prediction grid
+)
+
+# Individual model components now include:
+# - For Cox model: ntimes, alpha (elastic net), nfolds (cross-validation)
+# - For XGBoost: ntimes (prediction grid), verbose (progress reporting)
+# - Consistent time grid specification across all models
+
+models
+```
+
+# 7. Ensemble Predictions
+
+We generate survival probability curves for the held-out test set and compute an
+average ensemble across models. All individual models now use a consistent time
+grid from their training phase, which is automatically propagated to predictions.
+
+```{r generate-predictions}
+complete_test_data <- test_data[complete.cases(test_data[, expvars]), ]
+
+# Set prediction time grid to match observed event times for correct concordance calculation
+
+# Define actual_times and actual_events for prediction grid
+actual_times <- complete_test_data[[timevar]]
+actual_events <- complete_test_data[[eventvar]]
+
+# Use sorted unique observed event times for prediction grid
+prediction_times <- sort(unique(actual_times))
+
+ensemble_predictions <- PredictSurvModels(
+  models = models,
+  newdata = complete_test_data,
+  new_times = prediction_times,
+  ensemble_method = "average"
+)
+
+individual_predictions <- ensemble_predictions$ModelPredictions
+ensemble_probs <- ensemble_predictions$NewProbs
+common_times <- ensemble_predictions$NewTimes
+models_used <- ensemble_predictions$models_used
+
+data.frame(
+  metric = c(
+    "Test subjects (complete cases)",
+    "Prediction time points",
+    "Models in ensemble"
+  ),
+  value = c(
+    nrow(complete_test_data),
+    length(common_times),
+    paste(models_used, collapse = ", ")
+  )
+)
+```
+
+# 7. Organise Model Predictions
+
+```{r prepare-predictions}
+pretty_model_name <- function(x) {
+  mapping <- c(
+    RF_Model = "Random Forest",
+    RF_Model2 = "Random Forest (Top Vars)",
+    glmnet_Model = "GLMNet",
+    CPH_Model = "Cox PH",
+    bart_Model = "BART",
+    deepsurv_Model = "DeepSurv",
+    gam_Model = "GAM",
+    gbm_Model = "GBM",
+    survregexp_Model = "ExpSurvReg",
+    survregweib_Model = "WeibSurvReg",
+    xgboost_Model = "XGBoost",
+    RuleFit_Model = "RuleFit"
+  )
+  if (x %in% names(mapping)) mapping[[x]] else tools::toTitleCase(gsub("_", " ", gsub("_Model$", "", x)))
+}
+
+model_prediction_objects <- lapply(individual_predictions, function(mat) {
+  list(Times = common_times, Probs = mat)
+})
+names(model_prediction_objects) <- vapply(names(individual_predictions), pretty_model_name, character(1))
+all_predictions <- c(
+  model_prediction_objects,
+  list(Ensemble = list(Times = common_times, Probs = ensemble_probs))
+)
+names(all_predictions)
+```
+
+# 8. Model Evaluation
+
+We evaluate every model (including the ensemble) using time-dependent concordance,
+Brier score, and mean expected time lost. The updated API provides consistent 
+metric calculation across survival and competing risks models.
+
+```{r evaluate-models}
+actual_times <- complete_test_data[[timevar]]
+actual_events <- complete_test_data[[eventvar]]
+actual_events_binary <- as.integer(actual_events == 1)
+
+median_time <- median(actual_times[actual_events_binary == 1], na.rm = TRUE)
+max_time <- as.numeric(quantile(actual_times, 0.9, na.rm = TRUE))
+
+etl_results <- list()
+
+performance_summary <- do.call(rbind, lapply(names(all_predictions), function(model_name) {
+  pred_obj <- all_predictions[[model_name]]
+
+ 
+  # Calculate ETL values ONCE and reuse
+  etl_values <- tryCatch({
+    etl_list <- CalculateExpectedTimeLost(
+      PredictedCurves = list(list(NewProbs = pred_obj$Probs)),
+      modeltypes = c("SURV"),
+      times = pred_obj$Times,
+      UL = max_time,
+      quiet = TRUE  # Suppress verbose output
+    )
+    etl_list[[1]]
+  }, error = function(e) {
+    warning("Error calculating ETL for model ", model_name, ": ", e$message)
+    rep(NA_real_, ncol(pred_obj$Probs))
+  })
+
+  # Store for later use
+  etl_results[[model_name]] <<- etl_values
+
+  # Concordance using package function
+  concordance <- tryCatch({
+    # Use integratedC for survival models, integratedConcordanceCR for CR models
+    if (model_name %in% c("RuleFit", "Random Forest", "Random Forest (Top Vars)", "GLMNet", "Cox PH", "BART", "DeepSurv", "GAM", "GBM", "ExpSurvReg", "XGBoost", "Ensemble")) {
+        integratedC(
+          predsurv = pred_obj$Probs,
+          pred_times = pred_obj$Times,
+          obstimes = actual_times,
+          obsevents = actual_events_binary
+        )
+    } else {
+        integratedConcordanceCR(
+          SurvObj = survival::Surv(actual_times, actual_events),
+          Predictions = pred_obj$Probs,
+          eval_times = pred_obj$Times,
+          cause = 1
+        )
+    }
+  }, error = function(e) NA_real_)
+
+  # BrierScore
+  brier <- tryCatch({
+    brier_obj <- BrierScore(
+      predsurv = pred_obj$Probs,
+      pred_times = pred_obj$Times,
+      obstimes = actual_times,
+      obsevents = actual_events_binary,
+      eval_times = median_time
+    )
+    if (!is.null(brier_obj$AppErr)) brier_obj$AppErr$model[1] else NA_real_
+  }, error = function(e) NA_real_)
+
+  data.frame(
+    Model = model_name,
+    Concordance = concordance,
+    Brier_Score = brier,
+    Mean_ETL = mean(etl_values, na.rm = TRUE),
+    stringsAsFactors = FALSE
+  )
+}))
+
+performance_summary
+
+```
+
+# 9. Expected Time Lost Analysis
+
+Expected time lost (ETL) summarises the area between the survival curve and full
+follow-up horizon. The table below highlights the 90th percentile follow-up time
+and the ensemble ETL distribution.
+
+```{r expected-time-lost}
+ensemble_etl <- etl_results[["Ensemble"]]
+
+data.frame(
+  statistic = c(
+    "90th percentile follow-up (days)",
+    "Mean ensemble ETL (days)",
+    "Ensemble ETL range (days)"
+  ),
+  value = c(
+    round(max_time, 1),
+    round(mean(ensemble_etl, na.rm = TRUE), 2),
+    paste(
+      round(range(ensemble_etl, na.rm = TRUE), 2),
+      collapse = " – "
+    )
+  )
+)
+```
+
+# 10. Visualisation
+
+We visualise the ensemble survival curves for a few patients and inspect the ETL
+distribution.
+
+```{r visualization, fig.width=10, fig.height=8}
+
+ordered_models <- performance_summary[order(-performance_summary$Concordance), ]
+ordered_models <- ordered_models[!is.na(ordered_models$Concordance), ]
+
+# Plot all models with ensemble highlighted in black
+plot_predictions <- all_predictions
+
+p_surv <- plot_survival_curves(
+  predictions = plot_predictions,
+  patients_to_plot = seq_len(min(3, ncol(ensemble_probs))),
+  highlight_ensemble = TRUE,
+  title = "Predicted Survival Curves - All Models (Ensemble in Black)"
+)
+print(p_surv)
+
+ensemble_etl_clean <- ensemble_etl[!is.na(ensemble_etl)]
+if (length(ensemble_etl_clean) > 0) {
+  etl_df <- data.frame(
+    Subject = seq_along(ensemble_etl_clean),
+    ETL = ensemble_etl_clean
+  )
+
+  p_etl <- ggplot(etl_df, aes(x = ETL)) +
+    geom_histogram(bins = 20, fill = "steelblue", color = "black") +
+    labs(
+      title = "Ensemble Expected Time Lost Distribution",
+      x = "Expected Time Lost (days)",
+      y = "Frequency"
+    ) +
+    theme_minimal() +
+    theme(plot.title = element_text(face = "bold"))
+
+  print(p_etl)
+}
+```
+
+# 11. Model Persistence
+
+`SaveEnsemble()` and `LoadEnsemble()` make it easy to persist fitted ensembles.
+We store objects in temporary files for illustration.
+
+```{r save-models}
+ensemble_file <- tempfile("lung_cancer_ensemble_", fileext = ".rds")
+results_file <- tempfile("lung_cancer_ensemble_results_", fileext = ".rds")
+
+SaveEnsemble(models, file = ensemble_file)
+
+ensemble_results <- list(
+  predictions = ensemble_predictions,
+  individual_predictions = individual_predictions,
+  ensemble_probs = ensemble_probs,
+  times = common_times,
+  evaluation = performance_summary,
+  etl_results = etl_results
+)
+saveRDS(ensemble_results, results_file)
+
+loaded_ensemble <- LoadEnsemble(file = ensemble_file)
+loaded_results <- readRDS(results_file)
+
+data.frame(
+  object = c("Loaded ensemble class", "Stored individual model predictions"),
+  value = c(
+    paste(class(loaded_ensemble), collapse = ", "),
+    length(loaded_results$individual_predictions)
+  )
+)
+```
+
+# 12. Key Takeaways
+
+## Updated API Features
+
+- **Standardized time grid management**: The `ntimes` parameter controls prediction grid resolution across all models (default: 50 time points). Individual models (Cox, XGBoost) now manage time grids consistently.
+
+- **Enhanced Cox model**: `SurvModel_Cox()` now supports `ntimes`, `alpha` (elastic net regularization), and `nfolds` (cross-validation folds) for more flexible regularization.
+
+- **XGBoost improvements**: `SurvModel_xgboost()` now includes `ntimes` (prediction grid) and `verbose` (progress reporting) parameters for better control and monitoring.
+
+- **Unified metric API**: `BrierScore()` and `BrierScoreCR()` now use the consistent `eval_times` parameter (instead of `time` for scalar, `eval_times` for vector support) for seamless survival and competing risks model evaluation.
+
+- **Automatic time attribute propagation**: Predictions now include a `Times` attribute for automatic time grid tracking through the analysis pipeline.
+
+## Workflow Summary
+
+- Prepared dataset `lung_survival_prepared` (available through `get_lung_survival_data()`) streamlines preprocessing for the vignette.
+- `RunSurvModels()` and `PredictSurvModels()` coordinate multiple survival learners and ensemble predictions with consistent time grid management.
+- Evaluation utilities cover concordance, Brier score, and expected time lost across individual models and the ensemble with unified API.
+- Visualisation and persistence helpers make it straightforward to operationalise survival models.
+
+## Migration Notes
+
+- If you have existing code using `time` parameter in metrics, the package maintains backward compatibility by accepting both `time` (scalar) and `eval_times` (vector).
+- Individual model predictions are now consistently structured with `Times` attribute for easy access to prediction time points.

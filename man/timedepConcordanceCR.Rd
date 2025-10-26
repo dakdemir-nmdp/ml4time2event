@@ -16,7 +16,7 @@ timedepConcordanceCR(
 \arguments{
 \item{SurvObj}{survival object (Surv(time, status))}
 
-\item{Predictions}{matrix of predicted CIFs (rows=observations, cols=times) for the cause of interest}
+\item{Predictions}{matrix of predicted CIFs (rows=times, cols=observations) for the cause of interest}
 
 \item{time}{evaluation time point}
 

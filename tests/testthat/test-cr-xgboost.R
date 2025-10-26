@@ -268,7 +268,7 @@ test_that("Predict_CRModel_xgboost honours custom time grid", {
   )
 
   custom_times <- c(1, 5, 10, 15)
-  preds <- Predict_CRModel_xgboost(model, test_data, newtimes = custom_times)
+  preds <- Predict_CRModel_xgboost(model, test_data, new_times = custom_times)
 
   expect_equal(preds$Times, custom_times)
   expect_equal(nrow(preds$CIFs), length(custom_times))
@@ -294,11 +294,11 @@ test_that("Predict_CRModel_xgboost validates inputs", {
   test_data_missing <- test_data[, !(names(test_data) %in% c("x1"))]
   expect_error(Predict_CRModel_xgboost(modelout = model, newdata = test_data_missing), "The following 'expvars' are missing in 'newdata': x1")
 
-  expect_error(Predict_CRModel_xgboost(modelout = model, newdata = test_data, newtimes = "not numeric"),
-               "'newtimes' must be a numeric vector of non-negative values")
+  expect_error(Predict_CRModel_xgboost(modelout = model, newdata = test_data, new_times = "not numeric"),
+               "'new_times' must be a numeric vector of non-negative values")
 
-  expect_error(Predict_CRModel_xgboost(modelout = model, newdata = test_data, newtimes = c(-1, 1)),
-               "'newtimes' must be a numeric vector of non-negative values")
+  expect_error(Predict_CRModel_xgboost(modelout = model, newdata = test_data, new_times = c(-1, 1)),
+               "'new_times' must be a numeric vector of non-negative values")
 
   expect_error(Predict_CRModel_xgboost(modelout = model, newdata = test_data, event_of_interest = "99"),
                "Input 'event_of_interest' was not present in training data. Available event codes: 1, 2")

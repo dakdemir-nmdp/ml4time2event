@@ -46,25 +46,45 @@ SurvModel_BART <- function(data,
   # Create model matrix
   x.train <- as.matrix(stats::model.matrix(~ -1 + ., data = data[, expvars, drop = FALSE]))
 
-  # Fit BART model
-  post <- surv.bart(
-    x.train = x.train,
-    times = timevarvec,
-    delta = eventvarvec,
-    x.test = x.train,
-    K = K,
-    ntree = ntree,
-    ndpost = 200,
-    nskip = 50,
-    keepevery = 2L
-  )
+  # Fit BART model, suppressing output unless verbose
+  if (!exists("verbose")) verbose <- FALSE
+  bart_model <- NULL
+  if (isTRUE(verbose)) {
+    bart_model <- suppressMessages(BART::surv.bart(
+      x.train = x.train,
+      times = timevarvec,
+      delta = eventvarvec,
+      x.test = x.train,
+      K = K,
+      ntree = ntree,
+      ndpost = 200,
+      nskip = 50,
+      keepevery = 2L
+    ))
+  } else {
+    bart_fit <- NULL
+    invisible(capture.output({
+      bart_fit <- suppressMessages(BART::surv.bart(
+        x.train = x.train,
+        times = timevarvec,
+        delta = eventvarvec,
+        x.test = x.train,
+        K = K,
+        ntree = ntree,
+        ndpost = 200,
+        nskip = 50,
+        keepevery = 2L
+      ))
+    }))
+    bart_model <- bart_fit
+  }
 
   # Get times from the fitted model
-  times <- post$times
+  times <- bart_model$times
 
   # Return standardized output
   result <- list(
-    model = post,
+    model = bart_model,
     times = times,
     varprof = varprof,
     expvars = expvars,
@@ -84,7 +104,7 @@ SurvModel_BART <- function(data,
 #'
 #' @param modelout the output from 'SurvModel_BART'
 #' @param newdata the data for which the predictions are to be calculated
-#' @param newtimes optional vector of new time points for interpolation. If NULL, uses model's native time points.
+#' @param new_times optional vector of new time points for interpolation. If NULL, uses model's native time points.
 #'
 #' @return a list containing the following items:
 #' Probs: predicted survival probability matrix (rows=times, cols=observations),
@@ -93,7 +113,7 @@ SurvModel_BART <- function(data,
 #' @importFrom BART surv.pre.bart bartModelMatrix
 #' @importFrom stats model.matrix
 #' @export
-Predict_SurvModel_BART <- function(modelout, newdata, newtimes = NULL) {
+Predict_SurvModel_BART <- function(modelout, newdata, new_times = NULL) {
 
   if (missing(modelout)) stop("argument \"modelout\" is missing")
   if (missing(newdata)) stop("argument \"newdata\" is missing")
@@ -142,10 +162,10 @@ Predict_SurvModel_BART <- function(modelout, newdata, newtimes = NULL) {
   Probs <- t(cbind(1, sorted_PredMat))
   Times <- c(0, sorted_times)
 
-  # If newtimes specified, interpolate to those times
-  if (!is.null(newtimes)) {
-    Probs <- survprobMatInterpolator(probsMat = Probs, times = Times, newtimes = newtimes)
-    Times <- newtimes
+  # If new_times specified, interpolate to those times
+  if (!is.null(new_times)) {
+    Probs <- survprobMatInterpolator(probsMat = Probs, times = Times, new_times = new_times)
+    Times <- new_times
   }
 
   return(list(Probs = Probs, Times = Times))

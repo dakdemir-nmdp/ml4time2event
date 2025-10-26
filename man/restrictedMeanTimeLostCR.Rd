@@ -7,9 +7,9 @@
 restrictedMeanTimeLostCR(Predictions, times, UL, LL = 0)
 }
 \arguments{
-\item{Predictions}{matrix of predicted CIFs (rows=observations, cols=times) for the cause of interest}
+\item{Predictions}{matrix of predicted CIFs (rows=times, cols=observations) for the cause of interest}
 
-\item{times}{vector of time points corresponding to columns of Predictions}
+\item{times}{vector of time points corresponding to rows of Predictions}
 
 \item{UL}{upper limit of integration}
 

@@ -48,7 +48,7 @@ print(args(Predict_SurvModel_Cox))
 cox_pred <- Predict_SurvModel_Cox(
   modelout = cox_model,
   newdata = test_data,
-  newtimes = times
+  new_times = times
 )
 print(str(cox_pred))
 
@@ -57,7 +57,7 @@ print(args(Predict_SurvModel_SurvReg))
 survreg_pred <- Predict_SurvModel_SurvReg(
   modelout = survreg_model,
   newdata = test_data,
-  newtimes = times
+  new_times = times
 )
 print(str(survreg_pred))
 

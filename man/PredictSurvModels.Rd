@@ -7,7 +7,7 @@
 PredictSurvModels(
   models,
   newdata,
-  newtimes,
+  new_times,
   models_to_use = NULL,
   ensemble_method = "average",
   model_weights = NULL,
@@ -21,7 +21,7 @@ PredictSurvModels(
 
 \item{newdata}{Data frame with new data for prediction.}
 
-\item{newtimes}{Numeric vector of times for which predictions are required.}
+\item{new_times}{Numeric vector of times for which predictions are required.}
 
 \item{models_to_use}{Character vector of model names to use for ensemble prediction.
 If NULL (default), uses all successfully fitted models. Model names should match

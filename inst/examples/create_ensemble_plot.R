@@ -44,7 +44,7 @@ cat("\nMaking predictions with Cox model...\n")
 cox_pred <- Predict_SurvModel_Cox(
   modelout = cox_model,
   newdata = test_data,
-  newtimes = times
+  new_times = times
 )
 cat("Prediction successful for cox\n")
 
@@ -52,7 +52,7 @@ cat("\nMaking predictions with SurvReg model...\n")
 survreg_pred <- Predict_SurvModel_SurvReg(
   modelout = survreg_model,
   newdata = test_data,
-  newtimes = times
+  new_times = times
 )
 cat("Prediction successful for survreg\n")
 

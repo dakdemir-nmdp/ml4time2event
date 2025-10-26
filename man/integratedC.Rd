@@ -4,12 +4,12 @@
 \alias{integratedC}
 \title{integratedC}
 \usage{
-integratedC(predsurv, predsurvtimes, obstimes, obsevents, TestMat = NULL)
+integratedC(predsurv, pred_times, obstimes, obsevents, TestMat = NULL)
 }
 \arguments{
 \item{predsurv}{Predicted survival probability matrix (rows=times, cols=observations)}
 
-\item{predsurvtimes}{The times for which the survival probabilities are predicted}
+\item{pred_times}{The times for which the survival probabilities are predicted}
 
 \item{obstimes}{Observed times vector}
 

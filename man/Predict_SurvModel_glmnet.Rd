@@ -4,7 +4,7 @@
 \alias{Predict_SurvModel_glmnet}
 \title{Predict_SurvModel_glmnet}
 \usage{
-Predict_SurvModel_glmnet(modelout, newdata, newtimes = NULL)
+Predict_SurvModel_glmnet(modelout, newdata, new_times = NULL)
 }
 \arguments{
 \item{modelout}{the output from 'SurvModel_glmnet'}

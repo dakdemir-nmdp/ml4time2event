@@ -45,7 +45,7 @@ test_that("SurvModel_xgboost runs and returns expected structure", {
 
   # Check output structure
   expect_type(model_xgb, "list")
-  expect_named(model_xgb, c("model", "times", "varprof", "expvars"))
+  expect_named(model_xgb, c("model", "times", "varprof", "expvars", "timevar", "eventvar"))
   expect_s3_class(model_xgb$model, "xgb.Booster")
   expect_type(model_xgb$times, "double")
   expect_type(model_xgb$varprof, "list")

@@ -7,7 +7,7 @@
 Predict_CRModel_RF(
   modelout,
   newdata,
-  newtimes = NULL,
+  new_times = NULL,
   event_of_interest = NULL
 )
 }
@@ -16,7 +16,7 @@ Predict_CRModel_RF(
 
 \item{newdata}{data frame with new observations for prediction}
 
-\item{newtimes}{optional numeric vector of time points for prediction.
+\item{new_times}{optional numeric vector of time points for prediction.
 If NULL (default), uses the model's native time points.
 Can be any positive values - interpolation handles all time points.}
 
@@ -27,7 +27,7 @@ stored in the fitted model.}
 \value{
 a list containing:
   \item{CIFs}{predicted cumulative incidence function matrix
-    (rows=observations, cols=times)}
+    (rows=times, cols=observations)}
   \item{Times}{the times at which CIFs are calculated
     (always includes time 0)}
 }

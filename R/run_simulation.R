@@ -132,7 +132,7 @@ run_survival_simulation <- function(n_replicates = 10,
       predictions <- predict_survival_models(
         model_results = model_results,
         newdata = test_data$data,
-        newtimes = eval_times
+        new_times = eval_times
       )
 
       # Evaluate calibration

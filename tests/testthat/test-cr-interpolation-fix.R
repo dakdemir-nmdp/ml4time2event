@@ -12,22 +12,22 @@ test_that("interpolation works with well-formed synthetic data", {
   n_times <- 5
   n_subj <- 10
   
-  # Create matrix with rows=observations, cols=times
-  probsMat <- matrix(runif(n_subj * n_times), nrow = n_subj, ncol = n_times)
+  # Create matrix with rows=times, cols=observations
+  probsMat <- matrix(runif(n_subj * n_times), nrow = n_times, ncol = n_subj)
   times <- seq(1, 10, length.out = n_times)
   
   # Test vector of new times
-  newtimes_vec <- c(2, 4, 6, 8)
-  result_vec <- cifMatInterpolaltor(probsMat, times, newtimes_vec)
+  new_times_vec <- c(2, 4, 6, 8)
+  result_vec <- cifMatInterpolaltor(probsMat, times, new_times_vec)
   
   # Test structure of result
   expect_true(is.matrix(result_vec))
-  expect_equal(nrow(result_vec), length(newtimes_vec))
+  expect_equal(nrow(result_vec), length(new_times_vec))
   expect_equal(ncol(result_vec), n_subj)
   
   # Test scalar new time
-  newtimes_scalar <- 5
-  result_scalar <- cifMatInterpolaltor(probsMat, times, newtimes_scalar)
+  new_times_scalar <- 5
+  result_scalar <- cifMatInterpolaltor(probsMat, times, new_times_scalar)
   
   # Test structure of scalar result
   expect_true(is.matrix(result_scalar))
@@ -40,28 +40,22 @@ test_that("interpolation handles transposed matrices correctly", {
   n_times <- 5
   n_subj <- 10
   
-  # Create matrix with rows=times, cols=observations (transposed)
-  probsMat <- matrix(runif(n_subj * n_times), nrow = n_times, ncol = n_subj)
+  # Create matrix with rows=observations, cols=times (transposed relative to expectation)
+  probsMat <- matrix(runif(n_subj * n_times), nrow = n_subj, ncol = n_times)
   times <- seq(1, 10, length.out = n_times)
-  
-  # Test with transposed matrix - should produce warning but work
-  expect_warning(
-    result <- cifMatInterpolaltor(probsMat, times, c(2, 4, 6, 8)),
-    "transposed"
+  # Test with transposed matrix - should now error
+  expect_error(
+    cifMatInterpolaltor(probsMat, times, c(2, 4, 6, 8)),
+    regexp = "rows=times and cols=observations"
   )
-  
-  # Test structure of result
-  expect_true(is.matrix(result))
-  expect_equal(nrow(result), 4)  # 4 new time points
-  expect_equal(ncol(result), n_subj)
 })
 
 test_that("interpolation handles edge cases with time=0", {
   n_times <- 5
   n_subj <- 10
   
-  # Create matrix with rows=observations, cols=times
-  probsMat <- matrix(runif(n_subj * n_times), nrow = n_subj, ncol = n_times)
+  # Create matrix with rows=times, cols=observations
+  probsMat <- matrix(runif(n_subj * n_times), nrow = n_times, ncol = n_subj)
   
   # Test with times including 0
   times_with_zero <- c(0, seq(1, 10, length.out = (n_times - 1)))
@@ -83,12 +77,12 @@ test_that("interpolation handles NA values correctly", {
   n_times <- 5
   n_subj <- 10
   
-  # Create matrix with rows=observations, cols=times
-  probsMat <- matrix(runif(n_subj * n_times), nrow = n_subj, ncol = n_times)
+  # Create matrix with rows=times, cols=observations
+  probsMat <- matrix(runif(n_subj * n_times), nrow = n_times, ncol = n_subj)
   
   # Insert some NA values
-  probsMat[2, 3] <- NA
-  probsMat[5, 1:5] <- NA  # Entire row NA
+  probsMat[3, 2] <- NA
+  probsMat[, 5] <- NA  # Entire observation across times NA
   
   times <- seq(1, 10, length.out = n_times)
   

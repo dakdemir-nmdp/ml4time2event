@@ -7,28 +7,32 @@
 BrierScoreCR(
   SurvObj,
   Predictions,
-  time,
+  eval_times = NULL,
   cause = 1,
   TestMat = NULL,
-  pred_times = NULL
+  pred_times = NULL,
+  time = NULL
 )
 }
 \arguments{
 \item{SurvObj}{survival object (Surv(time, status))}
 
-\item{Predictions}{matrix of predicted CIFs (rows=observations, cols=times) for the cause of interest}
+\item{Predictions}{matrix of predicted CIFs (rows=times, cols=observations) for the cause of interest}
 
-\item{time}{evaluation time point}
+\item{eval_times}{evaluation time point(s). If a vector, returns a vector of scores.
+For backward compatibility, also accepts 'time' as a deprecated alias.}
 
 \item{cause}{cause of interest (1 or 2)}
 
 \item{TestMat}{test dataset (optional, used if formula needs predictors)}
 
-\item{pred_times}{optional numeric vector of times corresponding to columns in `Predictions`}
+\item{pred_times}{optional numeric vector of times corresponding to rows in `Predictions`}
+
+\item{time}{deprecated, use eval_times instead}
 }
 \value{
-Brier score value
+Brier score value(s). If eval_times is a vector, returns a vector; if scalar, returns a scalar.
 }
 \description{
-Calculate Brier score for competing risk predictions at specific times
+Calculate Brier score for competing risk predictions at evaluation time(s)
 }

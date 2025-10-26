@@ -7,7 +7,7 @@
 Predict_CRModel_FineGray(
   modelout,
   newdata,
-  newtimes = NULL,
+  new_times = NULL,
   event_of_interest = NULL
 )
 }
@@ -16,7 +16,7 @@ Predict_CRModel_FineGray(
 
 \item{newdata}{data frame with new observations for prediction}
 
-\item{newtimes}{optional numeric vector of time points for prediction.
+\item{new_times}{optional numeric vector of time points for prediction.
 If NULL (default), generates 50 equally-spaced points from 0 to max observed time.
 Can be any positive values - interpolation handles all time points.}
 
@@ -46,6 +46,6 @@ preds <- Predict_CRModel_FineGray(model, test_data)
 
 # Predict at specific times
 preds_custom <- Predict_CRModel_FineGray(model, test_data,
-                                        newtimes = c(30, 60, 90, 180, 365))
+                                        new_times = c(30, 60, 90, 180, 365))
 }
 }

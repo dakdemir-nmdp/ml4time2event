@@ -12,7 +12,7 @@ SurvModel_RF(
   ntree = 300,
   samplesize = 500,
   nsplit = 5,
-  trace = TRUE,
+  trace = FALSE,
   splitrule = "bs.gradient",
   nodesize_try = c(1, 5, 10, 15),
   importance = "permute",

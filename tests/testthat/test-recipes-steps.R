@@ -59,15 +59,15 @@ test_that("t2edata_split creates train/test split", {
   split_list <- t2edata_split(test_setup$recipe_data, prop = 0.7)
 
   expect_type(split_list, "list")
-  expect_named(split_list, c("Train", "Test", "train_test_split"))
-  # Update class check to data.frame
-  expect_s3_class(split_list$Train, "data.frame")
-  expect_s3_class(split_list$Test, "data.frame")
-  expect_s3_class(split_list$train_test_split, "initial_split")
+  expect_named(split_list, c("Train", "Test", "Split"))
+  # Verify contents via explicit indexing (avoids partial-match ambiguity with $)
+  expect_s3_class(split_list[["Train"]], "data.frame")
+  expect_s3_class(split_list[["Test"]], "data.frame")
+  expect_s3_class(split_list[["Split"]], "initial_split")
 
   # Check approximate proportions
-  expect_equal(nrow(split_list$Train), floor(0.7 * test_setup$n_recipe))
-  expect_equal(nrow(split_list$Test), ceiling(0.3 * test_setup$n_recipe))
+  expect_equal(nrow(split_list[["Train"]]), floor(0.7 * test_setup$n_recipe))
+  expect_equal(nrow(split_list[["Test"]]), ceiling(0.3 * test_setup$n_recipe))
 })
 
 

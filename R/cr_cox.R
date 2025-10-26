@@ -13,8 +13,12 @@
 #'   "none" (default, no selection),
 #'   "backward" (backward elimination),
 #'   "forward" (forward selection),
-#'   "both" (stepwise selection)
+#'   "both" (stepwise selection),
+#'   "penalized" (elastic net penalized Cox via glmnet)
 #' @param penalty character string specifying penalty criterion for stepwise methods: "AIC" (default) or "BIC"
+#' @param alpha numeric value in [0,1] for elastic net mixing parameter when varsel="penalized".
+#'   alpha=1 is lasso, alpha=0 is ridge, alpha=0.5 (default) is elastic net.
+#' @param nfolds integer, number of cross-validation folds for penalized Cox (default: 10)
 #' @param ntimes integer, number of time points to use for prediction grid (default: 50)
 #' @param verbose logical, print progress messages (default: FALSE)
 #'
@@ -29,9 +33,12 @@
 #'   \item{event_codes}{vector of event codes for which models were fitted}
 #'   \item{varsel_method}{character string indicating variable selection method used}
 #'   \item{time_range}{vector with min and max observed event times}
+#'   \item{alpha}{numeric value of elastic net mixing parameter used (if varsel="penalized")}
+#'   \item{nfolds}{integer number of cross-validation folds used (if varsel="penalized")}
 #'
 #' @importFrom survival coxph Surv
-#' @importFrom stats as.formula complete.cases terms
+#' @importFrom stats as.formula complete.cases terms model.matrix coef
+#' @importFrom glmnet cv.glmnet
 #' @export
 #'
 #' @examples
@@ -52,6 +59,7 @@
 #' }
 CRModel_Cox <- function(data, expvars, timevar, eventvar, event_codes = NULL,
                        varsel = "none", penalty = "AIC",
+                       alpha = 0.5, nfolds = 10,
                        ntimes = 50, verbose = FALSE) {
 
   # ============================================================================
@@ -76,8 +84,16 @@ CRModel_Cox <- function(data, expvars, timevar, eventvar, event_codes = NULL,
   if (!is.null(event_codes) && length(event_codes) == 0) {
     stop("`event_codes` must be NULL or a non-empty vector if provided")
   }
-  varsel <- match.arg(varsel, c("none", "backward", "forward", "both"))
+  varsel <- match.arg(varsel, c("none", "backward", "forward", "both", "penalized"))
   penalty <- match.arg(penalty, c("AIC", "BIC"))
+  
+  # Validate alpha and nfolds parameters
+  if (!is.numeric(alpha) || alpha < 0 || alpha > 1) {
+    stop("`alpha` must be a numeric value between 0 and 1")
+  }
+  if (!is.numeric(nfolds) || nfolds < 3) {
+    stop("`nfolds` must be a numeric value >= 3")
+  }
 
   # ============================================================================
   # Data Preparation
@@ -167,7 +183,40 @@ CRModel_Cox <- function(data, expvars, timevar, eventvar, event_codes = NULL,
     }
 
     # Variable selection if specified
-    if (varsel != "none") {
+    if (varsel == "penalized") {
+      if (verbose) cat(sprintf("Fitting penalized Cox model for cause %s (alpha=%.2f, nfolds=%d)...\n", cause, alpha, nfolds))
+      
+      # Prepare data for glmnet (matrix form)
+      X <- stats::model.matrix(as.formula(paste0("~", paste(expvars, collapse = " + "))), data = cause_data)[, -1, drop = FALSE]
+      times_cox <- cause_data[[timevar]]
+      events_cox <- cause_data$event_bin
+      
+      # Fit penalized Cox model via glmnet
+      cph_model <- tryCatch({
+        glmnet::cv.glmnet(X, Surv(times_cox, events_cox), family = "cox", 
+                         alpha = alpha, nfolds = nfolds, standardize = TRUE)
+      }, error = function(e) {
+        warning(sprintf("Penalized Cox fitting failed for cause %s: %s. Using standard Cox model.", cause, e$message))
+        return(NULL)
+      })
+      
+      if (is.null(cph_model)) {
+        # Fallback to standard Cox model
+        cph_model <- tryCatch({
+          coxph(formula, data = cause_data, x = TRUE)
+        }, error = function(e) {
+          warning(sprintf("Fallback Cox model also failed for cause %s: %s", cause, e$message))
+          return(NULL)
+        })
+      }
+      
+      if (!is.null(cph_model)) {
+        cph_models_all_causes[[cause]] <- cph_model
+      } else {
+        cph_models_all_causes[[cause]] <- NULL
+      }
+      
+    } else if (varsel != "none") {
       if (verbose) cat(sprintf("Performing %s selection for cause %s...\n", varsel, cause))
 
       # Define the scope for stepwise selection
@@ -228,7 +277,9 @@ CRModel_Cox <- function(data, expvars, timevar, eventvar, event_codes = NULL,
     eventvar = eventvar,
     event_codes = event_codes,
     varsel_method = varsel,
-    time_range = time_range
+    time_range = time_range,
+    alpha = alpha,
+    nfolds = nfolds
   )
 
   class(output) <- c("ml4t2e_cr_cox", "CRModel_Cox")
@@ -242,8 +293,8 @@ CRModel_Cox <- function(data, expvars, timevar, eventvar, event_codes = NULL,
 #'
 #' @param modelout the output from 'CRModel_Cox'
 #' @param newdata data frame with new observations for prediction
-#' @param newtimes optional numeric vector of time points for prediction.
-#'   If NULL (default), uses the times from the training data.
+#' @param new_times optional numeric vector of time points for prediction.
+#'   If NULL (default), uses the times generated during model training.
 #'   Can be any positive values - interpolation handles all time points.
 #' @param event_of_interest integer, the code for the event of interest for CIF prediction.
 #'   If NULL (default), uses the failcode from the model training.
@@ -267,9 +318,9 @@ CRModel_Cox <- function(data, expvars, timevar, eventvar, event_codes = NULL,
 #'
 #' # Predict at specific times
 #' preds_custom <- Predict_CRModel_Cox(model, test_data,
-#'                                    newtimes = c(30, 60, 90, 180, 365))
+#'                                    new_times = c(30, 60, 90, 180, 365))
 #' }
-Predict_CRModel_Cox <- function(modelout, newdata, newtimes = NULL, event_of_interest = NULL) {
+Predict_CRModel_Cox <- function(modelout, newdata, new_times = NULL, event_of_interest = NULL) {
 
   # ============================================================================
   # Input Validation
@@ -305,11 +356,12 @@ Predict_CRModel_Cox <- function(modelout, newdata, newtimes = NULL, event_of_int
   }
 
   # Generate default times if not specified
-  if (!is.null(newtimes)) {
-    if (!is.numeric(newtimes) || any(newtimes < 0)) {
-      stop("'newtimes' must be a numeric vector of non-negative values")
+  use_default_times <- is.null(new_times)
+  if (!use_default_times) {
+    if (!is.numeric(new_times) || any(new_times < 0)) {
+      stop("'new_times' must be a numeric vector of non-negative values")
     }
-    newtimes <- sort(unique(newtimes))
+    new_times <- sort(unique(new_times))
   }
 
   # ============================================================================
@@ -364,26 +416,19 @@ Predict_CRModel_Cox <- function(modelout, newdata, newtimes = NULL, event_of_int
   # ============================================================================
   # Apply Interpolation
   # ============================================================================
-  if (is.null(newtimes)) {
+  if (use_default_times) {
+    # Return results at base times (including 0)
     result_cifs <- cif_matrix
     result_times <- base_times
   } else {
     # Interpolate to new time points
-    if (!is.numeric(newtimes) || any(newtimes < 0)) {
-      stop("'newtimes' must be a numeric vector of non-negative values")
-    }
-    newtimes <- sort(unique(newtimes))
-
     # Use the standard CIF interpolation utility function
-    pred_cifs <- cifMatInterpolaltor(
-      probsMat = t(cif_matrix),  # cifMatInterpolaltor expects [observations, times]
+    result_cifs <- cifMatInterpolaltor(
+      probsMat = cif_matrix,
       times = base_times,
-      newtimes = newtimes
+      new_times = new_times
     )
-
-    # cifMatInterpolaltor returns [newtimes, observations], keep as [times, observations]
-    result_cifs <- pred_cifs
-    result_times <- newtimes
+    result_times <- new_times
   }
 
   # ============================================================================

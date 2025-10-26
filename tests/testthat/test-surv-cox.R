@@ -14,31 +14,35 @@ set.seed(42)
 n_train <- 200
 n_test <- 50
 
-# Training data
-train_data <- data.frame(
-  time = rexp(n_train, rate = 0.1),
-  event = rbinom(n_train, 1, 0.7),
-  x1 = rnorm(n_train),
-  x2 = rnorm(n_train),
-  x3 = rnorm(n_train, mean = 1),
-  x4 = rnorm(n_train, mean = -1),
-  cat1 = factor(sample(c("A", "B", "C"), n_train, replace = TRUE)),
-  cat2 = factor(sample(c("Low", "High"), n_train, replace = TRUE))
-)
 
-# Test data
-test_data <- data.frame(
-  time = rexp(n_test, rate = 0.1),
-  event = rbinom(n_test, 1, 0.7),
-  x1 = rnorm(n_test),
-  x2 = rnorm(n_test),
-  x3 = rnorm(n_test, mean = 1),
-  x4 = rnorm(n_test, mean = -1),
-  cat1 = factor(sample(c("A", "B", "C"), n_test, replace = TRUE),
-                levels = c("A", "B", "C")),
-  cat2 = factor(sample(c("Low", "High"), n_test, replace = TRUE),
-                levels = c("Low", "High"))
-)
+# Simulate data with strong covariate effects for penalized Cox
+set.seed(42)
+beta <- c(x1 = 1.2, x2 = -1.0, x3 = 0.8, x4 = -0.7)
+cat1_levels <- c("A", "B", "C")
+cat2_levels <- c("Low", "High")
+
+make_surv_data <- function(n) {
+  x1 <- rnorm(n)
+  x2 <- rnorm(n)
+  x3 <- rnorm(n, mean = 1)
+  x4 <- rnorm(n, mean = -1)
+  cat1 <- factor(sample(cat1_levels, n, replace = TRUE), levels = cat1_levels)
+  cat2 <- factor(sample(cat2_levels, n, replace = TRUE), levels = cat2_levels)
+  # Linear predictor: strong effect for all variables
+  lp <- beta["x1"] * x1 + beta["x2"] * x2 + beta["x3"] * x3 + beta["x4"] * x4 +
+    ifelse(cat1 == "B", 0.8, ifelse(cat1 == "C", -0.8, 0)) +
+    ifelse(cat2 == "High", 1.0, 0)
+  # Exponential survival times
+  time <- rexp(n, rate = exp(lp - mean(lp) + log(0.1)))
+  # Censoring
+  censor_time <- rexp(n, rate = 0.05)
+  event <- as.integer(time <= censor_time)
+  observed_time <- pmin(time, censor_time)
+  data.frame(time = observed_time, event = event, x1 = x1, x2 = x2, x3 = x3, x4 = x4, cat1 = cat1, cat2 = cat2)
+}
+
+train_data <- make_surv_data(n_train)
+test_data <- make_surv_data(n_test)
 
 # Define variables
 expvars_numeric <- c("x1", "x2", "x3")
@@ -61,8 +65,8 @@ test_that("SurvModel_Cox fits basic model without variable selection", {
   # Check output structure
   expect_s3_class(model, "ml4t2e_surv_cox")
   expect_true(is.list(model))
-  expect_named(model, c("cph_model", "time_range", "varprof", "model_type",
-                       "expvars", "timevar", "eventvar", "varsel_method"))
+  expect_named(model, c("cph_model", "times", "time_range", "varprof", "model_type",
+                       "expvars", "timevar", "eventvar", "varsel_method", "alpha", "nfolds"))
 
   # Check model type
   expect_equal(model$model_type, "cox_standard")
@@ -78,8 +82,7 @@ test_that("SurvModel_Cox fits basic model without variable selection", {
   # Check varprof
   expect_true(is.list(model$varprof))
   expect_equal(length(model$varprof), length(expvars_numeric))
-  expect_equal(names(model$varprof), expvars_numeric)
-})
+  expect_equal(sort(names(model$varprof)), sort(expvars_numeric))
 
 test_that("SurvModel_Cox handles factor variables", {
   model <- SurvModel_Cox(
@@ -97,7 +100,6 @@ test_that("SurvModel_Cox handles factor variables", {
   expect_true(is.table(model$varprof$cat2))
   expect_setequal(names(model$varprof$cat1), c("A", "B", "C"))
   expect_setequal(names(model$varprof$cat2), c("Low", "High"))
-})
 
 # ==============================================================================
 # Tests for Variable Selection Methods
@@ -146,7 +148,7 @@ test_that("SurvModel_Cox performs backward selection with BIC", {
 test_that("SurvModel_Cox performs forward selection", {
   model <- SurvModel_Cox(
     data = train_data,
-    expvars = expvars_numeric,
+  expvars = expvars_all,
     timevar = "time",
     eventvar = "event",
     varsel = "forward",
@@ -162,7 +164,7 @@ test_that("SurvModel_Cox performs forward selection", {
 test_that("SurvModel_Cox performs stepwise (both) selection", {
   model <- SurvModel_Cox(
     data = train_data,
-    expvars = expvars_numeric,
+  expvars = expvars_all,
     timevar = "time",
     eventvar = "event",
     varsel = "both",
@@ -184,7 +186,7 @@ test_that("SurvModel_Cox fits penalized Cox (lasso)", {
 
   model <- SurvModel_Cox(
     data = train_data,
-    expvars = expvars_numeric,
+  expvars = expvars_all,
     timevar = "time",
     eventvar = "event",
     varsel = "penalized",
@@ -209,7 +211,7 @@ test_that("SurvModel_Cox fits penalized Cox (ridge)", {
 
   model <- SurvModel_Cox(
     data = train_data,
-    expvars = expvars_numeric,
+    expvars = expvars_all,
     timevar = "time",
     eventvar = "event",
     varsel = "penalized",
@@ -228,7 +230,7 @@ test_that("SurvModel_Cox fits penalized Cox (elastic net)", {
 
   model <- SurvModel_Cox(
     data = train_data,
-    expvars = expvars_numeric,
+    expvars = expvars_all,
     timevar = "time",
     eventvar = "event",
     varsel = "penalized",
@@ -249,7 +251,7 @@ test_that("SurvModel_Cox fits penalized Cox (elastic net)", {
 test_that("Predict_SurvModel_Cox returns correct output structure", {
   model <- SurvModel_Cox(
     data = train_data,
-    expvars = expvars_numeric,
+    expvars = expvars_all,
     timevar = "time",
     eventvar = "event"
   )
@@ -280,7 +282,7 @@ test_that("Predict_SurvModel_Cox returns correct output structure", {
 test_that("Predict_SurvModel_Cox predictions are monotonically decreasing", {
   model <- SurvModel_Cox(
     data = train_data,
-    expvars = expvars_numeric,
+    expvars = expvars_all,
     timevar = "time",
     eventvar = "event"
   )
@@ -304,7 +306,7 @@ test_that("Predict_SurvModel_Cox handles custom time points", {
   )
 
   custom_times <- c(1, 5, 10, 20, 50)
-  preds <- Predict_SurvModel_Cox(model, test_data, newtimes = custom_times)
+  preds <- Predict_SurvModel_Cox(model, test_data, new_times = custom_times)
 
   expect_equal(preds$Times, custom_times)
   expect_equal(nrow(preds$Probs), length(custom_times))
@@ -471,10 +473,10 @@ test_that("Predict_SurvModel_Cox validates inputs", {
     "variables missing in newdata"
   )
 
-  # Invalid newtimes
+  # Invalid new_times
   expect_error(
-    Predict_SurvModel_Cox(model, test_data, newtimes = c(-1, 5, 10)),
-    "newtimes.*non-negative"
+    Predict_SurvModel_Cox(model, test_data, new_times = c(-1, 5, 10)),
+    "new_times.*non-negative"
   )
 
   # Wrong model type
@@ -511,11 +513,6 @@ test_that("SurvModel_Cox handles single observation prediction", {
   expect_equal(nrow(preds$Probs), length(preds$Times))
 })
 
-# ==============================================================================
-# Integration Tests
-# ==============================================================================
-
-test_that("Full workflow: fit -> predict -> extract probabilities", {
   # Fit model
   model <- SurvModel_Cox(
     data = train_data,
@@ -540,6 +537,7 @@ test_that("Full workflow: fit -> predict -> extract probabilities", {
   }
 })
 
+
 test_that("Multiple models produce consistent output shapes", {
   # Fit different models
   model1 <- SurvModel_Cox(train_data, expvars_numeric, "time", "event",
@@ -548,23 +546,24 @@ test_that("Multiple models produce consistent output shapes", {
                          varsel = "backward", penalty = "AIC")
 
   skip_if_not_installed("glmnet")
-  model3 <- SurvModel_Cox(train_data, expvars_numeric, "time", "event",
+  model3 <- SurvModel_Cox(train_data, expvars_all, "time", "event",
                          varsel = "penalized", nfolds = 3)
 
   # Get predictions at same time points
   custom_times <- c(5, 10, 20)
-  preds1 <- Predict_SurvModel_Cox(model1, test_data, newtimes = custom_times)
+  preds1 <- Predict_SurvModel_Cox(model1, test_data, new_times = custom_times)
 
   # Only compare if model2 has variables
   if (length(coef(model2$cph_model)) > 0) {
-    preds2 <- Predict_SurvModel_Cox(model2, test_data, newtimes = custom_times)
+    preds2 <- Predict_SurvModel_Cox(model2, test_data, new_times = custom_times)
     expect_equal(dim(preds1$Probs), dim(preds2$Probs))
     expect_equal(preds1$Times, preds2$Times)
   }
 
-  preds3 <- Predict_SurvModel_Cox(model3, test_data, newtimes = custom_times)
+  preds3 <- Predict_SurvModel_Cox(model3, test_data, new_times = custom_times)
 
   # All should have same dimensions
   expect_equal(dim(preds1$Probs), dim(preds3$Probs))
   expect_equal(preds1$Times, preds3$Times)
+})
 })

@@ -34,7 +34,7 @@
 #' @importFrom survival Surv
 #' @export
 CRModel_RF <- function(data, expvars, timevar, eventvar, event_codes = NULL,
-                      ntree = 300, samplesize = 500, nsplit = 5, trace = TRUE,
+                      ntree = 300, samplesize = 500, nsplit = 5, trace = FALSE,
                       splitrule = "logrankCR", nodesize_try = c(1, 5, 10, 15), ...) {
 
   # ============================================================================
@@ -167,7 +167,7 @@ CRModel_RF <- function(data, expvars, timevar, eventvar, event_codes = NULL,
 #'
 #' @param modelout the output from 'CRModel_RF' (a list containing model and metadata)
 #' @param newdata data frame with new observations for prediction
-#' @param newtimes optional numeric vector of time points for prediction.
+#' @param new_times optional numeric vector of time points for prediction.
 #'   If NULL (default), uses the model's native time points.
 #'   Can be any positive values - interpolation handles all time points.
 #' @param event_of_interest character or numeric scalar indicating the event code
@@ -176,13 +176,13 @@ CRModel_RF <- function(data, expvars, timevar, eventvar, event_codes = NULL,
 #'
 #' @return a list containing:
 #'   \item{CIFs}{predicted cumulative incidence function matrix
-#'     (rows=observations, cols=times)}
+#'     (rows=times, cols=observations)}
 #'   \item{Times}{the times at which CIFs are calculated
 #'     (always includes time 0)}
 #'
 #' @importFrom randomForestSRC predict.rfsrc
 #' @export
-Predict_CRModel_RF <- function(modelout, newdata, newtimes = NULL, event_of_interest = NULL) {
+Predict_CRModel_RF <- function(modelout, newdata, new_times = NULL, event_of_interest = NULL) {
 
   # ============================================================================
   # Input Validation
@@ -265,33 +265,29 @@ Predict_CRModel_RF <- function(modelout, newdata, newtimes = NULL, event_of_inte
   # randomForestSRC returns cif as [observations, times, causes]
   cif_matrix <- pred_rf$cif[, , paste0("CIF.", modelout$event_code_numeric)]
 
-  # Add time 0 with CIF = 0
-  cif_with_t0 <- cbind(0, cif_matrix)  # Add column for time 0
+  # Convert to time-by-observation orientation and add time 0 with CIF = 0
+  cif_time_obs <- t(cif_matrix)
+  cif_time_obs <- rbind(rep(0, ncol(cif_time_obs)), cif_time_obs)
   times_with_t0 <- c(0, pred_rf$time.interest)
 
   # ============================================================================
   # Apply Interpolation if needed
   # ============================================================================
-  if (is.null(newtimes)) {
-    # Use model's native time points: [times, observations]
-    result_cifs <- t(cif_with_t0)  # Transpose to [times, observations]
+  if (is.null(new_times)) {
+    result_cifs <- cif_time_obs
     result_times <- times_with_t0
   } else {
-    # Interpolate to new time points
-    if (!is.numeric(newtimes) || any(newtimes < 0)) {
-      stop("'newtimes' must be a numeric vector of non-negative values")
+    if (!is.numeric(new_times) || any(new_times < 0)) {
+      stop("'new_times' must be a numeric vector of non-negative values")
     }
-    newtimes <- sort(unique(newtimes))
+    new_times <- sort(unique(new_times))
 
-    # Use cifMatInterpolaltor for interpolation
     result_cifs <- cifMatInterpolaltor(
-      probsMat = cif_with_t0,  # [observations, times]
+      probsMat = cif_time_obs,
       times = times_with_t0,
-      newtimes = newtimes
+      new_times = new_times
     )
-    # cifMatInterpolaltor returns [newtimes, observations], keep as [times, observations]
-    result_cifs <- result_cifs
-    result_times <- newtimes
+    result_times <- new_times
   }
 
   # ============================================================================

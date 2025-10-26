@@ -12,6 +12,8 @@ CRModel_Cox(
   event_codes = NULL,
   varsel = "none",
   penalty = "AIC",
+  alpha = 0.5,
+  nfolds = 10,
   ntimes = 50,
   verbose = FALSE
 )
@@ -33,9 +35,15 @@ Codes are stored as character strings for downstream consistency.}
 "none" (default, no selection),
 "backward" (backward elimination),
 "forward" (forward selection),
-"both" (stepwise selection)}
+"both" (stepwise selection),
+"penalized" (elastic net penalized Cox via glmnet)}
 
 \item{penalty}{character string specifying penalty criterion for stepwise methods: "AIC" (default) or "BIC"}
+
+\item{alpha}{numeric value in [0,1] for elastic net mixing parameter when varsel="penalized".
+alpha=1 is lasso, alpha=0 is ridge, alpha=0.5 (default) is elastic net.}
+
+\item{nfolds}{integer, number of cross-validation folds for penalized Cox (default: 10)}
 
 \item{ntimes}{integer, number of time points to use for prediction grid (default: 50)}
 
@@ -53,6 +61,8 @@ a list with the following components:
   \item{event_codes}{vector of event codes for which models were fitted}
   \item{varsel_method}{character string indicating variable selection method used}
   \item{time_range}{vector with min and max observed event times}
+  \item{alpha}{numeric value of elastic net mixing parameter used (if varsel="penalized")}
+  \item{nfolds}{integer number of cross-validation folds used (if varsel="penalized")}
 }
 \description{
 Fit a cause-specific Cox model for competing risks outcomes with optional variable selection.

@@ -284,7 +284,7 @@ SurvModel_DeepSurv <- function(data, expvars, timevar, eventvar,
 #'
 #' @param modelout the output from 'SurvModel_DeepSurv'
 #' @param newdata data frame with new observations for prediction
-#' @param newtimes optional numeric vector of time points for prediction.
+#' @param new_times optional numeric vector of time points for prediction.
 #'   If NULL (default), uses the baseline hazard times from training.
 #'
 #' @return a list containing:
@@ -294,7 +294,7 @@ SurvModel_DeepSurv <- function(data, expvars, timevar, eventvar,
 #'
 #' @importFrom stats model.matrix
 #' @export
-Predict_SurvModel_DeepSurv <- function(modelout, newdata, newtimes = NULL) {
+Predict_SurvModel_DeepSurv <- function(modelout, newdata, new_times = NULL) {
 
   # ============================================================================
   # Input Validation
@@ -316,13 +316,13 @@ Predict_SurvModel_DeepSurv <- function(modelout, newdata, newtimes = NULL) {
          paste(missing_vars, collapse = ", "))
   }
 
-  # Validate newtimes if provided
-  if (!is.null(newtimes)) {
-    if (!is.numeric(newtimes)) {
-      stop("'newtimes' must be numeric")
+  # Validate new_times if provided
+  if (!is.null(new_times)) {
+    if (!is.numeric(new_times)) {
+      stop("'new_times' must be numeric")
     }
-    if (any(newtimes < 0)) {
-      stop("'newtimes' must contain non-negative values")
+    if (any(new_times < 0)) {
+      stop("'new_times' must contain non-negative values")
     }
   }
 
@@ -360,12 +360,12 @@ Predict_SurvModel_DeepSurv <- function(modelout, newdata, newtimes = NULL) {
   log_risk_scores <- forward_pass(x_new, modelout$model$weights)$output
 
   # Determine prediction times
-  if (is.null(newtimes)) {
+  if (is.null(new_times)) {
     pred_times <- c(0, modelout$model$baseline_hazard$time)
     baseline_times <- pred_times
     baseline_cumhaz <- c(0, modelout$model$baseline_hazard$hazard)
   } else {
-    pred_times <- sort(unique(newtimes))
+    pred_times <- sort(unique(new_times))
     baseline_times <- c(0, modelout$model$baseline_hazard$time)
     baseline_cumhaz <- c(0, modelout$model$baseline_hazard$hazard)
   }
@@ -375,8 +375,8 @@ Predict_SurvModel_DeepSurv <- function(modelout, newdata, newtimes = NULL) {
   surv_probs <- exp(-outer(baseline_cumhaz, exp(as.vector(log_risk_scores))))
 
   # Interpolate to requested times if needed
-  if (!is.null(newtimes)) {
-    # Use interpolation to get probabilities at newtimes
+  if (!is.null(new_times)) {
+    # Use interpolation to get probabilities at new_times
     cumhaz_interp <- approx(baseline_times, baseline_cumhaz, xout = pred_times, rule = 2)$y
     surv_probs <- exp(-outer(cumhaz_interp, exp(as.vector(log_risk_scores))))
   }

@@ -312,14 +312,14 @@ test_that("PredictCRModels validates inputs", {
   )
 
   # Missing models
-  expect_error(PredictCRModels(newdata = test_data, newtimes = time_points))
+  expect_error(PredictCRModels(newdata = test_data, new_times = time_points))
 
   # Missing newdata
-  expect_error(PredictCRModels(models = models, newtimes = time_points))
+  expect_error(PredictCRModels(models = models, new_times = time_points))
 
   # Invalid models
-  expect_error(PredictCRModels(models = "not models", newdata = test_data, newtimes = time_points))
+  expect_error(PredictCRModels(models = "not models", newdata = test_data, new_times = time_points))
 
   # Invalid newdata
-  expect_error(PredictCRModels(models = models, newdata = "not data", newtimes = time_points))
+  expect_error(PredictCRModels(models = models, newdata = "not data", new_times = time_points))
 })

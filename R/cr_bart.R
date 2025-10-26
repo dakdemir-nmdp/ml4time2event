@@ -105,25 +105,47 @@ CRModel_BART <- function(data, expvars, timevar, eventvar, event_codes = NULL,
   # ============================================================================
   # Model Fitting
   # ============================================================================
-  # Fit BART model with retry logic for robustness
+  if (verbose) message("Fitting Competing Risks BART model...")
+  # Fit BART model with retry logic for robustness, suppressing all output unless verbose
   failcount <- 0
   bart_model <- NULL
 
   while (is.null(bart_model) && failcount < 4) {
     failcount <- failcount + 1
     bart_model <- tryCatch(
-      BART::crisk.bart(
-        x.train = x_train,
-        times = times_train,
-        delta = delta_train,
-        x.test = x_train,  # Include training data for predictions
-        K = K,
-        ntree = ntree,
-        ndpost = ndpost,
-        nskip = nskip,
-        keepevery = keepevery,
-        numcut = 2  # Small number of cuts for speed
-      ),
+      {
+        if (verbose) {
+          suppressMessages(BART::crisk.bart(
+            x.train = x_train,
+            times = times_train,
+            delta = delta_train,
+            x.test = x_train,  # Include training data for predictions
+            K = K,
+            ntree = ntree,
+            ndpost = ndpost,
+            nskip = nskip,
+            keepevery = keepevery,
+            numcut = 2  # Small number of cuts for speed
+          ))
+        } else {
+          bart_fit <- NULL
+          invisible(capture.output({
+            bart_fit <- suppressMessages(BART::crisk.bart(
+              x.train = x_train,
+              times = times_train,
+              delta = delta_train,
+              x.test = x_train,  # Include training data for predictions
+              K = K,
+              ntree = ntree,
+              ndpost = ndpost,
+              nskip = nskip,
+              keepevery = keepevery,
+              numcut = 2  # Small number of cuts for speed
+            ))
+          }))
+          bart_fit
+        }
+      },
       error = function(e) {
         if (verbose) message("BART fitting attempt ", failcount, " failed: ", e$message)
         NULL
@@ -176,7 +198,7 @@ CRModel_BART <- function(data, expvars, timevar, eventvar, event_codes = NULL,
 #'
 #' @param modelout the output from 'CRModel_BART' (a list containing model and metadata)
 #' @param newdata data frame with new observations for prediction
-#' @param newtimes optional numeric vector of time points for prediction.
+#' @param new_times optional numeric vector of time points for prediction.
 #'   If NULL (default), uses the model's native time points.
 #'   Can be any positive values - interpolation handles all time points.
 #' @param event_of_interest character or numeric scalar indicating the event code
@@ -193,7 +215,7 @@ CRModel_BART <- function(data, expvars, timevar, eventvar, event_codes = NULL,
 #' @importFrom BART crisk.pre.bart bartModelMatrix
 #' @importFrom stats model.matrix
 #' @export
-Predict_CRModel_BART <- function(modelout, newdata, newtimes = NULL, event_of_interest = NULL) {
+Predict_CRModel_BART <- function(modelout, newdata, new_times = NULL, event_of_interest = NULL) {
 
   # ============================================================================
   # Input Validation
@@ -303,33 +325,29 @@ Predict_CRModel_BART <- function(modelout, newdata, newtimes = NULL, event_of_in
   # Reshape to matrix [observations, times]
   cif_matrix <- matrix(cif_vector, nrow = N, ncol = K, byrow = TRUE)
 
-  # Add time 0 with CIF = 0
-  cif_with_t0 <- cbind(0, cif_matrix)
+  # Convert to time-by-observation orientation and add time 0 with CIF = 0
+  cif_time_obs <- t(cif_matrix)
+  cif_time_obs <- rbind(rep(0, ncol(cif_time_obs)), cif_time_obs)
   times_with_t0 <- c(0, modelout$bart_model$times)
 
   # ============================================================================
   # Apply Interpolation if needed
   # ============================================================================
-  if (is.null(newtimes)) {
-    # Use model's native time points: [times, observations]
-    result_cifs <- t(cif_with_t0)  # Transpose to [times, observations]
+  if (is.null(new_times)) {
+    result_cifs <- cif_time_obs
     result_times <- times_with_t0
   } else {
-    # Interpolate to new time points
-    if (!is.numeric(newtimes) || any(newtimes < 0)) {
-      stop("Input 'newtimes' must be a numeric vector of non-negative values.")
+    if (!is.numeric(new_times) || any(new_times < 0)) {
+      stop("Input 'new_times' must be a numeric vector of non-negative values.")
     }
-    newtimes <- sort(unique(newtimes))
+    new_times <- sort(unique(new_times))
 
-    # Use cifMatInterpolaltor for interpolation
     result_cifs <- cifMatInterpolaltor(
-      probsMat = cif_with_t0,  # [observations, times]
+      probsMat = cif_time_obs,
       times = times_with_t0,
-      newtimes = newtimes
+      new_times = new_times
     )
-    # cifMatInterpolaltor returns [newtimes, observations], keep as [times, observations]
-    result_cifs <- result_cifs
-    result_times <- newtimes
+    result_times <- new_times
   }
 
   # ============================================================================

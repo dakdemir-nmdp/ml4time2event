@@ -12,6 +12,7 @@
 #' "rulefit", "xgboost", "gam", "gbm", "ExpSurvReg", "WeibSurvReg", "bart".
 #' @param ntreeRF number of trees for Random Forest models.
 #' @param nvars number of top variables (based on RF importance) to use for the second RF model and potentially others.
+#' @param run_rf logical; if `FALSE`, skips fitting the baseline Random Forest models.
 #' @param ... Additional arguments passed to individual model fitting functions (currently not explicitly handled, consider adding specific args).
 #' @return A list containing:
 #'   - input: list with ExpVars, ExpVars2 (top N vars), timevar, eventvar.
@@ -21,7 +22,9 @@
 #'   - ... other fitted model outputs named according to the 'models' input (e.g., glmnet_Model, CPH_Model).
 #'
 #' @export
-RunSurvModels<-function(datatrain, ExpVars, timevar, eventvar, models=c("glmnet","coxph","rulefit","xgboost","gam","gbm","ExpSurvReg","WeibSurvReg","bart","deepsurv"), ntreeRF=300, nvars=20, ...){
+RunSurvModels<-function(datatrain, ExpVars, timevar, eventvar,
+                        models=c("glmnet","coxph","rulefit","xgboost","gam","gbm","ExpSurvReg","WeibSurvReg","bart","deepsurv"),
+                        ntreeRF=300, nvars=20, run_rf = TRUE, ...){
 
   if (missing(datatrain) || is.null(datatrain) || !is.data.frame(datatrain)) {
     stop("'datatrain' must be a data frame")
@@ -56,84 +59,85 @@ RunSurvModels<-function(datatrain, ExpVars, timevar, eventvar, models=c("glmnet"
     }
   }
 
-  # --- Fit Base Random Forest Models ---
-  # Assuming SurvModel_RF is loaded/available
-  RF_Model<-tryCatch(
-      SurvModel_RF(data=datatrainFact, expvars=ExpVars, timevar=timevar, eventvar=eventvar, samplesize=min(c(500,ceiling(.3*nrow(datatrainFact)))), ntree=ntreeRF),
-      error = function(e) {
-        message("Failed fitting RF_Model (all vars): ", e$message)
-        return(NULL)
-      }
-  )
-  model_status["RF_Model"] <- !is.null(RF_Model)
+  ExpVars2 <- ExpVars
+  RF_Model <- NULL
+  RF_Model2 <- NULL
 
-  # Debug information about RF_Model structure
-  if (!is.null(RF_Model)) {
-      # Try multiple paths to get variable importance from the model
-      got_importance <- FALSE
-      
-      # Path 1: Direct importance from model
-      if (!got_importance && !is.null(RF_Model$model) && !is.null(RF_Model$model$importance) && !all(is.na(RF_Model$model$importance))) {
-          importance_scores <- RF_Model$model$importance
-          if (!is.null(importance_scores) && (is.matrix(importance_scores) || is.vector(importance_scores))) {
-              if (is.matrix(importance_scores)) {
-                  # Use first column if matrix
-                  ExpVars2 <- names(sort(importance_scores[,1], decreasing=TRUE))[seq_len(min(length(ExpVars), nvars))]
-              } else {
-                  ExpVars2 <- names(sort(importance_scores, decreasing=TRUE))[seq_len(min(length(ExpVars), nvars))]
-              }
-              got_importance <- TRUE
-          }
-      }
-      
-      # Path 2: Try using vimp function if available
-      if (!got_importance && requireNamespace("randomForestSRC", quietly = TRUE) && !is.null(RF_Model$model)) {
-          tryCatch({
-              # Try to get variable importance via vimp function
-              imp_obj <- randomForestSRC::vimp(RF_Model$model)
-              if (!is.null(imp_obj) && !is.null(imp_obj$importance)) {
-                  importance_scores <- imp_obj$importance
-                  if (is.matrix(importance_scores)) {
-                      ExpVars2 <- names(sort(importance_scores[,1], decreasing=TRUE))[seq_len(min(length(ExpVars), nvars))]
-                  } else {
-                      ExpVars2 <- names(sort(importance_scores, decreasing=TRUE))[seq_len(min(length(ExpVars), nvars))]
-                  }
-                  got_importance <- TRUE
-              }
-          }, error = function(e) {
-              # vimp function failed, continue to next method
-          })
-      }
-      
-      # Path 3: Use var.used if available
-      if (!got_importance && !is.null(RF_Model$model$var.used) && length(RF_Model$model$var.used) > 0) {
-          var_freq <- table(RF_Model$model$var.used)
-          var_names <- names(var_freq)
-          if (length(var_names) > 0) {
-              # Create a pseudo-importance based on frequency of variable usage
-              ExpVars2 <- names(sort(var_freq, decreasing=TRUE))[seq_len(min(length(var_names), nvars))]
-              got_importance <- TRUE
-          }
-      }
-      
-      # Fallback if no importance info could be extracted
-      if (!got_importance) {
-          warning("Could not get importance from RF_Model, using all variables for RF_Model2.")
-          ExpVars2 <- ExpVars # Fallback to all variables
-      }
+  if (isTRUE(run_rf)) {
+    # --- Fit Base Random Forest Models ---
+    # Assuming SurvModel_RF is loaded/available
+    RF_Model<-tryCatch(
+        SurvModel_RF(data=datatrainFact, expvars=ExpVars, timevar=timevar, eventvar=eventvar, samplesize=min(c(500,ceiling(.3*nrow(datatrainFact)))), ntree=ntreeRF),
+        error = function(e) {
+          message("Failed fitting RF_Model (all vars): ", e$message)
+          return(NULL)
+        }
+    )
+    model_status["RF_Model"] <- !is.null(RF_Model)
+
+    if (!is.null(RF_Model)) {
+        got_importance <- FALSE
+
+        if (!got_importance && !is.null(RF_Model$model) && !is.null(RF_Model$model$importance) && !all(is.na(RF_Model$model$importance))) {
+            importance_scores <- RF_Model$model$importance
+            if (!is.null(importance_scores) && (is.matrix(importance_scores) || is.vector(importance_scores))) {
+                if (is.matrix(importance_scores)) {
+                    ExpVars2 <- names(sort(importance_scores[,1], decreasing=TRUE))[seq_len(min(length(ExpVars), nvars))]
+                } else {
+                    ExpVars2 <- names(sort(importance_scores, decreasing=TRUE))[seq_len(min(length(ExpVars), nvars))]
+                }
+                got_importance <- TRUE
+            }
+        }
+
+        if (!got_importance && requireNamespace("randomForestSRC", quietly = TRUE) && !is.null(RF_Model$model)) {
+            tryCatch({
+                imp_obj <- randomForestSRC::vimp(RF_Model$model)
+                if (!is.null(imp_obj) && !is.null(imp_obj$importance)) {
+                    importance_scores <- imp_obj$importance
+                    if (is.matrix(importance_scores)) {
+                        ExpVars2 <- names(sort(importance_scores[,1], decreasing=TRUE))[seq_len(min(length(ExpVars), nvars))]
+                    } else {
+                        ExpVars2 <- names(sort(importance_scores, decreasing=TRUE))[seq_len(min(length(ExpVars), nvars))]
+                    }
+                    got_importance <- TRUE
+                }
+            }, error = function(e) {
+                # vimp function failed, continue to next method
+            })
+        }
+
+        if (!got_importance && !is.null(RF_Model$model$var.used) && length(RF_Model$model$var.used) > 0) {
+            var_freq <- table(RF_Model$model$var.used)
+            var_names <- names(var_freq)
+            if (length(var_names) > 0) {
+                ExpVars2 <- names(sort(var_freq, decreasing=TRUE))[seq_len(min(length(var_names), nvars))]
+                got_importance <- TRUE
+            }
+        }
+
+        if (!got_importance) {
+            warning("Could not get importance from RF_Model, using all variables for RF_Model2.")
+            ExpVars2 <- ExpVars
+        }
+    } else {
+        warning("RF_Model is NULL, using all variables for RF_Model2.")
+        ExpVars2 <- ExpVars
+    }
+
+    RF_Model2<-tryCatch(
+        SurvModel_RF(data=datatrainFact, expvars=ExpVars2, timevar=timevar, eventvar=eventvar, samplesize=min(c(500,ceiling(.3*nrow(datatrainFact)))), ntree=ntreeRF),
+        error = function(e) {
+          message("Failed fitting RF_Model2 (top vars): ", e$message)
+          return(NULL)
+        }
+    )
+    model_status["RF_Model2"] <- !is.null(RF_Model2)
   } else {
-      warning("RF_Model is NULL, using all variables for RF_Model2.")
-      ExpVars2 <- ExpVars # Fallback to all variables
+    message("Skipping baseline Random Forest models (run_rf = FALSE).")
+    model_status["RF_Model"] <- NA
+    model_status["RF_Model2"] <- NA
   }
-
-  RF_Model2<-tryCatch(
-      SurvModel_RF(data=datatrainFact, expvars=ExpVars2, timevar=timevar, eventvar=eventvar, samplesize=min(c(500,ceiling(.3*nrow(datatrainFact)))), ntree=ntreeRF),
-      error = function(e) {
-        message("Failed fitting RF_Model2 (top vars): ", e$message)
-        return(NULL)
-      }
-  )
-  model_status["RF_Model2"] <- !is.null(RF_Model2)
 
 
   # --- Fit Additional Requested Models ---
@@ -142,7 +146,9 @@ RunSurvModels<-function(datatrain, ExpVars, timevar, eventvar, models=c("glmnet"
 
   # Initialize list to store model outputs
   input2<-vector(mode="list")
-  input2<-c(input2,list(RF_Model=RF_Model, RF_Model2=RF_Model2)) # Add base RF models first
+  if (isTRUE(run_rf)) {
+    input2<-c(input2,list(RF_Model=RF_Model, RF_Model2=RF_Model2)) # Add base RF models first
+  }
 
   # Helper function for fitting with error catching
   fit_model <- function(model_name, fit_func, ...) {
@@ -267,11 +273,12 @@ RunSurvModels<-function(datatrain, ExpVars, timevar, eventvar, models=c("glmnet"
   input_params<-list(ExpVars=ExpVars, ExpVars2=ExpVars2, timevar=timevar, eventvar=eventvar)
 
   # Print summary of model fitting
-  n_success <- sum(model_status)
-  n_total <- length(model_status)
+  valid_status <- !is.na(model_status)
+  n_total <- sum(valid_status)
+  n_success <- if (n_total > 0) sum(model_status[valid_status]) else 0
   message(sprintf("Model fitting complete: %d/%d models succeeded", n_success, n_total))
-  if (n_success < n_total) {
-    failed_models <- names(model_status)[!model_status]
+  failed_models <- names(model_status)[valid_status & !model_status]
+  if (length(failed_models) > 0) {
     message("Failed models: ", paste(failed_models, collapse=", "))
   }
 
@@ -314,7 +321,7 @@ ComputeSuperLearnerWeights <- function(ensemble_models, training_data, eval_time
     PredictSurvModels(
       models = ensemble_models,
       newdata = training_data,
-      newtimes = eval_times,
+      new_times = eval_times,
       ensemble_method = "average"  # Just to get individual predictions
     )$ModelPredictions
   }, error = function(e) {
@@ -363,7 +370,7 @@ ComputeSuperLearnerWeights <- function(ensemble_models, training_data, eval_time
 #'
 #' @param models List containing the fitted models (output from 'RunSurvModels').
 #' @param newdata Data frame with new data for prediction.
-#' @param newtimes Numeric vector of times for which predictions are required.
+#' @param new_times Numeric vector of times for which predictions are required.
 #' @param models_to_use Character vector of model names to use for ensemble prediction.
 #'   If NULL (default), uses all successfully fitted models. Model names should match
 #'   those in the models list (e.g., "RF_Model", "glmnet_Model", "CPH_Model").
@@ -384,7 +391,7 @@ ComputeSuperLearnerWeights <- function(ensemble_models, training_data, eval_time
 #'   - ensemble_method: The ensemble method used.
 #'
 #' @export
-PredictSurvModels<-function(models, newdata, newtimes, models_to_use=NULL,
+PredictSurvModels<-function(models, newdata, new_times, models_to_use=NULL,
                              ensemble_method="average", model_weights=NULL, 
                              super_learner_training_data=NULL, 
                              super_learner_timevar=NULL, 
@@ -399,15 +406,15 @@ PredictSurvModels<-function(models, newdata, newtimes, models_to_use=NULL,
   if (!is.data.frame(newdata)) {
     stop("'newdata' must be a data frame")
   }
-  if (missing(newtimes)) {
-    stop("'newtimes' must be provided")
+  if (missing(new_times)) {
+    stop("'new_times' must be provided")
   }
-  if (!is.numeric(newtimes)) {
-    stop("'newtimes' must be numeric")
+  if (!is.numeric(new_times)) {
+    stop("'new_times' must be numeric")
   }
 
-  # Ensure newtimes includes 0 and is sorted
-  newtimes <- sort(unique(c(0, newtimes)))
+  # Ensure new_times includes 0 and is sorted
+  new_times <- sort(unique(c(0, new_times)))
 
   # --- Model Selection and Validation ---
   # Get model status if available (backward compatibility: if not present, assume all non-NULL models succeeded)
@@ -421,7 +428,8 @@ PredictSurvModels<-function(models, newdata, newtimes, models_to_use=NULL,
   }
 
   # Get successful models
-  successful_models <- names(model_status)[model_status]
+  valid_success_idx <- which(!is.na(model_status) & model_status)
+  successful_models <- names(model_status)[valid_success_idx]
 
   # Validate and filter models_to_use
   if (!is.null(models_to_use)) {
@@ -490,7 +498,7 @@ PredictSurvModels<-function(models, newdata, newtimes, models_to_use=NULL,
           if (!is.null(pred_out) && !is.null(pred_out$Probs) && !is.null(pred_out$Times)) {
               # Assuming survprobMatInterpolator is loaded/available
               interp_probs <- tryCatch(
-                  survprobMatInterpolator(probsMat=pred_out$Probs, times=pred_out$Times, newtimes=newtimes),
+                  survprobMatInterpolator(probsMat=pred_out$Probs, times=pred_out$Times, new_times=new_times),
                    error = function(e) {
                       warning("Interpolation failed for ", model_name, ": ", e$message)
                       return(NULL)
@@ -592,7 +600,7 @@ PredictSurvModels<-function(models, newdata, newtimes, models_to_use=NULL,
                 PredictSurvModels(
                   models = models,
                   newdata = super_learner_training_data,
-                  newtimes = newtimes,
+                  new_times = new_times,
                   models_to_use = names(ValidPredictions),
                   ensemble_method = "average"  # Just to get individual predictions
                 )$ModelPredictions
@@ -608,7 +616,7 @@ PredictSurvModels<-function(models, newdata, newtimes, models_to_use=NULL,
                     data = super_learner_training_data,
                     timevar = super_learner_timevar,
                     eventvar = super_learner_eventvar,
-                    eval_times = newtimes
+                    eval_times = new_times
                   )
                 }, error = function(e) {
                   warning("Failed to build observed survival matrix: ", e$message)
@@ -668,6 +676,11 @@ PredictSurvModels<-function(models, newdata, newtimes, models_to_use=NULL,
 
   models_used <- names(ValidPredictions)
 
-  return(list(ModelPredictions=ValidPredictions, NewProbs=NewProbs, models_used=models_used,
-              ensemble_method=ensemble_method))
+  return(list(
+    ModelPredictions = ValidPredictions,
+    NewProbs = NewProbs,
+    NewTimes = new_times,
+    models_used = models_used,
+    ensemble_method = ensemble_method
+  ))
 }

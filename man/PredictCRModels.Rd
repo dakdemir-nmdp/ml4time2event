@@ -7,7 +7,7 @@
 PredictCRModels(
   models,
   newdata,
-  newtimes,
+  new_times,
   models_to_use = NULL,
   ensemble_method = "average",
   model_weights = NULL,
@@ -21,7 +21,7 @@ PredictCRModels(
 
 \item{newdata}{the data for which the predictions are to be calculated}
 
-\item{newtimes}{the times for which the predictions obtained}
+\item{new_times}{the times for which the predictions obtained}
 
 \item{models_to_use}{Character vector of model names to use for ensemble prediction.
 If NULL (default), uses all successfully fitted models. Model names should match

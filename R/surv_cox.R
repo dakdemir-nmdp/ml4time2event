@@ -21,6 +21,7 @@
 #'
 #' @return a list with the following components:
 #'   \item{cph_model}{the fitted Cox model object (coxph or cv.glmnet)}
+#'   \item{times}{vector of time points for prediction grid (equally-spaced from 0 to max time)}
 #'   \item{time_range}{vector with min and max observed event times}
 #'   \item{varprof}{variable profile list containing factor levels and numeric ranges}
 #'   \item{model_type}{character string "cox_standard" or "cox_penalized"}
@@ -28,9 +29,11 @@
 #'   \item{timevar}{character name of time variable}
 #'   \item{eventvar}{character name of event variable}
 #'   \item{varsel_method}{character string indicating variable selection method used}
+#'   \item{alpha}{numeric value of elastic net mixing parameter used (if varsel="penalized")}
+#'   \item{nfolds}{integer number of cross-validation folds used (if varsel="penalized")}
 #'
 #' @note Predictions can be made at any time points via interpolation.
-#'   No fixed time grid is stored in the model.
+#'   The times vector is used as default when predicting, but can be overridden.
 #'
 #' @importFrom survival coxph Surv survfit
 #' @importFrom stats as.formula model.matrix coef complete.cases
@@ -107,6 +110,7 @@ SurvModel_Cox <- function(data, expvars, timevar, eventvar,
   # ============================================================================
   if (verbose) cat("Creating variable profile...\n")
   varprof <- VariableProfile(data, expvars)
+  varprof <- varprof[expvars]
 
   # Ensure event variable is numeric 0/1
   data[[eventvar]] <- as.numeric(data[[eventvar]] == 1)
@@ -134,6 +138,9 @@ SurvModel_Cox <- function(data, expvars, timevar, eventvar,
   # Store event time range for reference
   # Note: Predictions can be made at ANY time points via interpolation
   time_range <- c(0, max(event_times))
+  
+  # Generate default times grid for predictions
+  times <- seq(time_range[1], time_range[2], length.out = ntimes)
 
   # ============================================================================
   # Model Fitting
@@ -169,6 +176,12 @@ SurvModel_Cox <- function(data, expvars, timevar, eventvar,
         stop("Failed to fit penalized Cox model: ", e$message)
       }
     )
+
+    # Check for at least one nonzero coefficient
+    coefs <- as.numeric(coef(cv_fit, s = "lambda.min"))
+    if (all(coefs == 0 | is.na(coefs))) {
+      stop("All coefficients are zero after penalized Cox fitting. The final model has no predictors. This is not a valid Cox model. Try using a different variable selection method or check your data.")
+    }
 
     # Store sample of training data and matrix for prediction
     sample_size <- min(500, nrow(XYTrain))
@@ -239,6 +252,36 @@ SurvModel_Cox <- function(data, expvars, timevar, eventvar,
           cph_model # Return original full model
         }
       )
+      # Always keep the single best variable if none selected (robust variable selection)
+      coefs <- coef(cph_model)
+      if (length(coefs) == 0 || all(coefs == 0 | is.na(coefs))) {
+        # Try all single-variable models and pick the best by AIC/BIC
+        best_var <- NULL
+        best_aic <- Inf
+        for (var in expvars) {
+          single_form <- stats::as.formula(paste0("survival::Surv(", timevar, ", ", eventvar, ") ~ ", var))
+          single_model <- tryCatch(
+            survival::coxph(single_form, data = XYTrain, x = TRUE, y = TRUE),
+            error = function(e) NULL
+          )
+          if (!is.null(single_model)) {
+            aic_val <- switch(penalty, "AIC" = AIC(single_model), "BIC" = AIC(single_model, k = log(nrow(XYTrain))))
+            if (aic_val < best_aic) {
+              best_aic <- aic_val
+              best_var <- var
+            }
+          }
+        }
+        if (!is.null(best_var)) {
+          if (verbose) cat("No variable improved over intercept-only, keeping best single variable:", best_var, "AIC/BIC:", round(best_aic, 2), "\n")
+          cph_model <- survival::coxph(
+            stats::as.formula(paste0("survival::Surv(", timevar, ", ", eventvar, ") ~ ", best_var)),
+            data = XYTrain, x = TRUE, y = TRUE
+          )
+        } else {
+          stop("No valid single-variable Cox model could be fit after variable selection.")
+        }
+      }
     }
 
     model_type <- "cox_standard"
@@ -251,13 +294,16 @@ SurvModel_Cox <- function(data, expvars, timevar, eventvar,
 
   result <- list(
     cph_model = cph_model,
-    time_range = time_range,  # Store time range instead of fixed grid
+    times = times,
+    time_range = time_range,
     varprof = varprof,
     model_type = model_type,
     expvars = expvars,
     timevar = timevar,
     eventvar = eventvar,
-    varsel_method = varsel
+    varsel_method = varsel,
+    alpha = alpha,
+    nfolds = nfolds
   )
 
   class(result) <- c("ml4t2e_surv_cox", "list")
@@ -270,8 +316,9 @@ SurvModel_Cox <- function(data, expvars, timevar, eventvar,
 #'
 #' @param modelout the output from 'SurvModel_Cox'
 #' @param newdata data frame with new observations for prediction
-#' @param newtimes optional numeric vector of time points for prediction.
-#'   If NULL (default), generates 50 equally-spaced points from 0 to max observed time.
+#' @param new_times optional numeric vector of time points for prediction.
+#'   If NULL (default), uses the times generated during model training
+#'   (50 equally-spaced points from 0 to max observed time).
 #'   Can be any positive values - interpolation handles all time points.
 #'
 #' @return a list containing:
@@ -297,9 +344,9 @@ SurvModel_Cox <- function(data, expvars, timevar, eventvar,
 #'
 #' # Predict at specific times
 #' preds_custom <- Predict_SurvModel_Cox(model, test_data,
-#'                                       newtimes = c(30, 60, 90, 180, 365))
+#'                                       new_times = c(30, 60, 90, 180, 365))
 #' }
-Predict_SurvModel_Cox <- function(modelout, newdata, newtimes = NULL) {
+Predict_SurvModel_Cox <- function(modelout, newdata, new_times = NULL) {
 
   # ============================================================================
   # Input Validation
@@ -322,15 +369,15 @@ Predict_SurvModel_Cox <- function(modelout, newdata, newtimes = NULL) {
   }
 
   # Generate default times if not specified
-  if (is.null(newtimes)) {
+  if (is.null(new_times)) {
     # Create a reasonable default grid: 50 points from 0 to max observed time
     max_time <- modelout$time_range[2]
-    newtimes <- seq(0, max_time, length.out = 50)
+    new_times <- seq(0, max_time, length.out = 50)
   } else {
-    if (!is.numeric(newtimes) || any(newtimes < 0)) {
-      stop("'newtimes' must be a numeric vector of non-negative values")
+    if (!is.numeric(new_times) || any(new_times < 0)) {
+      stop("'new_times' must be a numeric vector of non-negative values")
     }
-    newtimes <- sort(unique(newtimes))
+    new_times <- sort(unique(new_times))
   }
 
   # ============================================================================
@@ -458,16 +505,25 @@ Predict_SurvModel_Cox <- function(modelout, newdata, newtimes = NULL) {
       # Single observation case - shape as column vector
       pred_probs <- matrix(pred_probs, ncol = 1)
     } else {
-      # Multiple observations but got vector - this suggests survfit encountered issues
-      # (e.g., many observations with NAs, identical risk scores, etc.)
-      # Interpret as single survival curve for all observations
-      warning(sprintf(
-        "survfit returned a vector for %d observations. This may indicate:\n",
-        n_expected_obs),
-        "  - Observations have identical covariate patterns\n",
-        "  - Multiple observations had missing values\n",
-        "Treating as single survival curve replicated across all observations."
-      )
+      # Check for all-identical covariate patterns
+      all_identical <- all(apply(newdata_prepared, 2, function(col) length(unique(col)) == 1))
+      # Check for excessive missingness
+      all_missing_but_one <- (n_complete_cases == 1)
+      if (all_identical) {
+        # No warning: all covariate patterns are identical, expected behavior
+      } else if (all_missing_but_one) {
+        # No warning: all but one row had missing values, expected behavior
+      } else {
+        warning(sprintf(
+          paste0(
+            "survfit returned a vector for %d observations. This is unexpected. ",
+            "Possible causes: identical risk scores, excessive missingness, or a bug. ",
+            "First few rows of newdata:\n%s\n",
+            "Treating as single survival curve replicated across all observations."),
+          n_expected_obs,
+          paste(capture.output(print(utils::head(newdata_prepared, 3))), collapse = "\n")
+        ))
+      }
       # Create matrix: replicate the single curve for all observations
       pred_probs <- matrix(rep(pred_probs, n_expected_obs),
                           nrow = length(pred_probs),
@@ -499,13 +555,13 @@ Predict_SurvModel_Cox <- function(modelout, newdata, newtimes = NULL) {
   }
 
   # Use the standard interpolation utility function
-  # This handles: time 0 addition, interpolation to newtimes, and monotonicity
+  # This handles: time 0 addition, interpolation to new_times, and monotonicity
   pred_probs <- survprobMatInterpolator(
     probsMat = pred_probs,
     times = pred_times,
-    newtimes = newtimes
+    new_times = new_times
   )
-  pred_times <- newtimes
+  pred_times <- new_times
 
   # ============================================================================
   # Return Results

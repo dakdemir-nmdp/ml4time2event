@@ -270,7 +270,7 @@ test_that("Predict_CRModel_SurvReg handles custom times", {
   )
 
   custom_times <- c(1, 5, 10, 15)
-  preds <- Predict_CRModel_SurvReg(model, test_data, newtimes = custom_times)
+  preds <- Predict_CRModel_SurvReg(model, test_data, new_times = custom_times)
 
   expect_equal(preds$Times, custom_times)
   expect_equal(nrow(preds$CIFs), length(custom_times))
@@ -290,6 +290,50 @@ test_that("Predict_CRModel_SurvReg handles factor variables in newdata", {
 
   expect_true(is.matrix(preds$CIFs))
   expect_true(all(preds$CIFs >= 0 & preds$CIFs <= 1))
+})
+
+test_that("Predict_CRModel_SurvReg reflects covariate-driven risk differences", {
+  # Construct a deterministic dataset where the risk indicator accelerates event type 1
+  make_group <- function(risk_value) {
+    if (risk_value == 0) {
+      data.frame(
+        time = c(rep(25, 40), rep(10, 10), rep(35, 10)),
+        event = c(rep(1, 40), rep(2, 10), rep(0, 10)),
+        risk = 0
+      )
+    } else {
+      data.frame(
+        time = c(rep(5, 40), rep(18, 10), rep(35, 10)),
+        event = c(rep(1, 40), rep(2, 10), rep(0, 10)),
+        risk = 1
+      )
+    }
+  }
+
+  sim_data <- rbind(make_group(0), make_group(1))
+  set.seed(123)
+  sim_data$time <- sim_data$time + runif(nrow(sim_data), -0.25, 0.25)
+
+  model <- CRModel_SurvReg(
+    data = sim_data,
+    expvars = "risk",
+    timevar = "time",
+    eventvar = "event",
+    event_codes = c(1, 2),
+    dist = "exponential"
+  )
+
+  newdata <- data.frame(risk = c(0, 1))
+  preds <- Predict_CRModel_SurvReg(model, newdata)
+
+  expect_true(is.matrix(preds$CIFs))
+  expect_equal(ncol(preds$CIFs), 2)
+
+  cif_diff <- preds$CIFs[, 2] - preds$CIFs[, 1]
+
+  # Ensure the high-risk profile obtains meaningfully larger CIF at multiple times
+  expect_gt(max(cif_diff), 0.2)
+  expect_gt(cif_diff[length(cif_diff)], 0.2)
 })
 
 # ==============================================================================
@@ -327,11 +371,11 @@ test_that("Predict_CRModel_SurvReg validates inputs", {
   expect_error(Predict_CRModel_SurvReg(modelout = model, newdata = test_data_missing),
                "missing in newdata")
 
-  # Invalid newtimes
-  expect_error(Predict_CRModel_SurvReg(modelout = model, newdata = test_data, newtimes = "not numeric"),
-               "'newtimes' must be a numeric vector")
-  expect_error(Predict_CRModel_SurvReg(modelout = model, newdata = test_data, newtimes = c(-1, 1)),
-               "'newtimes' must be a numeric vector of non-negative values")
+  # Invalid new_times
+  expect_error(Predict_CRModel_SurvReg(modelout = model, newdata = test_data, new_times = "not numeric"),
+               "'new_times' must be a numeric vector")
+  expect_error(Predict_CRModel_SurvReg(modelout = model, newdata = test_data, new_times = c(-1, 1)),
+               "'new_times' must be a numeric vector of non-negative values")
 })
 
 test_that("Predict_CRModel_SurvReg handles missing factor levels", {

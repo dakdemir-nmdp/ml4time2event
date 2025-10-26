@@ -78,7 +78,7 @@ test_that("Predict_SurvModel_BART returns predictions in correct format", {
   # Prediction for BART survival models might involve predict() on the fitted object
   # and potentially custom logic to get survival probabilities at specific times.
   # Assuming Predict_SurvModel_BART handles this.
-  predictions <- Predict_SurvModel_BART(modelout = model_bart_surv, newdata = test_data_surv, newtimes = time_points_surv)
+  predictions <- Predict_SurvModel_BART(modelout = model_bart_surv, newdata = test_data_surv, new_times = time_points_surv)
 
   # Check output structure
   expect_type(predictions, "list")
@@ -103,7 +103,7 @@ test_that("Predict_SurvModel_BART handles single time point", {
 
   model_bart_surv <- SurvModel_BART(data = train_data_surv, expvars = c("x1", "x2", "x3"), timevar = "time", eventvar = "status")
   single_time <- median(train_data_surv$time[train_data_surv$status == 1])
-  predictions <- Predict_SurvModel_BART(modelout = model_bart_surv, newdata = test_data_surv, newtimes = single_time)
+  predictions <- Predict_SurvModel_BART(modelout = model_bart_surv, newdata = test_data_surv, new_times = single_time)
 
   expect_type(predictions, "list")
   expect_true(is.matrix(predictions$Probs))
@@ -116,5 +116,5 @@ test_that("Predict_SurvModel_BART requires model and data", {
   model_bart_surv <- SurvModel_BART(data = train_data_surv, expvars = c("x1", "x2", "x3"), timevar = "time", eventvar = "status")
   expect_error(Predict_SurvModel_BART(newdata = test_data_surv), "argument \"modelout\" is missing")
   expect_error(Predict_SurvModel_BART(modelout = model_bart_surv), "argument \"newdata\" is missing")
-  # newtimes is optional, so no error expected when omitted
+  # new_times is optional, so no error expected when omitted
 })

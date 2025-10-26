@@ -3,9 +3,9 @@ library(ml4time2event)
 
 # Create a simplified test version of the cifMatInterpolaltor function
 # This avoids using the existing function which might depend on other parts
-test_interpolator <- function(probsMat, times, newtimes) {
-  n_obs <- nrow(probsMat)
-  n_new_times <- length(newtimes)
+test_interpolator <- function(probsMat, times, new_times) {
+  n_obs <- ncol(probsMat)
+  n_new_times <- length(new_times)
   
   # Prepare result matrix
   result_mat <- matrix(NA_real_, nrow=n_new_times, ncol=n_obs)
@@ -13,13 +13,13 @@ test_interpolator <- function(probsMat, times, newtimes) {
   # Process each observation
   for (i in seq_len(n_obs)) {
     # Get probabilities for this observation
-    probs <- probsMat[i, ]
+    probs <- probsMat[, i]
     
     # Interpolate to new times
     interp_probs <- stats::approx(
       x = times,
       y = probs,
-      xout = newtimes,
+      xout = new_times,
       method = "linear",
       yleft = 0,
       yright = utils::tail(probs, 1),
@@ -40,22 +40,22 @@ test_that("interpolation works with simple synthetic data", {
   n_times <- 5
   n_subj <- 10
   
-  # Create matrix with rows=observations, cols=times
-  probsMat <- matrix(runif(n_subj * n_times), nrow = n_subj, ncol = n_times)
+  # Create matrix with rows=times, cols=observations
+  probsMat <- matrix(runif(n_subj * n_times), nrow = n_times, ncol = n_subj)
   times <- seq(1, 10, length.out = n_times)
   
   # Test vector of new times
-  newtimes_vec <- c(2, 4, 6, 8)
-  result_vec <- test_interpolator(probsMat, times, newtimes_vec)
+  new_times_vec <- c(2, 4, 6, 8)
+  result_vec <- test_interpolator(probsMat, times, new_times_vec)
   
   # Test structure of result
   expect_true(is.matrix(result_vec))
-  expect_equal(nrow(result_vec), length(newtimes_vec))
+  expect_equal(nrow(result_vec), length(new_times_vec))
   expect_equal(ncol(result_vec), n_subj)
   
   # Test scalar new time
-  newtimes_scalar <- 5
-  result_scalar <- test_interpolator(probsMat, times, newtimes_scalar)
+  new_times_scalar <- 5
+  result_scalar <- test_interpolator(probsMat, times, new_times_scalar)
   
   # Test structure of scalar result
   expect_true(is.matrix(result_scalar))

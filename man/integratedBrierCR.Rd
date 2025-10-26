@@ -7,7 +7,7 @@
 integratedBrierCR(
   SurvObj,
   Predictions,
-  eval.times = NULL,
+  eval_times = NULL,
   cause = 1,
   TestMat = NULL,
   pred_times = NULL
@@ -16,9 +16,9 @@ integratedBrierCR(
 \arguments{
 \item{SurvObj}{survival object (Surv(time, status))}
 
-\item{Predictions}{matrix of predicted CIFs (rows=observations, cols=times) for the cause of interest}
+\item{Predictions}{matrix of predicted CIFs (rows=times, cols=observations) for the cause of interest}
 
-\item{eval.times}{vector of evaluation time points}
+\item{eval_times}{vector of evaluation time points}
 
 \item{cause}{cause of interest (1 or 2)}
 

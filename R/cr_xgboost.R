@@ -263,7 +263,7 @@ CRModel_xgboost <- function(data, expvars, timevar, eventvar, event_codes = NULL
 #'
 #' @param modelout the output from 'CRModel_xgboost'
 #' @param newdata data frame with new observations for prediction
-#' @param newtimes optional numeric vector of time points for prediction.
+#' @param new_times optional numeric vector of time points for prediction.
 #'   If NULL (default), uses the times from the training data.
 #'   Can be any positive values - interpolation handles all time points.
 #' @param event_of_interest character or numeric scalar indicating the event code
@@ -277,7 +277,7 @@ CRModel_xgboost <- function(data, expvars, timevar, eventvar, event_codes = NULL
 #'
 #' @importFrom stats approx model.matrix
 #' @export
-Predict_CRModel_xgboost <- function(modelout, newdata, newtimes = NULL, event_of_interest = NULL) {
+Predict_CRModel_xgboost <- function(modelout, newdata, new_times = NULL, event_of_interest = NULL) {
 
   # ============================================================================
   # Input Validation
@@ -318,14 +318,14 @@ Predict_CRModel_xgboost <- function(modelout, newdata, newtimes = NULL, event_of
   }
 
   # Generate default times if not specified
-  if (is.null(newtimes)) {
+  if (is.null(new_times)) {
     # Create a reasonable default grid: include 0 and event times
     target_times <- sort(unique(c(0, modelout$times)))
   } else {
-    if (!is.numeric(newtimes) || any(newtimes < 0)) {
-      stop("Input 'newtimes' must be a numeric vector of non-negative values.")
+    if (!is.numeric(new_times) || any(new_times < 0)) {
+      stop("Input 'new_times' must be a numeric vector of non-negative values.")
     }
-    target_times <- sort(unique(newtimes))
+    target_times <- sort(unique(new_times))
   }
 
   # ============================================================================
@@ -478,13 +478,11 @@ Predict_CRModel_xgboost <- function(modelout, newdata, newtimes = NULL, event_of
     result_cifs <- cif_matrix
     result_times <- base_times
   } else {
-    pred_cifs <- cifMatInterpolaltor(
-      probsMat = t(cif_matrix),
+    result_cifs <- cifMatInterpolaltor(
+      probsMat = cif_matrix,
       times = base_times,
-      newtimes = requested_times
+      new_times = requested_times
     )
-
-    result_cifs <- pred_cifs
     result_times <- requested_times
   }
 

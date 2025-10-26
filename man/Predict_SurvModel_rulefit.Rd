@@ -4,7 +4,7 @@
 \alias{Predict_SurvModel_rulefit}
 \title{Predict Survival Probabilities from a RuleFit Model}
 \usage{
-Predict_SurvModel_rulefit(modelout, newdata, newtimes = NULL)
+Predict_SurvModel_rulefit(modelout, newdata, new_times = NULL)
 }
 \arguments{
 \item{modelout}{The output from `SurvModel_rulefit` (a list containing 'model', 'times', 'varprof', 'expvars', 'factor_levels').}

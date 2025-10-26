@@ -33,7 +33,8 @@ models <- RunSurvModels(
 predictions <- PredictSurvModels(
   models = models,
   newdata = veteran[1:10, ],
-  ensemble_method = "average"
+  ensemble_method = "average",
+  new_times=seq(min(veteran$time), max(veteran$time), by=30)
 )
 ```
 

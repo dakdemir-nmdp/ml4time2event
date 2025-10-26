@@ -122,26 +122,37 @@ CRModel_FineGray <- function(data, expvars, timevar, eventvar, event_codes = NUL
   meanTrain <- attr(covmat_scaled, "scaled:center")
   sdTrain <- attr(covmat_scaled, "scaled:scale")
 
-  # SVD for dimensionality reduction (keep top 20 components or fewer)
+    # SVD for dimensionality reduction (keep top 20 components or fewer)
   svdcovmat <- svd(covmat_scaled)
   n_components <- min(c(20, ncol(covmat_scaled)))
-  Feat <- (covmat_scaled %*% svdcovmat$v)[, 1:n_components]
+  Feat <- as.data.frame((covmat_scaled %*% svdcovmat$v)[, 1:n_components])
+  colnames(Feat) <- paste0("PC", 1:n_components)
 
   # Fit model with default elastic net parameters (lambda=0.01, alpha=0.5)
   # For simplicity, we'll use fixed parameters instead of grid search
-  fg_model <- tryCatch(
+  fg_model <- tryCatch({
+    # Prepare covariate matrix as in temp_test_fastcmprsk.R
+    cov <- as.matrix(Feat)
+    model_data <- data.frame(
+      ftime = XYTrain[[timevar]],
+      fstatus = XYTrain[[eventvar]]
+    )
+    model_data$cov <- I(cov)  # I() prevents data.frame from splitting matrix into columns
+    # Explicitly set failcode and cencode for Crisk
+    censor_code <- min(XYTrain[[eventvar]], na.rm = TRUE)
     fastcmprsk::fastCrrp(
-      fastcmprsk::Crisk(XYTrain[[timevar]], XYTrain[[eventvar]]) ~ Feat,
+      fastcmprsk::Crisk(ftime, fstatus, failcode = failcode, cencode = censor_code) ~ cov,
+      data = model_data,
       lambda = 0.01,
       alpha = 0.5,
       penalty = "ENET",
       standardize = FALSE,
       max.iter = 5000
-    ),
-    error = function(e) {
-      stop("Failed to fit Fine-Gray model: ", e$message)
-    }
-  )
+    )
+  },
+  error = function(e) {
+    stop("Failed to fit Fine-Gray model: ", e$message)
+  })
 
   # ============================================================================
   # Return Results
@@ -174,7 +185,7 @@ CRModel_FineGray <- function(data, expvars, timevar, eventvar, event_codes = NUL
 #'
 #' @param modelout the output from 'CRModel_FineGray'
 #' @param newdata data frame with new observations for prediction
-#' @param newtimes optional numeric vector of time points for prediction.
+#' @param new_times optional numeric vector of time points for prediction.
 #'   If NULL (default), generates 50 equally-spaced points from 0 to max observed time.
 #'   Can be any positive values - interpolation handles all time points.
 #' @param event_of_interest character or numeric scalar indicating the event code
@@ -202,9 +213,9 @@ CRModel_FineGray <- function(data, expvars, timevar, eventvar, event_codes = NUL
 #'
 #' # Predict at specific times
 #' preds_custom <- Predict_CRModel_FineGray(model, test_data,
-#'                                         newtimes = c(30, 60, 90, 180, 365))
+#'                                         new_times = c(30, 60, 90, 180, 365))
 #' }
-Predict_CRModel_FineGray <- function(modelout, newdata, newtimes = NULL, event_of_interest = NULL) {
+Predict_CRModel_FineGray <- function(modelout, newdata, new_times = NULL, event_of_interest = NULL) {
 
   # ============================================================================
   # Input Validation
@@ -235,11 +246,11 @@ Predict_CRModel_FineGray <- function(modelout, newdata, newtimes = NULL, event_o
   }
 
   # Generate default times if not specified
-  if (!is.null(newtimes)) {
-    if (!is.numeric(newtimes) || any(newtimes < 0)) {
-      stop("'newtimes' must be a numeric vector of non-negative values")
+  if (!is.null(new_times)) {
+    if (!is.numeric(new_times) || any(new_times < 0)) {
+      stop("'new_times' must be a numeric vector of non-negative values")
     }
-    newtimes <- sort(unique(newtimes))
+    new_times <- sort(unique(new_times))
   }
 
   # ============================================================================
@@ -307,9 +318,11 @@ Predict_CRModel_FineGray <- function(modelout, newdata, newtimes = NULL, event_o
   cif_matrix[1, ] <- 0
 
   # Compute CIF at each baseline time point
+  # Ensure coefficients are a numeric vector
+  beta <- as.numeric(modelout$fg_model$coef)
   for (i in 1:n_obs) {
     # Linear predictor
-    lp <- sum(Feat[i, ] * unlist(modelout$fg_model$coef))
+    lp <- sum(Feat[i, ] * beta)
 
     # Cumulative hazard for this observation
     cumhaz <- exp(lp) * baseline_haz
@@ -323,27 +336,23 @@ Predict_CRModel_FineGray <- function(modelout, newdata, newtimes = NULL, event_o
   # ============================================================================
   # Apply Interpolation
   # ============================================================================
-  if (is.null(newtimes)) {
+  if (is.null(new_times)) {
     # Return predictions in native time grid: [times, observations]
     result_cifs <- cif_matrix  # cif_matrix is already [times+1, observations]
     result_times <- c(0, baseline_times)
   } else {
     # Interpolate to new time points
-    if (!is.numeric(newtimes) || any(newtimes < 0)) {
-      stop("'newtimes' must be a numeric vector of non-negative values")
+    if (!is.numeric(new_times) || any(new_times < 0)) {
+      stop("'new_times' must be a numeric vector of non-negative values")
     }
-    newtimes <- sort(unique(newtimes))
+    new_times <- sort(unique(new_times))
 
-    # Use the standard CIF interpolation utility function
-    pred_cifs <- cifMatInterpolaltor(
-      probsMat = t(cif_matrix),  # cifMatInterpolaltor expects [observations, times]
+    result_cifs <- cifMatInterpolaltor(
+      probsMat = cif_matrix,
       times = c(0, baseline_times),
-      newtimes = newtimes
+      new_times = new_times
     )
-
-    # cifMatInterpolaltor returns [newtimes, observations], keep as [times, observations]
-    result_cifs <- pred_cifs
-    result_times <- newtimes
+    result_times <- new_times
   }
 
   # ============================================================================

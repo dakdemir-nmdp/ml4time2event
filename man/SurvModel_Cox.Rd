@@ -47,6 +47,7 @@ alpha=1 is lasso, alpha=0 is ridge, alpha=0.5 (default) is elastic net.}
 \value{
 a list with the following components:
   \item{cph_model}{the fitted Cox model object (coxph or cv.glmnet)}
+  \item{times}{vector of time points for prediction grid (equally-spaced from 0 to max time)}
   \item{time_range}{vector with min and max observed event times}
   \item{varprof}{variable profile list containing factor levels and numeric ranges}
   \item{model_type}{character string "cox_standard" or "cox_penalized"}
@@ -54,13 +55,15 @@ a list with the following components:
   \item{timevar}{character name of time variable}
   \item{eventvar}{character name of event variable}
   \item{varsel_method}{character string indicating variable selection method used}
+  \item{alpha}{numeric value of elastic net mixing parameter used (if varsel="penalized")}
+  \item{nfolds}{integer number of cross-validation folds used (if varsel="penalized")}
 }
 \description{
 Fit a Cox proportional hazards model for survival outcomes with optional variable selection.
 }
 \note{
 Predictions can be made at any time points via interpolation.
-  No fixed time grid is stored in the model.
+  The times vector is used as default when predicting, but can be overridden.
 }
 \examples{
 \dontrun{

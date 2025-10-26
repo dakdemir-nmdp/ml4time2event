@@ -40,6 +40,8 @@ SurvModel_SurvReg <- function(data, expvars, timevar, eventvar, dist = "exponent
   print(paste("Initial AIC (Intercept only):", round(best_aic, 2)))
 
 
+
+  # Forward selection loop
   while (length(candidate_vars) > 0) {
     aic_values <- numeric(length(candidate_vars))
     names(aic_values) <- candidate_vars
@@ -72,8 +74,14 @@ SurvModel_SurvReg <- function(data, expvars, timevar, eventvar, dist = "exponent
       best_aic <- best_candidate_aic
       improved <- TRUE
     } else {
-       print(paste("No improvement adding remaining variables. Best AIC:", round(best_aic, 2)))
-       break # Stop if no variable improves AIC
+      # If no improvement, but no variable has been selected yet, pick the best single variable
+      if (length(selected_vars) == 0) {
+        print(paste("No improvement over intercept-only, but keeping best single variable:", best_candidate_var, "AIC:", round(best_candidate_aic, 2)))
+        selected_vars <- best_candidate_var
+      } else {
+        print(paste("No improvement adding remaining variables. Best AIC:", round(best_aic, 2)))
+      }
+      break # Stop if no variable improves AIC
     }
   } # End while loop
 
@@ -119,9 +127,11 @@ SurvModel_SurvReg <- function(data, expvars, timevar, eventvar, dist = "exponent
 #'
 #' @importFrom stats predict
 #' @export
-Predict_SurvModel_SurvReg <- function(modelout, newdata, newtimes = NULL) {
+Predict_SurvModel_SurvReg <- function(modelout, newdata, new_times = NULL) {
+  cat("Predict_SurvModel_SurvReg called with", nrow(newdata), "rows\n")
   # Select only the variables used in the final model
   selected_vars <- attr(terms(modelout$survregOut), "term.labels")
+
   # Check if selected_vars exist in newdata
   missing_pred_vars <- setdiff(selected_vars, colnames(newdata))
   if (length(missing_pred_vars) > 0) {
@@ -137,34 +147,70 @@ Predict_SurvModel_SurvReg <- function(modelout, newdata, newtimes = NULL) {
       X <- X[rep(1, nrow(newdata)), , drop = FALSE]
   }
 
-
-  # Predict quantiles (survival times) for the new data
-  p_seq <- seq(0.01, 0.99, length.out = 100)
-  predicted_times_for_quantiles <- stats::predict(modelout$survregOut, newdata = X, type = "quantile", p = p_seq)
-
-  # Determine time points for interpolation
-  if (is.null(newtimes)) {
-    times.interest <- modelout$times # Use times from training fit
+  # Get linear predictors using model matrix approach
+  # Create model matrix for prediction using only the predictor terms
+  if (length(selected_vars) > 0) {
+    pred_formula <- as.formula(paste("~", paste(selected_vars, collapse = "+")))
+    pred_terms <- terms(pred_formula)
+    X_model <- model.matrix(pred_terms, data = X)
   } else {
-    times.interest <- sort(unique(c(0, newtimes))) # Use provided times, ensure 0 included
+    # Intercept-only model
+    X_model <- matrix(1, nrow = nrow(X), ncol = 1)
+    colnames(X_model) <- "(Intercept)"
+  }
+  
+  coefficients <- coef(modelout$survregOut)
+  
+  # Ensure coefficient names match model matrix columns
+  coef_names <- names(coefficients)
+  mm_names <- colnames(X_model)
+  
+  # Match coefficients to model matrix columns
+  matched_coefs <- rep(0, ncol(X_model))
+  names(matched_coefs) <- mm_names
+  
+  for (name in coef_names) {
+    if (name %in% mm_names) {
+      coef_val <- coefficients[name]
+      # Handle NA coefficients (unseen factor levels) by setting to 0
+      if (!is.na(coef_val)) {
+        matched_coefs[name] <- coef_val
+      } else {
+        warning("Coefficient for ", name, " is NA (unseen factor level), setting to 0")
+        matched_coefs[name] <- 0
+      }
+    }
+  }
+  
+  # Compute linear predictors
+  linear_preds <- X_model %*% matched_coefs
+  
+    # Get model parameters
+  dist <- modelout$survregOut$dist
+  
+  # Determine time points for prediction
+  if (is.null(new_times)) {
+    times <- modelout$times # Use times from training fit
+  } else {
+    times <- new_times
+  }
+  times <- sort(unique(c(0, times))) # Ensure 0 included
+  
+  # Compute survival probabilities based on distribution
+  n_obs <- nrow(X)
+  n_times <- length(times)
+  surv_probs <- matrix(0.0, nrow = n_times, ncol = n_obs)  # Ensure numeric
+  
+  for (i in 1:n_obs) {
+    lp <- linear_preds[i]
+    if (dist == "exponential") {
+      rate <- exp(-lp)
+      surv_probs[, i] <- exp(-rate * times)
+    } else {
+      surv_probs[, i] <- NA
+    }
   }
 
-  # Interpolate survival probabilities at desired times.interest
-  # Assuming survivalProbsInterpolator is loaded/available
-  predicttest <- apply(predicted_times_for_quantiles, 1, function(pred_times_row) {
-      valid_idx <- !is.na(pred_times_row) & !is.infinite(pred_times_row)
-      if (sum(valid_idx) < 2) return(rep(NA, length(times.interest)))
-
-      sorted_idx <- order(pred_times_row[valid_idx])
-      t_pred <- pred_times_row[valid_idx][sorted_idx]
-      s_pred <- (1 - p_seq)[valid_idx][sorted_idx]
-
-      t_interp <- c(0, t_pred)
-      s_interp <- c(1, s_pred)
-
-      survivalProbsInterpolator(times.interest, probs = s_interp, times = t_interp)
-  })
-  # Result is matrix: rows=times.interest, cols=observations
-
-  return(list(Probs = predicttest, Times = times.interest))
+  # Result is matrix: rows=times, cols=observations
+  return(list(Probs = surv_probs, Times = times))
 }

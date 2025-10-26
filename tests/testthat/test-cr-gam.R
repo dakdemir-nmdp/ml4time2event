@@ -219,7 +219,7 @@ test_that("Predict_CRModel_GAM handles custom time grid", {
   )
 
   custom_times <- c(0, 1, 5, 10, 25)
-  preds <- Predict_CRModel_GAM(model, test_data, newtimes = custom_times)
+  preds <- Predict_CRModel_GAM(model, test_data, new_times = custom_times)
 
   expect_equal(preds$Times, custom_times)
   expect_equal(nrow(preds$CIFs), length(custom_times))
@@ -262,7 +262,7 @@ test_that("Predict_CRModel_GAM validates inputs", {
   expect_error(Predict_CRModel_GAM(modelout = model, newdata = incomplete),
                "missing in newdata")
 
-  expect_error(Predict_CRModel_GAM(modelout = model, newdata = test_data, newtimes = c(-1, 1)),
+  expect_error(Predict_CRModel_GAM(modelout = model, newdata = test_data, new_times = c(-1, 1)),
                "must be a numeric vector of non-negative")
 })
 

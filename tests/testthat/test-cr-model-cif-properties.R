@@ -86,7 +86,7 @@ test_that("CRModel_FineGray produces monotonic CIFs", {
   fg_preds <- Predict_CRModel_FineGray(
     modelout = fg_model_out,
     newdata = test_data,
-    newtimes = eval_times
+    new_times = eval_times
   )
   
   # Check for monotonicity
@@ -114,7 +114,7 @@ test_that("CRModel_Cox produces monotonic CIFs", {
   cox_preds <- Predict_CRModel_Cox(
     modelout = cox_model_out,
     newdata = test_data,
-    newtimes = eval_times,
+    new_times = eval_times,
     event_of_interest = "2"
   )
   
@@ -143,7 +143,7 @@ test_that("CRModel_GAM produces monotonic CIFs", {
   gam_preds <- Predict_CRModel_GAM(
     modelout = gam_model_out,
     newdata = test_data,
-    newtimes = eval_times,
+    new_times = eval_times,
     event_of_interest = 2
   )
   
@@ -172,7 +172,7 @@ test_that("CRModel_RF produces monotonic CIFs", {
   rf_preds <- Predict_CRModel_RF(
     modelout = rf_model_out,
     newdata = test_data,
-    newtimes = eval_times,
+    new_times = eval_times,
     event_of_interest = "2"
   )
   
@@ -201,7 +201,7 @@ test_that("CRModel_xgboost produces monotonic CIFs", {
   xgb_preds <- Predict_CRModel_xgboost(
     modelout = xgb_model_out,
     newdata = test_data,
-    newtimes = eval_times,
+    new_times = eval_times,
     event_of_interest = "2"
   )
   
@@ -230,7 +230,7 @@ test_that("CRModel_FineGray produces monotonic CIFs", {
   fg_preds <- Predict_CRModel_FineGray(
     modelout = fg_model_out,
     newdata = test_data,
-    newtimes = eval_times
+    new_times = eval_times
   )
   
   # Check for monotonicity
@@ -258,7 +258,7 @@ test_that("CRModel_Cox produces monotonic CIFs", {
   cox_preds <- Predict_CRModel_Cox(
     modelout = cox_model_out,
     newdata = test_data,
-    newtimes = eval_times,
+    new_times = eval_times,
     event_of_interest = "2"
   )
   
@@ -287,7 +287,7 @@ test_that("CRModel_GAM produces monotonic CIFs", {
   gam_preds <- Predict_CRModel_GAM(
     modelout = gam_model_out,
     newdata = test_data,
-    newtimes = eval_times,
+    new_times = eval_times,
     event_of_interest = 2
   )
   
@@ -316,7 +316,7 @@ test_that("CRModel_RF produces monotonic CIFs", {
   rf_preds <- Predict_CRModel_RF(
     modelout = rf_model_out,
     newdata = test_data,
-    newtimes = eval_times,
+    new_times = eval_times,
     event_of_interest = "2"
   )
   
@@ -345,7 +345,7 @@ test_that("CRModel_xgboost produces monotonic CIFs", {
   xgb_preds <- Predict_CRModel_xgboost(
     modelout = xgb_model_out,
     newdata = test_data,
-    newtimes = eval_times,
+    new_times = eval_times,
     event_of_interest = "2"
   )
   

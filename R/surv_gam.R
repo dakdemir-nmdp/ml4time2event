@@ -160,7 +160,7 @@ SurvModel_GAM <-
 #' @importFrom stats predict
 #' @importFrom survival survfit
 #' @export
-Predict_SurvModel_GAM <- function(modelout, newdata, newtimes = NULL) {
+Predict_SurvModel_GAM <- function(modelout, newdata, new_times = NULL) {
   if (missing(modelout)) stop("argument \"modelout\" is missing")
   if (missing(newdata)) stop("argument \"newdata\" is missing")
 
@@ -190,10 +190,10 @@ Predict_SurvModel_GAM <- function(modelout, newdata, newtimes = NULL) {
   Probs <- estSURVTest
   Times <- time.interest
 
-  # If newtimes specified, interpolate to those times
-  if (!is.null(newtimes)) {
-    Probs <- survprobMatInterpolator(probsMat = Probs, times = Times, newtimes = newtimes)
-    Times <- newtimes
+  # If new_times specified, interpolate to those times
+  if (!is.null(new_times)) {
+    Probs <- survprobMatInterpolator(probsMat = Probs, times = Times, new_times = new_times)
+    Times <- new_times
   }
 
   return(list(

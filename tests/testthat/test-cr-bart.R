@@ -157,7 +157,7 @@ test_that("Predict_CRModel_BART handles custom time points", {
                             ntree = 20, ndpost = 50, nskip = 25)
 
   predictions <- Predict_CRModel_BART(modelout = model_bart, newdata = test_data,
-                                     newtimes = time_points)
+                                     new_times = time_points)
 
   # Check dimensions match requested time points
   expect_equal(length(predictions$Times), length(time_points))
@@ -188,8 +188,8 @@ test_that("Predict_CRModel_BART validates inputs", {
   expect_error(Predict_CRModel_BART(modelout = model_bart, newdata = test_data_missing),
                "^(The following )?'expvars' are missing in 'newdata':.*$")
 
-  # Test invalid newtimes
+  # Test invalid new_times
   expect_error(Predict_CRModel_BART(modelout = model_bart, newdata = test_data,
-                                   newtimes = c(-1, 1)),
-               "^(Input )?'newtimes' must be a numeric vector of non-negative values\\.?$")
+                                   new_times = c(-1, 1)),
+               "^(Input )?'new_times' must be a numeric vector of non-negative values\\.?$")
 })

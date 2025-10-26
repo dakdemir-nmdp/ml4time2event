@@ -6,29 +6,29 @@
 \usage{
 BrierScore(
   predsurv,
-  predsurvtimes,
+  pred_times,
   obstimes,
   obsevents,
-  eval.times = NULL,
+  eval_times = NULL,
   TestMat = NULL
 )
 }
 \arguments{
 \item{predsurv}{Predicted survival probability matrix (rows=times, cols=observations)}
 
-\item{predsurvtimes}{The times for which the survival probabilities are predicted}
+\item{pred_times}{The times for which the survival probabilities are predicted}
 
 \item{obstimes}{Observed times vector}
 
 \item{obsevents}{Observed event indicator vector (0=censored, 1=event)}
 
-\item{eval.times}{Optional vector of evaluation times (defaults to predsurvtimes)}
+\item{eval_times}{Optional vector of evaluation times (defaults to pred_times)}
 
-\item{TestMat}{Optional test dataset (used if formula needs predictors)}
+\item{TestMat}{Optional test dataset (ignored; retained for backward compatibility)}
 }
 \value{
-Output from the pec::pec function containing Brier scores
+List with Brier scores stored in \code{AppErr$model}; mimics the structure returned by \pkg{pec}.
 }
 \description{
-Calculate Brier score for survival predictions at specific times
+Calculate Brier score for survival predictions at specific times.
 }

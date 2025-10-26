@@ -268,7 +268,7 @@ test_that("Predict_CRModel_DeepSurv handles custom time points", {
   preds <- Predict_CRModel_DeepSurv(
     primary_model,
     test_data,
-    newtimes = custom_times,
+    new_times = custom_times,
     other_models = list(cause2 = competing_model)
   )
 

@@ -19,7 +19,6 @@
 #' @importFrom xgboost xgb.DMatrix xgb.train
 #' @importFrom survival coxph Surv basehaz
 #' @importFrom stats optim complete.cases
-#' @importFrom pec pec crps
 #' @noRd
 xgb.train.surv <- function(params = list(), data, label, weight = NULL, nrounds,
                            watchlist = list(), verbose = 1, print_every_n = 1L,
@@ -166,17 +165,24 @@ predict.xgb.Booster.surv <- function(object, newdata, type = "risk", times = NUL
 #' @param eta learning rate (default: 0.01)
 #' @param max_depth maximum depth of trees (default: 5)
 #' @param nrounds number of boosting rounds (default: 100)
+#' @param ntimes integer, number of time points to use for prediction grid (default: 50)
+#' @param verbose logical, print progress messages (default: FALSE)
 #' @param ... additional parameters passed to xgboost
 #'
-#' @return a list of three items: model: fitted xgboost model object (class xgb.Booster.surv),
-#'  times: unique event times from the training data,
-#'  varprof: profile of explanatory variables.
+#' @return a list of components:
+#'   \item{model}{fitted xgboost model object (class xgb.Booster.surv)}
+#'   \item{times}{vector of time points for prediction grid}
+#'   \item{varprof}{profile of explanatory variables}
+#'   \item{expvars}{character vector of explanatory variables used}
+#'   \item{timevar}{character name of time variable}
+#'   \item{eventvar}{character name of event variable}
 #'
 #' @importFrom xgboost xgb.DMatrix
 #' @importFrom stats model.matrix
 #' @export
-SurvModel_xgboost<-function(data, expvars, timevar, eventvar, eta = 0.01, max_depth = 5, nrounds = 100, ...){
+SurvModel_xgboost<-function(data, expvars, timevar, eventvar, eta = 0.01, max_depth = 5, nrounds = 100, ntimes = 50, verbose = FALSE, ...){
   # Assuming VariableProfile is loaded/available
+  if (verbose) cat("Creating variable profile...\n")
   varprof<-VariableProfile(data, expvars) # Placeholder
 
   # Prepare data matrix (handle factors)
@@ -198,15 +204,26 @@ SurvModel_xgboost<-function(data, expvars, timevar, eventvar, eta = 0.01, max_de
                  ...)
 
   # Train the survival xgboost model using the internal helper function
-  bst <- xgb.train.surv(data=X, label=yTrain, params = params, nrounds = nrounds, verbose = 0)
+  verbose_level <- if(verbose) 1 else 0
+  if (verbose) cat("Training XGBoost survival model with", nrounds, "rounds...\n")
+  bst <- xgb.train.surv(data=X, label=yTrain, params = params, nrounds = nrounds, verbose = verbose_level)
 
-  # Get unique event times from training data
-  times <- sort(unique(data[data[[eventvar]] == 1, timevar]))
+  # Get event times and create time grid for predictions
+  event_times <- data[data[[eventvar]] == 1, timevar]
+  time_range <- range(event_times, na.rm = TRUE)
+  times <- seq(time_range[1], time_range[2], length.out = ntimes)
 
   # Store feature names in the model for prediction consistency
   bst$feature_names <- colnames(X)
 
-  result <- list(model = bst, times = times, varprof = varprof, expvars = expvars)
+  result <- list(
+    model = bst, 
+    times = times, 
+    varprof = varprof, 
+    expvars = expvars,
+    timevar = timevar,
+    eventvar = eventvar
+  )
   class(result) <- c("ml4t2e_surv_xgboost", "list")
   return(result)
 }
@@ -231,7 +248,7 @@ SurvModel_xgboost<-function(data, expvars, timevar, eventvar, eta = 0.01, max_de
 #' @importFrom stats model.matrix
 #' @importFrom xgboost xgb.DMatrix
 #' @export
-Predict_SurvModel_xgboost <- function(modelout, newdata, newtimes = NULL) {
+Predict_SurvModel_xgboost <- function(modelout, newdata, new_times = NULL) {
   # ============================================================================
   # Input Validation
   # ============================================================================
@@ -326,10 +343,10 @@ Predict_SurvModel_xgboost <- function(modelout, newdata, newtimes = NULL) {
   Probs <- t(preds)
   Times <- times
 
-  # If newtimes specified, interpolate to those times
-  if (!is.null(newtimes)) {
-    Probs <- survprobMatInterpolator(probsMat = Probs, times = Times, newtimes = newtimes)
-    Times <- newtimes
+  # If new_times specified, interpolate to those times
+  if (!is.null(new_times)) {
+    Probs <- survprobMatInterpolator(probsMat = Probs, times = Times, new_times = new_times)
+    Times <- new_times
   }
 
   return(list(Probs = Probs, Times = Times))

@@ -4,14 +4,14 @@
 \alias{Predict_SurvModel_DeepSurv}
 \title{Predict_SurvModel_DeepSurv}
 \usage{
-Predict_SurvModel_DeepSurv(modelout, newdata, newtimes = NULL)
+Predict_SurvModel_DeepSurv(modelout, newdata, new_times = NULL)
 }
 \arguments{
 \item{modelout}{the output from 'SurvModel_DeepSurv'}
 
 \item{newdata}{data frame with new observations for prediction}
 
-\item{newtimes}{optional numeric vector of time points for prediction.
+\item{new_times}{optional numeric vector of time points for prediction.
 If NULL (default), uses the baseline hazard times from training.}
 }
 \value{

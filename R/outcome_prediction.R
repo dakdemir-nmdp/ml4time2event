@@ -30,7 +30,7 @@ PredictAllPossibleOutcomesSurvOrCifs<-function(data, modelslist, modeltypes, tim
     if (model_type == "SURV"){
       # Assuming PredictSurvModels is loaded/available
       pred_out <- tryCatch(
-          PredictSurvModels(models=model_obj, newdata=data, newtimes=times),
+          PredictSurvModels(models=model_obj, newdata=data, new_times=times),
           error = function(e) {
               warning("Error predicting SURV model at index ", i, ": ", e$message)
               return(NA)
@@ -40,7 +40,7 @@ PredictAllPossibleOutcomesSurvOrCifs<-function(data, modelslist, modeltypes, tim
     } else if (model_type == "CR"){
       # Assuming PredictCRModels is loaded/available
        pred_out <- tryCatch(
-          PredictCRModels(models=model_obj, newdata=data, newtimes=times),
+          PredictCRModels(models=model_obj, newdata=data, new_times=times),
            error = function(e) {
               warning("Error predicting CR model at index ", i, ": ", e$message)
               return(NA)
@@ -70,53 +70,57 @@ PredictAllPossibleOutcomesSurvOrCifs<-function(data, modelslist, modeltypes, tim
 #' @param times Numeric vector of time points corresponding to the rows of the prediction matrices.
 #' @param UL Upper limit of integration for RMTL.
 #' @param LL Lower limit of integration (default: 0).
+#' @param quiet Logical; if TRUE, suppress cat() messages (default: FALSE).
 #' @return A list of numeric vectors, where each vector contains the calculated RMTL for each observation
 #'   corresponding to the respective input prediction curve.
 #' @export
-CalculateExpectedTimeLost<-function(PredictedCurves, modeltypes, times, UL, LL=0){
+CalculateExpectedTimeLost <- function(PredictedCurves, modeltypes, times, UL, LL = 0, quiet = FALSE) {
   if (length(PredictedCurves) != length(modeltypes)) {
-      stop("Length of 'PredictedCurves' and 'modeltypes' must be equal.")
+    stop("Length of 'PredictedCurves' and 'modeltypes' must be equal.")
   }
   if (!is.numeric(UL) || length(UL) != 1 || UL <= LL) {
-      stop("'UL' must be a single numeric value greater than 'LL'.")
+    stop("'UL' must be a single numeric value greater than 'LL'.")
   }
-   if (!is.numeric(LL) || length(LL) != 1 || LL < 0) {
-      stop("'LL' must be a single non-negative numeric value.")
+  if (!is.numeric(LL) || length(LL) != 1 || LL < 0) {
+    stop("'LL' must be a single non-negative numeric value.")
   }
 
   ExpectedTimeLostList <- lapply(1:length(PredictedCurves), function(i) {
-      pred_output <- PredictedCurves[[i]]
-      model_type <- toupper(modeltypes[i])
+    pred_output <- PredictedCurves[[i]]
+    model_type <- toupper(modeltypes[i])
 
-      if (is.null(pred_output) || (is.atomic(pred_output) && length(pred_output) == 1 && is.na(pred_output)) || is.null(pred_output$NewProbs)) {
-          warning("Invalid prediction output or missing 'NewProbs' at index ", i, ". Cannot calculate time lost.")
-          return(NA) # Or perhaps NULL or vector of NAs?
+    if (is.null(pred_output) || (is.atomic(pred_output) && length(pred_output) == 1 && is.na(pred_output)) || is.null(pred_output$NewProbs)) {
+      warning("Invalid prediction output or missing 'NewProbs' at index ", i, ". Cannot calculate time lost.")
+      return(NA)
+    }
+
+    ProbMatrix <- pred_output$NewProbs # Ensemble predictions (rows=times, cols=obs)
+
+    # Transform to event probability based on model type
+    if (model_type == "SURV") {
+      # For survival curves: event probability = 1 - S(t)
+      if (!quiet) cat("Model", i, "(Type: SURV): Converting survival curves to event probabilities (1 - S(t))...\n")
+      EventProbMatrix <- 1 - ProbMatrix
+    } else if (model_type == "CR") {
+      # For CIF curves: already event probability, use as-is
+      if (!quiet) cat("Model", i, "(Type: CR): Using CIF curves as event probabilities...\n")
+      EventProbMatrix <- ProbMatrix
+    } else {
+      warning("Unsupported model type '", model_type, "' at index ", i, ". Cannot calculate time lost.")
+      return(NA)
+    }
+
+    # Integrate event probability for each observation using the Integrator helper
+    time_lost_vector <- tryCatch(
+      apply(EventProbMatrix, 2, function(obs_event_probs) {
+        Integrator(times = times, scores = obs_event_probs, minmax = c(LL, UL), scale = FALSE)
+      }),
+      error = function(e) {
+        warning("Error during integration for index ", i, ": ", e$message)
+        return(rep(NA, ncol(EventProbMatrix)))
       }
-
-      ProbMatrix <- pred_output$NewProbs # Ensemble predictions (rows=times, cols=obs)
-
-      # Calculate event probability: 1-Survival for SURV, CIF for CR
-      if (model_type == "SURV"){
-        EventProbMatrix <- 1 - ProbMatrix
-      } else if (model_type == "CR"){
-        EventProbMatrix <- ProbMatrix # Assuming NewProbs contains CIF for event of interest
-      } else {
-        warning("Unsupported model type '", modeltypes[i], "' at index ", i, ". Cannot calculate time lost.")
-        return(NA)
-      }
-
-      # Integrate event probability for each observation using the Integrator helper
-      # Assuming Integrator is loaded/available
-      time_lost_vector <- tryCatch(
-          apply(EventProbMatrix, 2, function(obs_event_probs){
-              Integrator(times=times, scores=obs_event_probs, minmax=c(LL, UL), scale = FALSE) # Integrate, don't scale
-          }),
-          error = function(e) {
-              warning("Error during integration for index ", i, ": ", e$message)
-              return(rep(NA, ncol(EventProbMatrix))) # Return NA vector on error
-          }
-      )
-      return(time_lost_vector)
+    )
+    return(time_lost_vector)
   })
 
   return(ExpectedTimeLostList)

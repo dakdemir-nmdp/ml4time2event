@@ -7,7 +7,7 @@
 Predict_CRModel_Cox(
   modelout,
   newdata,
-  newtimes = NULL,
+  new_times = NULL,
   event_of_interest = NULL
 )
 }
@@ -16,8 +16,8 @@ Predict_CRModel_Cox(
 
 \item{newdata}{data frame with new observations for prediction}
 
-\item{newtimes}{optional numeric vector of time points for prediction.
-If NULL (default), uses the times from the training data.
+\item{new_times}{optional numeric vector of time points for prediction.
+If NULL (default), uses the times generated during model training.
 Can be any positive values - interpolation handles all time points.}
 
 \item{event_of_interest}{integer, the code for the event of interest for CIF prediction.
@@ -43,6 +43,6 @@ preds <- Predict_CRModel_Cox(model, test_data)
 
 # Predict at specific times
 preds_custom <- Predict_CRModel_Cox(model, test_data,
-                                   newtimes = c(30, 60, 90, 180, 365))
+                                   new_times = c(30, 60, 90, 180, 365))
 }
 }

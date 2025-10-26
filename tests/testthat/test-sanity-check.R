@@ -41,7 +41,7 @@ test_that("Ensemble end-to-end test", {
   cox_pred <- Predict_SurvModel_Cox(
     modelout = cox_model,
     newdata = test_data,
-    newtimes = times
+    new_times = times
   )
   message("Prediction successful for cox")
   
@@ -49,7 +49,7 @@ test_that("Ensemble end-to-end test", {
   survreg_pred <- Predict_SurvModel_SurvReg(
     modelout = survreg_model,
     newdata = test_data,
-    newtimes = times
+    new_times = times
   )
   message("Prediction successful for survreg")
   
@@ -110,7 +110,7 @@ test_that("Ensemble end-to-end test", {
   message("Plots saved to directory: ", plots_dir)
   
   # Verify ensemble averaging works correctly
-  expect_true(is.matrix(ensemble_pred), "Ensemble prediction should be a matrix")
+  expect_true(is.matrix(ensemble_pred), info = "Ensemble prediction should be a matrix")
   expect_equal(dim(ensemble_pred), c(length(times), ncol(cox_risk)), 
-               "Ensemble prediction should have the correct dimensions")
+               info = "Ensemble prediction should have the correct dimensions")
 })

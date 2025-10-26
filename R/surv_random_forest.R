@@ -24,7 +24,7 @@
 #' @importFrom stats as.formula complete.cases
 #' @importFrom survival Surv
 #' @export
-SurvModel_RF<-function(data, expvars, timevar, eventvar, ntree=300, samplesize=500, nsplit=5, trace=TRUE, 
+SurvModel_RF<-function(data, expvars, timevar, eventvar, ntree=300, samplesize=500, nsplit=5, trace=FALSE, 
                        splitrule="bs.gradient", nodesize_try=c(1, 5, 10, 15), importance="permute", ...){
   # Assuming VariableProfile is loaded/available
   varprof<-VariableProfile(data, expvars) # Placeholder
@@ -108,7 +108,7 @@ SurvModel_RF<-function(data, expvars, timevar, eventvar, ntree=300, samplesize=5
 #'
 #' @param modelout the output from 'SurvModel_RF' (a list containing 'model', 'times', 'varprof', 'expvars')
 #' @param newdata the data for which the predictions are to be calculated
-#' @param newtimes optional vector of new time points for interpolation. If NULL, uses model's native time points.
+#' @param new_times optional vector of new time points for interpolation. If NULL, uses model's native time points.
 #'
 #' @return a list containing the following items:
 #'  Probs: predicted Survival probability matrix (rows=times, cols=observations),
@@ -116,7 +116,7 @@ SurvModel_RF<-function(data, expvars, timevar, eventvar, ntree=300, samplesize=5
 #'
 #' @importFrom randomForestSRC predict.rfsrc
 #' @export
-Predict_SurvModel_RF <- function(modelout, newdata, newtimes = NULL) {
+Predict_SurvModel_RF <- function(modelout, newdata, new_times = NULL) {
   # ============================================================================
   # Input Validation
   # ============================================================================
@@ -214,10 +214,10 @@ Predict_SurvModel_RF <- function(modelout, newdata, newtimes = NULL) {
     }
   }
 
-  # If newtimes specified, interpolate to those times
-  if (!is.null(newtimes)) {
-    Probs <- survprobMatInterpolator(probsMat = Probs, times = Times, newtimes = newtimes)
-    Times <- newtimes
+  # If new_times specified, interpolate to those times
+  if (!is.null(new_times)) {
+    Probs <- survprobMatInterpolator(probsMat = Probs, times = Times, new_times = new_times)
+    Times <- new_times
   }
 
   return(list(

@@ -4,14 +4,14 @@
 \alias{Predict_SurvModel_BART}
 \title{Predict_SurvModel_BART}
 \usage{
-Predict_SurvModel_BART(modelout, newdata, newtimes = NULL)
+Predict_SurvModel_BART(modelout, newdata, new_times = NULL)
 }
 \arguments{
 \item{modelout}{the output from 'SurvModel_BART'}
 
 \item{newdata}{the data for which the predictions are to be calculated}
 
-\item{newtimes}{optional vector of new time points for interpolation. If NULL, uses model's native time points.}
+\item{new_times}{optional vector of new time points for interpolation. If NULL, uses model's native time points.}
 }
 \value{
 a list containing the following items:

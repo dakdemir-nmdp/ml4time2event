@@ -261,7 +261,7 @@ CRModel_rulefit <- function(data, expvars, timevar, eventvar, event_codes = NULL
 #'
 #' @param modelout the output from 'CRModel_rulefit' (a list containing model and metadata)
 #' @param newdata data frame with new observations for prediction
-#' @param newtimes optional numeric vector of time points for prediction.
+#' @param new_times optional numeric vector of time points for prediction.
 #'   If NULL (default), uses the model's native time points.
 #'   Can be any positive values - interpolation handles all time points.
 #' @param event_of_interest character or numeric scalar indicating the event code
@@ -277,7 +277,7 @@ CRModel_rulefit <- function(data, expvars, timevar, eventvar, event_codes = NULL
 #' @importFrom partykit as.party
 #' @importFrom stats model.matrix
 #' @export
-Predict_CRModel_rulefit <- function(modelout, newdata, newtimes = NULL, event_of_interest = NULL) {
+Predict_CRModel_rulefit <- function(modelout, newdata, new_times = NULL, event_of_interest = NULL) {
 
   # ============================================================================
   # Input Validation
@@ -395,7 +395,7 @@ Predict_CRModel_rulefit <- function(modelout, newdata, newtimes = NULL, event_of
   pred_fg <- Predict_CRModel_FineGray(
     modelout$rulefit_model$CRrulefitModel,
     TestMat,
-    newtimes = newtimes
+    new_times = new_times
   )
 
   # ============================================================================

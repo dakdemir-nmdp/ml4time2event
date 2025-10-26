@@ -63,7 +63,7 @@ test_that("CRModel_Cox fits basic model", {
   expect_setequal(names(model),
                   c("cph_models_all_causes", "times", "varprof", "model_type",
                     "expvars", "timevar", "eventvar", "event_codes",
-                    "varsel_method", "time_range"))
+                    "varsel_method", "time_range", "alpha", "nfolds"))
 
   # Check model type
   expect_equal(model$model_type, "cr_cox")
@@ -160,7 +160,7 @@ test_that("Predict_CRModel_Cox handles custom time points", {
   )
 
   custom_times <- c(1, 5, 10, 20, 50)
-  preds <- Predict_CRModel_Cox(model, test_data, newtimes = custom_times, event_of_interest = "1")
+  preds <- Predict_CRModel_Cox(model, test_data, new_times = custom_times, event_of_interest = "1")
 
   expect_equal(preds$Times, custom_times)
   expect_equal(nrow(preds$CIFs), length(custom_times))
@@ -357,7 +357,7 @@ test_that("Predict_CRModel_Cox handles custom time points", {
 
   custom_times <- c(1, 5, 10)
   predictions <- Predict_CRModel_Cox(modelout = model_cox, newdata = test_data,
-                                     newtimes = custom_times, event_of_interest = "1")
+                                     new_times = custom_times, event_of_interest = "1")
 
   expect_type(predictions, "list")
   expect_true(is.matrix(predictions$CIFs))

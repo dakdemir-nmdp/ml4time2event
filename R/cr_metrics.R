@@ -1,38 +1,104 @@
-.select_prediction_vector <- function(Predictions, eval_time, pred_times = NULL) {
-  mat <- as.matrix(Predictions)
-  if (is.null(pred_times)) {
-    attr_times <- attr(Predictions, "Times")
-    if (!is.null(attr_times)) {
-      pred_times <- attr_times
-    } else if (!is.null(colnames(mat))) {
-      numeric_colnames <- suppressWarnings(as.numeric(colnames(mat)))
-      if (!all(is.na(numeric_colnames))) {
-        pred_times <- numeric_colnames
-      }
+.cr_prepare_prediction_matrix <- function(Predictions,
+                                          n_obs,
+                                          pred_times = NULL,
+                                          default_time = NULL,
+                                          context = "Predictions") {
+
+  original_obj <- Predictions
+
+  if (is.data.frame(Predictions)) {
+    Predictions <- as.matrix(Predictions)
+  } else if (is.vector(Predictions)) {
+    if (length(Predictions) != n_obs) {
+      stop(sprintf(
+        "%s vector must have length equal to the number of observations (%d).",
+        context, n_obs
+      ))
+    }
+    Predictions <- matrix(Predictions, nrow = 1)
+  } else {
+    Predictions <- as.matrix(Predictions)
+  }
+
+  if (!is.matrix(Predictions)) {
+    stop(sprintf("%s must be coercible to a matrix.", context))
+  }
+
+  mat <- Predictions
+
+  if (ncol(mat) == n_obs) {
+    # Already time-by-observation
+  } else {
+    stop(sprintf(
+      "%s must have rows=times and columns=observations. Got %dx%d, expected nrow=%d (times), ncol=%d (observations).",
+      context, nrow(mat), ncol(mat), length(pred_times) %||% nrow(mat), n_obs
+    ))
+  }
+
+  times <- pred_times
+  if (is.null(times)) {
+    times <- attr(original_obj, "Times")
+  }
+  if (is.null(times)) {
+    times <- attr(original_obj, "times")
+  }
+  if (is.null(times)) {
+    rownames_numeric <- suppressWarnings(as.numeric(rownames(mat)))
+    if (!any(is.na(rownames_numeric))) {
+      times <- rownames_numeric
     }
   }
-
-  if (ncol(mat) == 1 && is.null(pred_times)) {
-    return(list(pred = as.numeric(mat[, 1]), times = eval_time))
+  if (is.null(times)) {
+    if (nrow(mat) == 1 && !is.null(default_time)) {
+      times <- default_time
+    }
+  }
+  if (is.null(times)) {
+    stop(sprintf(
+      "Unable to determine the time grid for %s. Provide 'pred_times' or supply numeric rownames/'Times' attribute.",
+      tolower(context)
+    ))
   }
 
-  if (is.null(pred_times)) {
-    stop("Unable to determine prediction time grid. Provide 'pred_times' or numeric column names/Times attribute.")
+  times <- suppressWarnings(as.numeric(times))
+  if (any(is.na(times))) {
+    stop(sprintf("'pred_times' must be numeric for %s.", tolower(context)))
   }
 
-  if (length(pred_times) != ncol(mat)) {
-    stop("'pred_times' must have the same length as the number of columns in 'Predictions'.")
+  if (length(times) != nrow(mat)) {
+    stop(sprintf(
+      "'pred_times' must have length %d to match the number of rows in %s (rows represent time points).",
+      nrow(mat), tolower(context)
+    ))
+  }
+
+  list(matrix = mat, times = times)
+}
+
+.cr_select_prediction_row <- function(pred_matrix,
+                                      pred_times,
+                                      eval_time,
+                                      context = "Predictions") {
+  if (is.null(pred_times) || length(pred_times) != nrow(pred_matrix)) {
+    stop(sprintf(
+      "Prediction times for %s must be provided and match the number of matrix rows.",
+      tolower(context)
+    ))
   }
 
   idx <- which.min(abs(pred_times - eval_time))
-  list(pred = as.numeric(mat[, idx]), times = pred_times)
+  list(
+    pred = as.numeric(pred_matrix[idx, ]),
+    matched_time = pred_times[idx],
+    times = pred_times
+  )
 }
 
 #' @title timedepConcordanceCR
 #'
 #' @description Get time dependent concordance for competing risk outcomes (only event 1)
 #' @param SurvObj survival object (Surv(time, status))
-#' @param Predictions matrix of predicted CIFs (rows=observations, cols=times) for the cause of interest
+#' @param Predictions matrix of predicted CIFs (rows=times, cols=observations) for the cause of interest
 #' @param time evaluation time point
 #' @param cause cause of interest (1 or 2)
 #' @param TestMat test dataset (optional, used if formula needs predictors)
@@ -44,9 +110,6 @@ timedepConcordanceCR<-function(SurvObj, Predictions, time, cause=1, TestMat=NULL
   # Input validation
   if (!inherits(SurvObj, "Surv")) {
     stop("'SurvObj' must be a Surv object")
-  }
-  if (!is.matrix(Predictions) && !is.vector(Predictions) && !is.data.frame(Predictions)) {
-    stop("'Predictions' must be a matrix, vector, or data.frame")
   }
   if (!is.numeric(time) || length(time) != 1) {
     stop("'time' must be a single numeric value")
@@ -62,14 +125,21 @@ timedepConcordanceCR<-function(SurvObj, Predictions, time, cause=1, TestMat=NULL
   obstimes <- SurvObj[, "time"]
   obsevents <- SurvObj[, "status"]
 
-  if (is.data.frame(Predictions)) {
-    Predictions <- as.matrix(Predictions)
-  } else if (is.vector(Predictions)) {
-    Predictions <- matrix(Predictions, ncol = 1)
-  }
-
-  pred_info <- .select_prediction_vector(Predictions, time, pred_times)
-  pred_at_time <- pred_info$pred
+  n_obs <- length(obstimes)
+  pred_prep <- .cr_prepare_prediction_matrix(
+    Predictions = Predictions,
+    n_obs = n_obs,
+    pred_times = pred_times,
+    default_time = time,
+    context = "Predictions"
+  )
+  pred_row <- .cr_select_prediction_row(
+    pred_matrix = pred_prep$matrix,
+    pred_times = pred_prep$times,
+    eval_time = time,
+    context = "Predictions"
+  )
+  pred_at_time <- pred_row$pred
 
   event_idx <- which(obsevents == cause & obstimes <= time & !is.na(obsevents))
   if (length(event_idx) == 0) {
@@ -87,6 +157,7 @@ timedepConcordanceCR<-function(SurvObj, Predictions, time, cause=1, TestMat=NULL
       if (obstimes[j] < obstimes[i]) next
       if (obsevents[j] == cause && obstimes[j] <= obstimes[i]) next
       total_pairs <- total_pairs + 1
+      # Standard concordance: higher risk = earlier event
       if (pred_at_time[i] > pred_at_time[j]) {
         concordant <- concordant + 1
       } else if (pred_at_time[i] == pred_at_time[j]) {
@@ -105,26 +176,37 @@ timedepConcordanceCR<-function(SurvObj, Predictions, time, cause=1, TestMat=NULL
 
 #' @title BrierScoreCR
 #'
-#' @description Calculate Brier score for competing risk predictions at specific times
+#' @description Calculate Brier score for competing risk predictions at evaluation time(s)
 #' @param SurvObj survival object (Surv(time, status))
-#' @param Predictions matrix of predicted CIFs (rows=observations, cols=times) for the cause of interest
-#' @param time evaluation time point
+#' @param Predictions matrix of predicted CIFs (rows=times, cols=observations) for the cause of interest
+#' @param eval_times evaluation time point(s). If a vector, returns a vector of scores.
+#'   For backward compatibility, also accepts 'time' as a deprecated alias.
 #' @param cause cause of interest (1 or 2)
 #' @param TestMat test dataset (optional, used if formula needs predictors)
+#' @param pred_times optional numeric vector of times corresponding to rows in `Predictions`
+#' @param time deprecated, use eval_times instead
 #'
-#' @return Brier score value
-#' @param pred_times optional numeric vector of times corresponding to columns in `Predictions`
+#' @return Brier score value(s). If eval_times is a vector, returns a vector; if scalar, returns a scalar.
 #' @export
-BrierScoreCR <- function(SurvObj, Predictions, time, cause = 1, TestMat = NULL, pred_times = NULL) {
+BrierScoreCR <- function(SurvObj, Predictions, eval_times = NULL, cause = 1, TestMat = NULL, pred_times = NULL, time = NULL) {
+  
+  # Handle backward compatibility: support both 'time' and 'eval_times'
+  if (!is.null(time) && is.null(eval_times)) {
+    # Warn user about deprecation
+    message("Parameter 'time' is deprecated. Please use 'eval_times' instead.")
+    eval_times <- time
+  }
+  
+  if (is.null(eval_times)) {
+    stop("'eval_times' must be specified (or 'time' for backward compatibility)")
+  }
+  
   # Input validation
   if (!inherits(SurvObj, "Surv")) {
     stop("'SurvObj' must be a Surv object")
   }
-  if (!is.matrix(Predictions) && !is.vector(Predictions) && !is.data.frame(Predictions)) {
-    stop("'Predictions' must be a matrix, vector, or data.frame")
-  }
-  if (!is.numeric(time) || length(time) != 1) {
-    stop("'time' must be a single numeric value")
+  if (!is.numeric(eval_times)) {
+    stop("'eval_times' must be numeric")
   }
   if (!is.numeric(cause) || length(cause) != 1 || !(cause %in% c(1, 2))) {
     stop("'cause' must be 1 or 2")
@@ -134,14 +216,54 @@ BrierScoreCR <- function(SurvObj, Predictions, time, cause = 1, TestMat = NULL, 
   obstimes <- SurvObj[, "time"]
   obsevents <- SurvObj[, "status"]
 
-  if (is.vector(Predictions)) {
-    Predictions <- matrix(Predictions, ncol = 1)
+  n_obs <- length(obstimes)
+  
+  # Handle vector of evaluation times - compute Brier score for each
+  if (length(eval_times) > 1) {
+    brier_scores <- sapply(eval_times, function(t) {
+      pred_prep <- .cr_prepare_prediction_matrix(
+        Predictions = Predictions,
+        n_obs = n_obs,
+        pred_times = pred_times,
+        default_time = t,
+        context = "Predictions"
+      )
+      pred_row <- .cr_select_prediction_row(
+        pred_matrix = pred_prep$matrix,
+        pred_times = pred_prep$times,
+        eval_time = t,
+        context = "Predictions"
+      )
+      pred_at_time <- pred_row$pred
+
+      event_indicator <- as.numeric(obsevents == cause & obstimes <= t & !is.na(obsevents))
+      valid_idx <- !is.na(pred_at_time)
+      if (!any(valid_idx)) {
+        return(NA_real_)
+      }
+      mean((event_indicator[valid_idx] - pred_at_time[valid_idx])^2)
+    })
+    return(brier_scores)
   }
+  
+  # Single evaluation time - return scalar
+  time <- eval_times[1]
+  pred_prep <- .cr_prepare_prediction_matrix(
+    Predictions = Predictions,
+    n_obs = n_obs,
+    pred_times = pred_times,
+    default_time = time,
+    context = "Predictions"
+  )
+  pred_row <- .cr_select_prediction_row(
+    pred_matrix = pred_prep$matrix,
+    pred_times = pred_prep$times,
+    eval_time = time,
+    context = "Predictions"
+  )
+  pred_at_time <- pred_row$pred
 
-  pred_info <- .select_prediction_vector(Predictions, time, pred_times)
-  pred_at_time <- pred_info$pred
-
-  event_indicator <- as.numeric(obsevents == cause & obstimes <= time)
+  event_indicator <- as.numeric(obsevents == cause & obstimes <= time & !is.na(obsevents))
   valid_idx <- !is.na(pred_at_time)
   if (!any(valid_idx)) {
     return(NA_real_)
@@ -155,50 +277,49 @@ BrierScoreCR <- function(SurvObj, Predictions, time, cause = 1, TestMat = NULL, 
 #'
 #' @description Calculate integrated concordance index for competing risk predictions over time range
 #' @param SurvObj survival object (Surv(time, status))
-#' @param Predictions matrix of predicted CIFs (rows=observations, cols=times) for the cause of interest
-#' @param eval.times vector of evaluation time points
+#' @param Predictions matrix of predicted CIFs (rows=times, cols=observations) for the cause of interest
+#' @param eval_times vector of evaluation time points
 #' @param cause cause of interest (1 or 2)
 #' @param TestMat test dataset (optional, used if formula needs predictors)
 #'
 #' @return integrated concordance index (scalar)
 #' @export
-integratedConcordanceCR <- function(SurvObj, Predictions, eval.times = NULL, cause = 1, TestMat = NULL, pred_times = NULL) {
+integratedConcordanceCR <- function(SurvObj, Predictions, eval_times = NULL, cause = 1, TestMat = NULL, pred_times = NULL) {
   # Input validation
   if (!inherits(SurvObj, "Surv")) {
     stop("'SurvObj' must be a Surv object")
   }
-  Predictions <- as.matrix(Predictions)
   if (!is.numeric(cause) || length(cause) != 1 || !(cause %in% c(1, 2))) {
     stop("'cause' must be 1 or 2")
   }
 
   # Extract time and event from Surv object
   obstimes <- SurvObj[, "time"]
-  # obsevents <- SurvObj[, "status"]  # Not used in this function
 
-  if (is.null(pred_times)) {
-    attr_times <- attr(Predictions, "Times")
-    if (!is.null(attr_times)) {
-      pred_times <- attr_times
-    } else if (!is.null(colnames(Predictions))) {
-      numeric_colnames <- suppressWarnings(as.numeric(colnames(Predictions)))
-      if (!all(is.na(numeric_colnames))) {
-        pred_times <- numeric_colnames
-      }
-    }
-  }
+  n_obs <- length(obstimes)
+  pred_prep <- .cr_prepare_prediction_matrix(
+    Predictions = Predictions,
+    n_obs = n_obs,
+    pred_times = pred_times,
+    context = "Predictions"
+  )
+  pred_matrix <- pred_prep$matrix
+  pred_times <- pred_prep$times
 
-  if (is.null(eval.times)) {
-    if (!is.null(pred_times)) {
-      eval.times <- pred_times
-    } else {
-      eval.times <- seq(min(obstimes), max(obstimes), length.out = ncol(Predictions))
-    }
+  if (is.null(eval_times)) {
+    eval_times <- pred_times
   }
 
   # Calculate concordance at each time point
-  concordance_values <- sapply(eval.times, function(t) {
-    timedepConcordanceCR(SurvObj, Predictions, t, cause, TestMat, pred_times = pred_times)
+  concordance_values <- sapply(eval_times, function(t) {
+    timedepConcordanceCR(
+      SurvObj = SurvObj,
+      Predictions = pred_matrix,
+      time = t,
+      cause = cause,
+      TestMat = TestMat,
+      pred_times = pred_times
+    )
   })
 
   # Remove NA values
@@ -208,7 +329,7 @@ integratedConcordanceCR <- function(SurvObj, Predictions, eval.times = NULL, cau
   }
 
   concordance_values <- concordance_values[valid_idx]
-  # eval_times_valid <- eval.times[valid_idx]  # Not used
+  # eval_times_valid <- eval_times[valid_idx]  # Not used
 
   # Calculate integrated concordance (mean over time)
   integrated_c <- mean(concordance_values, na.rm = TRUE)
@@ -221,50 +342,49 @@ integratedConcordanceCR <- function(SurvObj, Predictions, eval.times = NULL, cau
 #'
 #' @description Calculate integrated Brier score for competing risk predictions over time range
 #' @param SurvObj survival object (Surv(time, status))
-#' @param Predictions matrix of predicted CIFs (rows=observations, cols=times) for the cause of interest
-#' @param eval.times vector of evaluation time points
+#' @param Predictions matrix of predicted CIFs (rows=times, cols=observations) for the cause of interest
+#' @param eval_times vector of evaluation time points
 #' @param cause cause of interest (1 or 2)
 #' @param TestMat test dataset (optional, used if formula needs predictors)
 #'
 #' @return integrated Brier score (scalar)
 #' @export
-integratedBrierCR <- function(SurvObj, Predictions, eval.times = NULL, cause = 1, TestMat = NULL, pred_times = NULL) {
+integratedBrierCR <- function(SurvObj, Predictions, eval_times = NULL, cause = 1, TestMat = NULL, pred_times = NULL) {
   # Input validation
   if (!inherits(SurvObj, "Surv")) {
     stop("'SurvObj' must be a Surv object")
   }
-  Predictions <- as.matrix(Predictions)
   if (!is.numeric(cause) || length(cause) != 1 || !(cause %in% c(1, 2))) {
     stop("'cause' must be 1 or 2")
   }
 
   # Extract time and event from Surv object
   obstimes <- SurvObj[, "time"]
-  # obsevents <- SurvObj[, "status"]  # Not used in this function
 
-  if (is.null(pred_times)) {
-    attr_times <- attr(Predictions, "Times")
-    if (!is.null(attr_times)) {
-      pred_times <- attr_times
-    } else if (!is.null(colnames(Predictions))) {
-      numeric_colnames <- suppressWarnings(as.numeric(colnames(Predictions)))
-      if (!all(is.na(numeric_colnames))) {
-        pred_times <- numeric_colnames
-      }
-    }
-  }
+  n_obs <- length(obstimes)
+  pred_prep <- .cr_prepare_prediction_matrix(
+    Predictions = Predictions,
+    n_obs = n_obs,
+    pred_times = pred_times,
+    context = "Predictions"
+  )
+  pred_matrix <- pred_prep$matrix
+  pred_times <- pred_prep$times
 
-  if (is.null(eval.times)) {
-    if (!is.null(pred_times)) {
-      eval.times <- pred_times
-    } else {
-      eval.times <- seq(min(obstimes), max(obstimes), length.out = ncol(Predictions))
-    }
+  if (is.null(eval_times)) {
+    eval_times <- pred_times
   }
 
   # Calculate Brier score at each time point
-  brier_values <- sapply(eval.times, function(t) {
-    BrierScoreCR(SurvObj, Predictions, t, cause, TestMat, pred_times = pred_times)
+  brier_values <- sapply(eval_times, function(t) {
+    BrierScoreCR(
+      SurvObj = SurvObj,
+      Predictions = pred_matrix,
+      time = t,
+      cause = cause,
+      TestMat = TestMat,
+      pred_times = pred_times
+    )
   })
 
   # Remove NA values
@@ -274,7 +394,7 @@ integratedBrierCR <- function(SurvObj, Predictions, eval.times = NULL, cause = 1
   }
 
   brier_values <- brier_values[valid_idx]
-  eval_times_valid <- eval.times[valid_idx]
+  eval_times_valid <- eval_times[valid_idx]
 
   # Calculate integrated Brier score (area under curve using trapezoidal rule)
   if (length(eval_times_valid) < 2) {
@@ -292,8 +412,8 @@ integratedBrierCR <- function(SurvObj, Predictions, eval.times = NULL, cause = 1
 #' @title restrictedMeanTimeLostCR
 #'
 #' @description Calculate Restricted Mean Time Lost (RMTL) for competing risk predictions
-#' @param Predictions matrix of predicted CIFs (rows=observations, cols=times) for the cause of interest
-#' @param times vector of time points corresponding to columns of Predictions
+#' @param Predictions matrix of predicted CIFs (rows=times, cols=observations) for the cause of interest
+#' @param times vector of time points corresponding to rows of Predictions
 #' @param UL upper limit of integration
 #' @param LL lower limit of integration (default: 0)
 #'
@@ -304,8 +424,11 @@ restrictedMeanTimeLostCR <- function(Predictions, times, UL, LL = 0) {
   if (!is.matrix(Predictions)) {
     stop("'Predictions' must be a matrix")
   }
-  if (!is.numeric(times) || length(times) != ncol(Predictions)) {
-    stop("'times' must be numeric and match number of columns in Predictions")
+  if (!is.numeric(times)) {
+    stop("'times' must be numeric")
+  }
+  if (length(times) != nrow(Predictions)) {
+    stop("'times' must match the number of rows in Predictions (rows represent time points)")
   }
   if (!is.numeric(UL) || length(UL) != 1 || UL <= LL) {
     stop("'UL' must be a single numeric value greater than 'LL'")
@@ -320,7 +443,7 @@ restrictedMeanTimeLostCR <- function(Predictions, times, UL, LL = 0) {
   }
 
   # Integrate CIF for each observation using trapezoidal rule
-  time_lost_vector <- apply(Predictions, 1, function(cif_curve) {
+  time_lost_vector <- apply(Predictions, 2, function(cif_curve) {
     # Find indices within [LL, UL]
     valid_idx <- times >= LL & times <= UL
     if (sum(valid_idx) < 2) {

@@ -69,6 +69,9 @@ plot_survival_curves <- function(predictions,
     if (!is.numeric(pred$Times)) {
       stop("'Times' component must be numeric")
     }
+    if (nrow(pred$Probs) != length(pred$Times)) {
+      stop("Each prediction object's 'Times' vector must align with the number of rows in 'Probs'")
+    }
   }
   
   # Set model names

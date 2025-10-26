@@ -6,23 +6,23 @@
 \usage{
 integratedBrier(
   predsurv,
-  predsurvtimes,
+  pred_times,
   obstimes,
   obsevents,
-  eval.times = NULL,
+  eval_times = NULL,
   TestMat = NULL
 )
 }
 \arguments{
 \item{predsurv}{Predicted survival probability matrix (rows=times, cols=observations)}
 
-\item{predsurvtimes}{The times for which the survival probabilities are predicted}
+\item{pred_times}{The times for which the survival probabilities are predicted}
 
 \item{obstimes}{Observed times vector}
 
 \item{obsevents}{Observed event indicator vector (0=censored, 1=event)}
 
-\item{eval.times}{Optional vector of evaluation times for integration}
+\item{eval_times}{Optional vector of evaluation times for integration}
 
 \item{TestMat}{Optional test dataset}
 }

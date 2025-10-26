@@ -4,13 +4,17 @@
 #'
 #' @param data A dataset
 #' @param ... other parameters passed to 'rsample::initial_split'#'
-#' @return a list containing Train: training data and Test: test data
+#' @return a list containing Train: training data, Test: test data, and Split: the underlying rsample split object.
 #'
 #' @importFrom rsample initial_split training testing
 #' @export
 t2edata_split<-function(data, ...){
-train_test_split <- rsample::initial_split(data, ...)
-return(list(Train=rsample::training(train_test_split), Test=rsample::testing(train_test_split), train_test_split=train_test_split))
+  train_test_split <- rsample::initial_split(data, ...)
+  list(
+    Train = rsample::training(train_test_split),
+    Test = rsample::testing(train_test_split),
+    Split = train_test_split
+  )
 }
 
 

@@ -38,12 +38,12 @@ survivalProbsInterpolator<-function(x, probs, times){
 #' @description Interpolate a matrix of survival probabilities for new times.
 #' @param probsMat matrix of survival probabilities (rows=times, cols=observations)
 #' @param times vector of times corresponding to rows of probsMat
-#' @param newtimes vector of new times for interpolation
-#' @return matrix of interpolated survival probabilities (rows=newtimes, cols=observations)
+#' @param new_times vector of new times for interpolation
+#' @return matrix of interpolated survival probabilities (rows=new_times, cols=observations)
 #' @noRd
-survprobMatInterpolator <- function(probsMat, times, newtimes) {
+survprobMatInterpolator <- function(probsMat, times, new_times) {
   # Input: probsMat with rows=times, cols=observations
-  # Output: matrix with rows=newtimes, cols=observations
+  # Output: matrix with rows=new_times, cols=observations
 
   # Ensure matrix format
   if (!is.matrix(probsMat)) {
@@ -59,17 +59,17 @@ survprobMatInterpolator <- function(probsMat, times, newtimes) {
 
   # Interpolate each observation's survival curve (each column)
   n_obs <- ncol(probsMat)
-  # Ensure newtimes is sorted
-  newtimes_order <- order(newtimes)
-  newtimes_sorted <- newtimes[newtimes_order]
+  # Ensure new_times is sorted
+  new_times_order <- order(new_times)
+  new_times_sorted <- new_times[new_times_order]
   
-  probs_interp_sorted <- matrix(NA, nrow = length(newtimes_sorted), ncol = n_obs)
+  probs_interp_sorted <- matrix(NA, nrow = length(new_times_sorted), ncol = n_obs)
 
   for (i in seq_len(n_obs)) {
     # Get survival curve for observation i
     surv_curve <- probsMat[, i]
     # Interpolate to new times
-    probs_interp_sorted[, i] <- survivalProbsInterpolator(newtimes_sorted, surv_curve, times)
+    probs_interp_sorted[, i] <- survivalProbsInterpolator(new_times_sorted, surv_curve, times)
   }
 
   # Ensure monotonicity (survival probabilities should be non-increasing)
@@ -78,8 +78,8 @@ survprobMatInterpolator <- function(probsMat, times, newtimes) {
     probs_interp_sorted[, i] <- cummin(probs_interp_sorted[, i])
   }
 
-  # Revert to original order of newtimes
-  probs_interp <- probs_interp_sorted[order(newtimes_order), , drop = FALSE]
+  # Revert to original order of new_times
+  probs_interp <- probs_interp_sorted[order(new_times_order), , drop = FALSE]
 
 
   probs_interp
@@ -88,9 +88,9 @@ survprobMatInterpolator <- function(probsMat, times, newtimes) {
 
 #' @title survprobMatListAveraging
 #' @description Average a list of survival probability matrices on the cumulative hazard scale.
-#' @param listprobsMat list of survival probability matrices (each matrix: rows=newtimes, cols=observations)
+#' @param listprobsMat list of survival probability matrices (each matrix: rows=new_times, cols=observations)
 #' @param na.rm logical, whether to remove NAs when averaging.
-#' @return averaged survival probability matrix (rows=newtimes, cols=observations)
+#' @return averaged survival probability matrix (rows=new_times, cols=observations)
 #' @importFrom stats na.omit
 #' @noRd
 survprobMatListAveraging<-function(listprobsMat, na.rm = FALSE){

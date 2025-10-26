@@ -56,13 +56,17 @@ test_that("PredictAllPossibleOutcomesSurvOrCifs calls correct predict functions 
   skip_if_not_installed("mockery")
 
   # Mock the underlying prediction functions for this test
-  mockery::stub(PredictAllPossibleOutcomesSurvOrCifs, 'PredictSurvModels', function(models, newdata, newtimes, ...) {
-      list(MockSurvModel = matrix(0.5, nrow=nrow(newdata), ncol=length(newtimes)),
-           NewProbs = matrix(0.5, nrow=nrow(newdata), ncol=length(newtimes)))
+  mockery::stub(PredictAllPossibleOutcomesSurvOrCifs, 'PredictSurvModels', function(models, newdata, new_times, ...) {
+      list(
+        MockSurvModel = matrix(0.5, nrow=length(new_times), ncol=nrow(newdata)),
+        NewProbs = matrix(0.5, nrow=length(new_times), ncol=nrow(newdata))
+      )
   })
-   mockery::stub(PredictAllPossibleOutcomesSurvOrCifs, 'PredictCRModels', function(models, newdata, newtimes, ...) {
-      list(MockCRModel = list(matrix(0.2, nrow=nrow(newdata), ncol=length(newtimes))), # Only CIF1 needed for NewProbs
-           NewProbs = matrix(0.2, nrow=nrow(newdata), ncol=length(newtimes)))
+   mockery::stub(PredictAllPossibleOutcomesSurvOrCifs, 'PredictCRModels', function(models, newdata, new_times, ...) {
+      list(
+        MockCRModel = list(matrix(0.2, nrow=length(new_times), ncol=nrow(newdata))), # Only CIF1 needed for NewProbs
+        NewProbs = matrix(0.2, nrow=length(new_times), ncol=nrow(newdata))
+      )
   })
 
   predictions <- PredictAllPossibleOutcomesSurvOrCifs(data = surv_data_pred, # Use actual test data
@@ -77,14 +81,14 @@ test_that("PredictAllPossibleOutcomesSurvOrCifs calls correct predict functions 
   expect_type(predictions[[1]], "list")
   expect_named(predictions[[1]], c("MockSurvModel", "NewProbs"))
   expect_true(is.matrix(predictions[[1]]$NewProbs))
-  expect_equal(dim(predictions[[1]]$NewProbs), c(nrow(surv_data_pred), length(times_pred))) # Use actual data dim
+  expect_equal(dim(predictions[[1]]$NewProbs), c(length(times_pred), nrow(surv_data_pred))) # Use actual data dim
   expect_true(all(predictions[[1]]$NewProbs == 0.5)) # Check mock value
 
   # Check structure of CR prediction output (based on mock)
    expect_type(predictions[[2]], "list")
    expect_named(predictions[[2]], c("MockCRModel", "NewProbs"))
    expect_true(is.matrix(predictions[[2]]$NewProbs)) # Should contain CIF1
-   expect_equal(dim(predictions[[2]]$NewProbs), c(nrow(surv_data_pred), length(times_pred))) # Use actual data dim
+   expect_equal(dim(predictions[[2]]$NewProbs), c(length(times_pred), nrow(surv_data_pred))) # Use actual data dim
    expect_true(all(predictions[[2]]$NewProbs == 0.2)) # Check mock value
 
   # Check third model (SURV)
@@ -143,8 +147,20 @@ test_that("CalculateExpectedTimeLost calculates RMTL for SURV and CR", {
   # Generate mock prediction outputs (list with NewProbs matrix: times x obs)
   n_test_local <- nrow(surv_data_pred) # Define n_test locally
   n_times <- length(times_pred)
-  mock_pred_surv <- list(NewProbs = t(matrix(seq(0.9, 0.5, length.out=n_test_local*n_times), nrow=n_test_local, ncol=n_times)))
-  mock_pred_cr <- list(NewProbs = t(matrix(seq(0.1, 0.4, length.out=n_test_local*n_times), nrow=n_test_local, ncol=n_times)))
+  mock_pred_surv <- list(
+    NewProbs = matrix(
+      seq(0.9, 0.5, length.out = n_test_local * n_times),
+      nrow = n_times,
+      ncol = n_test_local
+    )
+  )
+  mock_pred_cr <- list(
+    NewProbs = matrix(
+      seq(0.1, 0.4, length.out = n_test_local * n_times),
+      nrow = n_times,
+      ncol = n_test_local
+    )
+  )
   predictions_list_calc <- list(mock_pred_surv, mock_pred_cr, mock_pred_surv)
 
 
@@ -185,8 +201,20 @@ test_that("CalculateExpectedTimeLost handles invalid inputs", {
    # Generate valid mock predictions
    n_test_local <- nrow(surv_data_pred) # Define n_test locally
    n_times <- length(times_pred)
-   mock_pred_surv <- list(NewProbs = t(matrix(seq(0.9, 0.5, length.out=n_test_local*n_times), nrow=n_test_local, ncol=n_times)))
-   mock_pred_cr <- list(NewProbs = t(matrix(seq(0.1, 0.4, length.out=n_test_local*n_times), nrow=n_test_local, ncol=n_times)))
+   mock_pred_surv <- list(
+     NewProbs = matrix(
+       seq(0.9, 0.5, length.out = n_test_local * n_times),
+       nrow = n_times,
+       ncol = n_test_local
+     )
+   )
+   mock_pred_cr <- list(
+     NewProbs = matrix(
+       seq(0.1, 0.4, length.out = n_test_local * n_times),
+       nrow = n_times,
+       ncol = n_test_local
+     )
+   )
    predictions_list_calc <- list(mock_pred_surv, mock_pred_cr, mock_pred_surv)
 
    # Mismatched lengths

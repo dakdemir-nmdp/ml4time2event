@@ -324,7 +324,7 @@ CRModel_GAM <- function(data, expvars, timevar, eventvar, event_codes = NULL,
 #'
 #' @param modelout the output from 'CRModel_GAM'
 #' @param newdata data frame with new observations for prediction
-#' @param newtimes optional numeric vector of time points for prediction.
+#' @param new_times optional numeric vector of time points for prediction.
 #'   If NULL (default), uses the times from the training data.
 #'   Can be any positive values - interpolation handles all time points.
 #' @param event_of_interest character or numeric scalar indicating which event code
@@ -337,7 +337,7 @@ CRModel_GAM <- function(data, expvars, timevar, eventvar, event_codes = NULL,
 #'
 #' @importFrom stats predict
 #' @export
-Predict_CRModel_GAM <- function(modelout, newdata, newtimes = NULL, event_of_interest = NULL) {
+Predict_CRModel_GAM <- function(modelout, newdata, new_times = NULL, event_of_interest = NULL) {
 
   # ============================================================================
   # Input Validation
@@ -378,12 +378,12 @@ Predict_CRModel_GAM <- function(modelout, newdata, newtimes = NULL, event_of_int
   target_event_numeric <- modelout$event_codes_numeric[event_idx]
 
   # Generate default times if not specified
-  use_native_times <- is.null(newtimes)
+  use_native_times <- is.null(new_times)
   if (!use_native_times) {
-    if (!is.numeric(newtimes) || any(newtimes < 0)) {
-      stop("'newtimes' must be a numeric vector of non-negative values")
+    if (!is.numeric(new_times) || any(new_times < 0)) {
+      stop("'new_times' must be a numeric vector of non-negative values")
     }
-    newtimes <- sort(unique(newtimes))
+    new_times <- sort(unique(new_times))
   }
 
   # ============================================================================
@@ -608,15 +608,12 @@ Predict_CRModel_GAM <- function(modelout, newdata, newtimes = NULL, event_of_int
   } else {
     # Interpolate to new time points
     # Use the standard CIF interpolation utility function
-    pred_cifs <- cifMatInterpolaltor(
-      probsMat = t(cif_matrix),  # cifMatInterpolaltor expects [observations, times]
+    result_cifs <- cifMatInterpolaltor(
+      probsMat = cif_matrix,
       times = surv_times,
-      newtimes = newtimes
+      new_times = new_times
     )
-
-    # cifMatInterpolaltor returns [newtimes, observations], keep as [times, observations]
-    result_cifs <- pred_cifs
-    result_times <- newtimes
+    result_times <- new_times
   }
 
   # ============================================================================

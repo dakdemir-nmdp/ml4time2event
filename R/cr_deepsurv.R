@@ -468,7 +468,7 @@ CRModel_DeepSurv <- function(data, expvars, timevar, eventvar, event_of_interest
 #'
 #' @param modelout the output from 'CRModel_DeepSurv'
 #' @param newdata data frame with new observations for prediction
-#' @param newtimes optional numeric vector of time points for prediction.
+#' @param new_times optional numeric vector of time points for prediction.
 #'   If NULL (default), uses the baseline hazard times from training.
 #' @param event_of_interest character or numeric scalar indicating the event code
 #'   for which CIFs should be returned. If NULL (default), uses the event code
@@ -497,7 +497,7 @@ CRModel_DeepSurv <- function(data, expvars, timevar, eventvar, event_of_interest
 #'
 #' @importFrom stats model.matrix
 #' @export
-Predict_CRModel_DeepSurv <- function(modelout, newdata, newtimes = NULL,
+Predict_CRModel_DeepSurv <- function(modelout, newdata, new_times = NULL,
                                      event_of_interest = NULL, other_models = NULL) {
 
   # ============================================================================
@@ -532,13 +532,13 @@ Predict_CRModel_DeepSurv <- function(modelout, newdata, newtimes = NULL,
     stop(paste0("DeepSurv models can only predict for the event they were trained on (event code = ",
                 modelout$default_event_code, "). Requested event code: ", event_of_interest))
   }
-  # Validate newtimes if provided
-  if (!is.null(newtimes)) {
-    if (!is.numeric(newtimes)) {
-      stop("`newtimes` must be numeric")
+  # Validate new_times if provided
+  if (!is.null(new_times)) {
+    if (!is.numeric(new_times)) {
+      stop("`new_times` must be numeric")
     }
-    if (any(newtimes < 0)) {
-      stop("`newtimes` must be a numeric vector of non-negative values")
+    if (any(new_times < 0)) {
+      stop("`new_times` must be a numeric vector of non-negative values")
     }
   }
   
@@ -703,11 +703,11 @@ Predict_CRModel_DeepSurv <- function(modelout, newdata, newtimes = NULL,
   # =========================================================================
   # Optional interpolation to new times
   # =========================================================================
-  if (!is.null(newtimes)) {
-    if (!is.numeric(newtimes) || any(newtimes < 0)) {
-      stop("'newtimes' must be a numeric vector of non-negative values")
+  if (!is.null(new_times)) {
+    if (!is.numeric(new_times) || any(new_times < 0)) {
+      stop("'new_times' must be a numeric vector of non-negative values")
     }
-    target_times <- sort(unique(newtimes))
+    target_times <- sort(unique(new_times))
     if (!any(target_times == 0)) {
       target_times <- c(0, target_times)
     }
@@ -749,12 +749,11 @@ Predict_CRModel_DeepSurv <- function(modelout, newdata, newtimes = NULL,
     )
 
     if (!is.null(cif_matrix)) {
-      cif_interp <- cifMatInterpolaltor(
-        probsMat = t(cif_matrix),
+      cif_matrix <- cifMatInterpolaltor(
+        probsMat = cif_matrix,
         times = times_full,
-        newtimes = target_times
+        new_times = target_times
       )
-      cif_matrix <- cif_interp
     }
 
     times_full <- target_times

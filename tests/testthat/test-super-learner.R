@@ -69,7 +69,7 @@ test_that("PredictSurvModels super_learner with training data works", {
   sl_preds <- PredictSurvModels(
     models = fitted,
     newdata = test_data,
-    newtimes = test_times,
+    new_times = test_times,
     ensemble_method = "super_learner",
     super_learner_training_data = train_data,
     super_learner_timevar = "time",
@@ -103,7 +103,7 @@ test_that("PredictSurvModels super_learner with pre-computed weights works", {
   sl_preds <- PredictSurvModels(
     models = fitted,
     newdata = test_data,
-    newtimes = test_times,
+    new_times = test_times,
     ensemble_method = "super_learner",
     model_weights = sl_weights
   )
@@ -171,7 +171,7 @@ test_that("Super learner falls back gracefully when training data is missing", {
     sl_preds <- PredictSurvModels(
       models = fitted,
       newdata = test_data,
-      newtimes = test_times,
+      new_times = test_times,
       ensemble_method = "super_learner"
     ),
     "requires either pre-computed weights"
@@ -211,7 +211,7 @@ test_that("ComputeSuperLearnerWeights works and weights are used in predictions"
   sl_preds <- PredictSurvModels(
     models = fitted_with_weights,
     newdata = test_data,
-    newtimes = test_times,
+    new_times = test_times,
     ensemble_method = "super_learner"
   )
   

@@ -12,7 +12,7 @@ t2edata_split(data, ...)
 \item{...}{other parameters passed to 'rsample::initial_split'#'}
 }
 \value{
-a list containing Train: training data and Test: test data
+a list containing Train: training data, Test: test data, and Split: the underlying rsample split object.
 }
 \description{
 creates a list object with training and test dataset using

@@ -95,13 +95,13 @@ test_that("Ensemble end-to-end test (local)", {
           pred <- Predict_SurvModel_Cox(
             modelout = model,
             newdata = test_data,
-            newtimes = 1:10
+            new_times = 1:10
           )
         } else if (model_name == "survreg") {
           pred <- Predict_SurvModel_SurvReg(
             modelout = model,
             newdata = test_data,
-            newtimes = 1:10
+            new_times = 1:10
           )
         }
         

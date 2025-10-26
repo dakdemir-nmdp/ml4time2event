@@ -72,7 +72,7 @@ test_that("survivalProbsInterpolator handles NA in probs (uses min of non-NA for
 test_that("survprobMatInterpolator interpolates matrix correctly", {
   interpolated_mat <- survprobMatInterpolator(probs_mat1, times_mat, new_times_mat)
 
-  # Check dimensions: rows = newtimes, cols = observations
+  # Check dimensions: rows = new_times, cols = observations
   expect_equal(nrow(interpolated_mat), length(new_times_mat))
   expect_equal(ncol(interpolated_mat), ncol(probs_mat1))  # ncol(probs_mat1) = num observations
 
@@ -113,7 +113,7 @@ test_that("survprobMatInterpolator enforces monotonicity", {
 })
 
 test_that("survprobMatInterpolator handles single new time", {
-   interpolated_mat <- survprobMatInterpolator(probs_mat1, times_mat, newtimes = 4)
+   interpolated_mat <- survprobMatInterpolator(probs_mat1, times_mat, new_times = 4)
    expect_true(is.matrix(interpolated_mat))
    expect_equal(nrow(interpolated_mat), 1)
    expect_equal(ncol(interpolated_mat), ncol(probs_mat1))  # ncol = num observations
@@ -131,7 +131,7 @@ test_that("survprobMatListAveraging averages correctly on cumulative hazard scal
 
   averaged_mat <- survprobMatListAveraging(list_mats)
 
-  # Check dimensions (should match input matrix dims: rows=newtimes, cols=observations)
+  # Check dimensions (should match input matrix dims: rows=new_times, cols=observations)
   expect_equal(dim(averaged_mat), dim(list_mats[[1]]))
 
   # Check a specific value (e.g., Subject 1 at newtime = 8)

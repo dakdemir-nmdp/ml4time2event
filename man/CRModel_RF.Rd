@@ -13,7 +13,7 @@ CRModel_RF(
   ntree = 300,
   samplesize = 500,
   nsplit = 5,
-  trace = TRUE,
+  trace = FALSE,
   splitrule = "logrankCR",
   nodesize_try = c(1, 5, 10, 15),
   ...

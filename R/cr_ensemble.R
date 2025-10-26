@@ -11,6 +11,7 @@
 #' @param ntreeRF number of trees for Random Forest models
 #' @param varsel  logical indicating whether variable selection to be
 #' applied before fitting models "FG", "rulefit", "bart", "cox", "xgboost", "gam", "survreg"
+#' @param run_rf logical; if `FALSE`, skips fitting the baseline Random Forest models.
 #' @return a list of two items. First is a list containing ExpVars: all of the explanatory vars,
 #'  ExpVars2: a subset of the explanatory variables selected by random forest,
 #'  timevar: time variable,
@@ -18,7 +19,9 @@
 #'  model_status: Named logical vector indicating which models succeeded (TRUE) or failed (FALSE).
 #'  The second is also a list that contain the individual model outputs.
 #' @export
-RunCRModels<-function(datatrain, ExpVars, timevar, eventvar, models=c("FG", "rulefit", "bart", "cox"), ntreeRF=300, varsel=FALSE){
+RunCRModels<-function(datatrain, ExpVars, timevar, eventvar,
+                      models=c("FG", "rulefit", "bart", "cox"), ntreeRF=300,
+                      varsel=FALSE, run_rf = TRUE){
 
   if (missing(datatrain) || is.null(datatrain) || !is.data.frame(datatrain)) {
     stop("'datatrain' must be a data frame")
@@ -55,42 +58,47 @@ RunCRModels<-function(datatrain, ExpVars, timevar, eventvar, models=c("FG", "rul
     stop("No non-zero event codes found in training data for competing risks models.")
   }
   default_event_code <- available_events[1]
-  # Assuming CRModel_RF is loaded/available
-  RF_Model<-tryCatch(
-    CRModel_RF(data=datatrainFact,expvars=ExpVars, timevar=timevar, eventvar=eventvar, samplesize=min(c(500,ceiling(.3*nrow(datatrainFact)))), ntree=ntreeRF),
-    error = function(e) {
-      message("Failed fitting RF_Model (all vars): ", e$message)
-      return(NULL)
-    }
-  )
-  model_status["RF_Model"] <- !is.null(RF_Model)
 
-  # Get variable importance - use the first event's importance
-  if (!is.null(RF_Model) && !is.null(RF_Model$rf_model$importance)) {
-    imp_scores <- RF_Model$rf_model$importance[,1]
-    # Ensure we have at least some variables selected
-    if (all(is.na(imp_scores)) || all(imp_scores <= 0, na.rm = TRUE)) {
-      # If all importances are NA or <= 0, use all variables
-      ExpVars2 <- ExpVars
+  ExpVars2 <- ExpVars
+  RF_Model <- NULL
+  RF_Model2 <- NULL
+
+  if (isTRUE(run_rf)) {
+    RF_Model<-tryCatch(
+      CRModel_RF(data=datatrainFact,expvars=ExpVars, timevar=timevar, eventvar=eventvar, samplesize=min(c(500,ceiling(.3*nrow(datatrainFact)))), ntree=ntreeRF),
+      error = function(e) {
+        message("Failed fitting RF_Model (all vars): ", e$message)
+        return(NULL)
+      }
+    )
+    model_status["RF_Model"] <- !is.null(RF_Model)
+
+    if (!is.null(RF_Model) && !is.null(RF_Model$rf_model$importance)) {
+      imp_scores <- RF_Model$rf_model$importance[,1]
+      if (all(is.na(imp_scores)) || all(imp_scores <= 0, na.rm = TRUE)) {
+        ExpVars2 <- ExpVars
+      } else {
+        n_vars <- min(length(ExpVars), max(1, length(ExpVars) %/% 2))
+        ExpVars2 <- names(sort(imp_scores, decreasing = TRUE, na.last = TRUE))[seq_len(n_vars)]
+      }
     } else {
-      # Sort by importance and take top variables (at least 1, at most half)
-      # Replace 1:min(...) with seq_len(min(...)) to handle edge cases
-      n_vars <- min(length(ExpVars), max(1, length(ExpVars) %/% 2))
-      ExpVars2 <- names(sort(imp_scores, decreasing = TRUE, na.last = TRUE))[seq_len(n_vars)]
+      warning("Could not get importance from RF_Model, using all variables for RF_Model2.")
+      ExpVars2 <- ExpVars
     }
-  } else {
-    warning("Could not get importance from RF_Model, using all variables for RF_Model2.")
-    ExpVars2 <- ExpVars # Fallback to all variables
-  }
 
-  RF_Model2<-tryCatch(
-    CRModel_RF(data=datatrainFact,expvars=ExpVars2, timevar=timevar, eventvar=eventvar, samplesize=min(c(500,ceiling(.3*nrow(datatrainFact)))), ntree=ntreeRF),
-    error = function(e) {
-      message("Failed fitting RF_Model2 (top vars): ", e$message)
-      return(NULL)
-    }
-  )
-  model_status["RF_Model2"] <- !is.null(RF_Model2)
+    RF_Model2<-tryCatch(
+      CRModel_RF(data=datatrainFact,expvars=ExpVars2, timevar=timevar, eventvar=eventvar, samplesize=min(c(500,ceiling(.3*nrow(datatrainFact)))), ntree=ntreeRF),
+      error = function(e) {
+        message("Failed fitting RF_Model2 (top vars): ", e$message)
+        return(NULL)
+      }
+    )
+    model_status["RF_Model2"] <- !is.null(RF_Model2)
+  } else {
+    message("Skipping baseline Random Forest models (run_rf = FALSE).")
+    model_status["RF_Model"] <- NA
+    model_status["RF_Model2"] <- NA
+  }
 
  if (!varsel){
   if ("FG" %in% models){
@@ -207,7 +215,9 @@ RunCRModels<-function(datatrain, ExpVars, timevar, eventvar, models=c("FG", "rul
 
   input<-list(ExpVars=ExpVars,ExpVars2=ExpVars2, timevar=timevar, eventvar=eventvar)
   input2<-vector(mode="list")
-  input2<-c(input2,list(RF_Model=RF_Model,RF_Model2=RF_Model2))
+  if (isTRUE(run_rf)) {
+    input2<-c(input2,list(RF_Model=RF_Model,RF_Model2=RF_Model2))
+  }
 
   if ("FG" %in% models){
     input2<-c(input2,list(FG_Model=FG_Model))
@@ -234,11 +244,12 @@ RunCRModels<-function(datatrain, ExpVars, timevar, eventvar, models=c("FG", "rul
   }
 
   # Print summary of model fitting
-  n_success <- sum(model_status)
-  n_total <- length(model_status)
+  valid_status <- !is.na(model_status)
+  n_total <- sum(valid_status)
+  n_success <- if (n_total > 0) sum(model_status[valid_status]) else 0
   message(sprintf("Model fitting complete: %d/%d models succeeded", n_success, n_total))
-  if (n_success < n_total) {
-    failed_models <- names(model_status)[!model_status]
+  failed_models <- names(model_status)[valid_status & !model_status]
+  if (length(failed_models) > 0) {
     message("Failed models: ", paste(failed_models, collapse=", "))
   }
 
@@ -279,7 +290,7 @@ ComputeCRSuperLearnerWeights <- function(ensemble_models, training_data, eval_ti
     PredictCRModels(
       models = ensemble_models,
       newdata = training_data,
-      newtimes = eval_times,
+      new_times = eval_times,
       ensemble_method = "average"  # Just to get individual predictions
     )$ModelPredictions
   }, error = function(e) {
@@ -327,7 +338,7 @@ ComputeCRSuperLearnerWeights <- function(ensemble_models, training_data, eval_ti
 #' at the same time. Also adds an ensemble prediction for the probabilities.
 #' @param models the output from 'RunCRModels'
 #' @param newdata the data for which the predictions are to be calculated
-#' @param newtimes the times for which the predictions obtained
+#' @param new_times the times for which the predictions obtained
 #' @param models_to_use Character vector of model names to use for ensemble prediction.
 #'   If NULL (default), uses all successfully fitted models. Model names should match
 #'   those in the models list (e.g., "RF_Model", "FG_Model", "Cox_Model").
@@ -348,7 +359,7 @@ ComputeCRSuperLearnerWeights <- function(ensemble_models, training_data, eval_ti
 #' ensemble_method: The ensemble method used.
 #'
 #' @export
-PredictCRModels<-function(models, newdata, newtimes, models_to_use=NULL,
+PredictCRModels<-function(models, newdata, new_times, models_to_use=NULL,
                            ensemble_method="average", model_weights=NULL,
                            super_learner_training_data=NULL, 
                            super_learner_timevar=NULL, 
@@ -363,11 +374,11 @@ PredictCRModels<-function(models, newdata, newtimes, models_to_use=NULL,
   if (!is.data.frame(newdata)) {
     stop("'newdata' must be a data frame")
   }
-  if (missing(newtimes)) {
-    stop("'newtimes' must be provided")
+  if (missing(new_times)) {
+    stop("'new_times' must be provided")
   }
-  if (!is.numeric(newtimes)) {
-    stop("'newtimes' must be numeric")
+  if (!is.numeric(new_times)) {
+    stop("'new_times' must be numeric")
   }
 
   # --- Model Selection and Validation ---
@@ -382,7 +393,8 @@ PredictCRModels<-function(models, newdata, newtimes, models_to_use=NULL,
   }
 
   # Get successful models
-  successful_models <- names(model_status)[model_status]
+  valid_success_idx <- which(!is.na(model_status) & model_status)
+  successful_models <- names(model_status)[valid_success_idx]
 
   # Validate and filter models_to_use
   if (!is.null(models_to_use)) {
@@ -520,55 +532,55 @@ PredictCRModels<-function(models, newdata, newtimes, models_to_use=NULL,
   # Assuming cifMatInterpolaltor is loaded/available
   ModelPredictions<-list()
   if ("RF_Model" %in% active_models && !is.null(models$RF_Model) && exists("Predict_RF") && !is.null(Predict_RF)){
-    newprobsRF<-cifMatInterpolaltor(probsMat=t(Predict_RF$CIFs),times=Predict_RF$Times, newtimes=newtimes)
+    newprobsRF<-cifMatInterpolaltor(probsMat=Predict_RF$CIFs,times=Predict_RF$Times, new_times=new_times)
     if (!is.null(newprobsRF)) {
       ModelPredictions[["RF_Model"]] <- newprobsRF
     }
   }
   if ("RF_Model2" %in% active_models && !is.null(models$RF_Model2) && exists("Predict_RF2") && !is.null(Predict_RF2)){
-    newprobsRF2<-cifMatInterpolaltor(probsMat=t(Predict_RF2$CIFs),times=Predict_RF2$Times, newtimes=newtimes)
+    newprobsRF2<-cifMatInterpolaltor(probsMat=Predict_RF2$CIFs,times=Predict_RF2$Times, new_times=new_times)
     if (!is.null(newprobsRF2)) {
       ModelPredictions[["RF_Model2"]] <- newprobsRF2
     }
   }
   if ("FG_Model" %in% active_models && !is.null(models$FG_Model) && exists("Predict_FG") && !is.null(Predict_FG)){
-    newprobsFG<-cifMatInterpolaltor(probsMat=t(Predict_FG$CIFs),times=Predict_FG$Times, newtimes=newtimes)
+    newprobsFG<-cifMatInterpolaltor(probsMat=Predict_FG$CIFs,times=Predict_FG$Times, new_times=new_times)
     if (!is.null(newprobsFG)) {
       ModelPredictions[["FG_Model"]] <- newprobsFG
     }
   }
   if ("BART_Model" %in% active_models && !is.null(models$BART_Model) && exists("Predict_BART") && !is.null(Predict_BART)){
-    newprobsBART<-cifMatInterpolaltor(probsMat=t(Predict_BART$CIFs),times=Predict_BART$Times, newtimes=newtimes)
+    newprobsBART<-cifMatInterpolaltor(probsMat=Predict_BART$CIFs,times=Predict_BART$Times, new_times=new_times)
     if (!is.null(newprobsBART)) {
       ModelPredictions[["BART_Model"]] <- newprobsBART
     }
   }
   if ("Cox_Model" %in% active_models && !is.null(models$Cox_Model) && exists("Predict_Cox") && !is.null(Predict_Cox)){
-    newprobsCox<-cifMatInterpolaltor(probsMat=t(Predict_Cox$CIFs),times=Predict_Cox$Times, newtimes=newtimes)
+    newprobsCox<-cifMatInterpolaltor(probsMat=Predict_Cox$CIFs,times=Predict_Cox$Times, new_times=new_times)
     if (!is.null(newprobsCox)) {
       ModelPredictions[["Cox_Model"]] <- newprobsCox
     }
   }
   if ("rulefit_Model" %in% active_models && !is.null(models$rulefit_Model) && exists("Predict_rulefit") && !is.null(Predict_rulefit)){
-    newprobsrulefit<-cifMatInterpolaltor(probsMat=t(Predict_rulefit$CIFs),times=Predict_rulefit$Times, newtimes=newtimes)
+    newprobsrulefit<-cifMatInterpolaltor(probsMat=Predict_rulefit$CIFs,times=Predict_rulefit$Times, new_times=new_times)
     if (!is.null(newprobsrulefit)) {
       ModelPredictions[["rulefit_Model"]] <- newprobsrulefit
     }
   }
   if ("xgboost_Model" %in% active_models && !is.null(models$xgboost_Model) && exists("Predict_xgboost") && !is.null(Predict_xgboost)){
-    newprobsxgboost<-cifMatInterpolaltor(probsMat=t(Predict_xgboost$CIFs),times=Predict_xgboost$Times, newtimes=newtimes)
+    newprobsxgboost<-cifMatInterpolaltor(probsMat=Predict_xgboost$CIFs,times=Predict_xgboost$Times, new_times=new_times)
     if (!is.null(newprobsxgboost)) {
       ModelPredictions[["xgboost_Model"]] <- newprobsxgboost
     }
   }
   if ("gam_Model" %in% active_models && !is.null(models$gam_Model) && exists("Predict_gam") && !is.null(Predict_gam)){
-    newprobsgam<-cifMatInterpolaltor(probsMat=t(Predict_gam$CIFs),times=Predict_gam$Times, newtimes=newtimes)
+    newprobsgam<-cifMatInterpolaltor(probsMat=Predict_gam$CIFs,times=Predict_gam$Times, new_times=new_times)
     if (!is.null(newprobsgam)) {
       ModelPredictions[["gam_Model"]] <- newprobsgam
     }
   }
   if ("survreg_Model" %in% active_models && !is.null(models$survreg_Model) && exists("Predict_survreg") && !is.null(Predict_survreg)){
-    newprobsurvreg<-cifMatInterpolaltor(probsMat=t(Predict_survreg$CIFs),times=Predict_survreg$Times, newtimes=newtimes)
+    newprobsurvreg<-cifMatInterpolaltor(probsMat=Predict_survreg$CIFs,times=Predict_survreg$Times, new_times=new_times)
     if (!is.null(newprobsurvreg)) {
       ModelPredictions[["survreg_Model"]] <- newprobsurvreg
     }
@@ -580,8 +592,13 @@ PredictCRModels<-function(models, newdata, newtimes, models_to_use=NULL,
   # Check if we have any valid predictions
   if (length(ModelPredictions) == 0) {
     warning("No valid predictions obtained from any model.")
-    return(list(ModelPredictions=ModelPredictions, NewProbs=NULL, models_used=character(0),
-                ensemble_method=ensemble_method))
+    return(list(
+      ModelPredictions = ModelPredictions,
+      NewProbs = NULL,
+      NewTimes = new_times,
+      models_used = character(0),
+      ensemble_method = ensemble_method
+    ))
   }
   
   # Safety check: Ensure all ModelPredictions are matrices with valid dimensions
@@ -599,7 +616,7 @@ PredictCRModels<-function(models, newdata, newtimes, models_to_use=NULL,
                       
     if (is.matrix(pred_mat) && all(dim(pred_mat) > 0)) {
       # Check if dimensions match expectations
-      n_times_expected <- length(newtimes)
+      n_times_expected <- length(new_times)
       n_obs_expected <- nrow(newdata)
       
       if (nrow(pred_mat) == n_times_expected && ncol(pred_mat) == n_obs_expected) {
@@ -642,8 +659,13 @@ PredictCRModels<-function(models, newdata, newtimes, models_to_use=NULL,
   # Check if we still have valid predictions after filtering
   if (length(ModelPredictions) == 0) {
     warning("No valid prediction matrices obtained from any model.")
-    return(list(ModelPredictions=ModelPredictions, NewProbs=NULL, models_used=character(0),
-                ensemble_method=ensemble_method))
+    return(list(
+      ModelPredictions = ModelPredictions,
+      NewProbs = NULL,
+      NewTimes = new_times,
+      models_used = character(0),
+      ensemble_method = ensemble_method
+    ))
   }
 
   models_used <- names(ModelPredictions)
@@ -688,7 +710,7 @@ PredictCRModels<-function(models, newdata, newtimes, models_to_use=NULL,
               PredictCRModels(
                 models = models,
                 newdata = super_learner_training_data,
-                newtimes = newtimes,
+                new_times = new_times,
                 models_to_use = names(ModelPredictions),
                 ensemble_method = "average"  # Just to get individual predictions
               )$ModelPredictions
@@ -705,7 +727,7 @@ PredictCRModels<-function(models, newdata, newtimes, models_to_use=NULL,
                   timevar = super_learner_timevar,
                   eventvar = super_learner_eventvar,
                   cause_of_interest = 1,  # Assuming event 1 is of interest
-                  eval_times = newtimes
+                  eval_times = new_times
                 )
               }, error = function(e) {
                 warning("Failed to build observed CIF matrix: ", e$message)
@@ -767,6 +789,11 @@ PredictCRModels<-function(models, newdata, newtimes, models_to_use=NULL,
     NewProbs <- rbind(NewProbs) # Ensure it's a matrix
   }
 
-  return(list(ModelPredictions=ModelPredictions, NewProbs=NewProbs, models_used=models_used,
-              ensemble_method=ensemble_method))
+  return(list(
+    ModelPredictions = ModelPredictions,
+    NewProbs = NewProbs,
+    NewTimes = new_times,
+    models_used = models_used,
+    ensemble_method = ensemble_method
+  ))
 }

@@ -7,7 +7,7 @@
 Predict_CRModel_DeepSurv(
   modelout,
   newdata,
-  newtimes = NULL,
+  new_times = NULL,
   event_of_interest = NULL,
   other_models = NULL
 )
@@ -17,7 +17,7 @@ Predict_CRModel_DeepSurv(
 
 \item{newdata}{data frame with new observations for prediction}
 
-\item{newtimes}{optional numeric vector of time points for prediction.
+\item{new_times}{optional numeric vector of time points for prediction.
 If NULL (default), uses the baseline hazard times from training.}
 
 \item{event_of_interest}{character or numeric scalar indicating the event code

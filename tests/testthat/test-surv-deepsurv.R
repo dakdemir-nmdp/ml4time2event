@@ -166,7 +166,7 @@ test_that("Predict_SurvModel_DeepSurv handles custom time points", {
   )
 
   custom_times <- c(1, 5, 10, 15)
-  preds <- Predict_SurvModel_DeepSurv(model, test_data, newtimes = custom_times)
+  preds <- Predict_SurvModel_DeepSurv(model, test_data, new_times = custom_times)
 
   expect_equal(preds$Times, custom_times)
   expect_equal(nrow(preds$Probs), length(custom_times))
@@ -215,7 +215,7 @@ test_that("DeepSurv works in PredictSurvModels ensemble", {
   predictions <- PredictSurvModels(
     models = fitted_models,
     newdata = test_data,
-    newtimes = c(5, 10, 15)
+    new_times = c(5, 10, 15)
   )
 
   # Check DeepSurv predictions are available
@@ -256,8 +256,8 @@ test_that("Predict_SurvModel_DeepSurv validates inputs", {
   # Missing newdata
   expect_error(Predict_SurvModel_DeepSurv(model))
 
-  # Invalid newtimes
+  # Invalid new_times
   expect_error(
-    Predict_SurvModel_DeepSurv(model, test_data, newtimes = c(-1, 5, 10))
+    Predict_SurvModel_DeepSurv(model, test_data, new_times = c(-1, 5, 10))
   )
 })

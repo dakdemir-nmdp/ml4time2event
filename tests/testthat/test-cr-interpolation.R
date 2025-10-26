@@ -16,15 +16,17 @@ new_times_single_cif <- c(0, 1, 2, 3, 4, 5, 6, 7, 8, 9)
 
 # For cifMatInterpolaltor & cifMatListAveraging
 times_mat_cif <- c(2, 5, 10)
-# Rows = observations, Cols = times
+# Rows = times, Cols = observations
 cif_mat1 <- matrix(c(
-  0.1, 0.3, 0.5, # Subject 1
-  0.2, 0.4, 0.7  # Subject 2
-), nrow = 2, byrow = TRUE)
+  0.1, 0.2,
+  0.3, 0.4,
+  0.5, 0.7
+), nrow = length(times_mat_cif), ncol = 2, byrow = TRUE)
 cif_mat2 <- matrix(c(
-  0.15, 0.25, 0.45, # Subject 1
-  0.18, 0.45, 0.65  # Subject 2
-), nrow = 2, byrow = TRUE)
+  0.15, 0.18,
+  0.25, 0.45,
+  0.45, 0.65
+), nrow = length(times_mat_cif), ncol = 2, byrow = TRUE)
 
 new_times_mat_cif <- c(0, 1, 2, 3, 4, 5, 8, 10, 12)
 
@@ -86,9 +88,9 @@ test_that("cifInterpolator handles NA in probs (uses max of non-NA for yright)",
 test_that("cifMatInterpolaltor interpolates matrix correctly", {
   interpolated_mat <- cifMatInterpolaltor(cif_mat1, times_mat_cif, new_times_mat_cif)
 
-  # Check dimensions: rows = newtimes, cols = observations
+  # Check dimensions: rows = new_times, cols = observations
   expect_equal(nrow(interpolated_mat), length(new_times_mat_cif))
-  expect_equal(ncol(interpolated_mat), nrow(cif_mat1))
+  expect_equal(ncol(interpolated_mat), ncol(cif_mat1))
 
   # Check interpolation for subject 1 (probs: 0.1@t=2, 0.3@t=5, 0.5@t=10)
   # Expected at new_times_mat_cif = c(0, 1, 2, 3, 4, 5, 8, 10, 12)
@@ -113,7 +115,7 @@ test_that("cifMatInterpolaltor handles time 0 correctly", {
 
   # Case 2: time 0 is in input times
   times_with_zero <- c(0, times_mat_cif)
-  cif_with_zero <- cbind(rep(0, nrow(cif_mat1)), cif_mat1)
+  cif_with_zero <- rbind(rep(0, ncol(cif_mat1)), cif_mat1)
   interpolated_mat_zero <- cifMatInterpolaltor(cif_with_zero, times_with_zero, new_times_mat_cif)
   expected_subj1 <- c(0, 0.05, 0.1, 0.1 + 1/15, 0.1 + 2/15, 0.3, 0.3 + 3/25, 0.5, 0.5)
   expected_subj2 <- c(0, 0.1, 0.2, 0.2 + 1/15, 0.2 + 2/15, 0.4, 0.4 + 9/50, 0.7, 0.7)
@@ -123,7 +125,7 @@ test_that("cifMatInterpolaltor handles time 0 correctly", {
 
 test_that("cifMatInterpolaltor enforces monotonicity", {
   # Create a matrix where interpolation might initially decrease
-  probs_nonmono <- matrix(c(0.1, 0.3, 0.25), nrow = 1) # Decreases from 0.3 to 0.25
+  probs_nonmono <- matrix(c(0.1, 0.3, 0.25), ncol = 1) # Decreases from 0.3 to 0.25
   times_nonmono <- c(2, 5, 10)
   new_times_nonmono <- c(1, 3, 6, 11)
   # Initial interpolation: 0.05, 0.1667, 0.3 + (0.25-0.3)/5*1 = 0.29, 0.25(yright)
@@ -136,10 +138,10 @@ test_that("cifMatInterpolaltor enforces monotonicity", {
 })
 
 test_that("cifMatInterpolaltor handles single new time", {
-   interpolated_mat <- cifMatInterpolaltor(cif_mat1, times_mat_cif, newtimes = 4)
+   interpolated_mat <- cifMatInterpolaltor(cif_mat1, times_mat_cif, new_times = 4)
    expect_true(is.matrix(interpolated_mat))
    expect_equal(nrow(interpolated_mat), 1)
-   expect_equal(ncol(interpolated_mat), nrow(cif_mat1))
+   expect_equal(ncol(interpolated_mat), ncol(cif_mat1))
    # Expected at t=4: Subj1=0.2333, Subj2=0.3333
    expect_equal(as.vector(interpolated_mat), c(0.1 + 2/15, 0.2 + 2/15), tolerance=1e-6)
 })
@@ -148,7 +150,7 @@ test_that("cifMatInterpolaltor handles single new time", {
 # --- Tests for cifMatListAveraging ---
 
 test_that("cifMatListAveraging averages correctly on CumHaz scale", {
-  # Use interpolated matrices (newtimes x observations)
+  # Use interpolated matrices (new_times x observations)
   list_mats <- list(cifMatInterpolaltor(cif_mat1, times_mat_cif, new_times_mat_cif),
                     cifMatInterpolaltor(cif_mat2, times_mat_cif, new_times_mat_cif))
 

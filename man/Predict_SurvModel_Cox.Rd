@@ -4,15 +4,16 @@
 \alias{Predict_SurvModel_Cox}
 \title{Predict_SurvModel_Cox}
 \usage{
-Predict_SurvModel_Cox(modelout, newdata, newtimes = NULL)
+Predict_SurvModel_Cox(modelout, newdata, new_times = NULL)
 }
 \arguments{
 \item{modelout}{the output from 'SurvModel_Cox'}
 
 \item{newdata}{data frame with new observations for prediction}
 
-\item{newtimes}{optional numeric vector of time points for prediction.
-If NULL (default), generates 50 equally-spaced points from 0 to max observed time.
+\item{new_times}{optional numeric vector of time points for prediction.
+If NULL (default), uses the times generated during model training
+(50 equally-spaced points from 0 to max observed time).
 Can be any positive values - interpolation handles all time points.}
 }
 \value{
@@ -38,6 +39,6 @@ preds <- Predict_SurvModel_Cox(model, test_data)
 
 # Predict at specific times
 preds_custom <- Predict_SurvModel_Cox(model, test_data,
-                                      newtimes = c(30, 60, 90, 180, 365))
+                                      new_times = c(30, 60, 90, 180, 365))
 }
 }

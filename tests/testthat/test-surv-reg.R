@@ -98,7 +98,7 @@ test_that("Predict_SurvModel_SurvReg returns predictions in correct format", {
   predictions <- Predict_SurvModel_SurvReg(
     modelout = model_survreg,
     newdata = test_data_surv,
-    newtimes = time_points_surv
+    new_times = time_points_surv
   )
 
   # Check output structure

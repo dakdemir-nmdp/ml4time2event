@@ -219,10 +219,43 @@ CRModel_SurvReg <- function(data, expvars, timevar, eventvar, event_codes = NULL
           candidate_vars <- setdiff(candidate_vars, best_candidate_var)
           best_aic <- best_candidate_aic
         } else {
-          if (verbose) print(paste("No improvement adding remaining variables. Best AIC:", round(best_aic, 2)))
+          # If no improvement, but no variable has been selected yet, pick the best single variable
+          if (length(selected_vars) == 0) {
+            if (verbose) print(paste("No improvement over intercept-only, but keeping best single variable:", best_candidate_var, "AIC:", round(best_candidate_aic, 2)))
+            selected_vars <- best_candidate_var
+          } else {
+            if (verbose) print(paste("No improvement adding remaining variables. Best AIC:", round(best_aic, 2)))
+          }
           break # Stop if no variable improves AIC
         }
-      } # End while loop
+        # End while loop
+      }
+      # Robustness: If after selection, selected_vars is empty, always keep the best single variable
+      if (length(selected_vars) == 0 && length(candidate_vars) > 0) {
+        # Defensive: pick the best single variable by AIC
+        aic_values <- numeric(length(candidate_vars))
+        names(aic_values) <- candidate_vars
+        for (i in seq_along(candidate_vars)) {
+          var <- candidate_vars[i]
+          formula_str <- paste("survival::Surv(", timevar, ", status_cs) ~", var)
+          model <- tryCatch(
+            survival::survreg(stats::as.formula(formula_str), data = XYTrain_cause, dist = dist, x = FALSE, y = FALSE),
+            error = function(e) NULL
+          )
+          if (!is.null(model)) {
+            aic_values[i] <- stats::AIC(model)
+          } else {
+            aic_values[i] <- Inf
+          }
+        }
+        best_idx <- which.min(aic_values)
+        if (length(best_idx) == 1 && is.finite(aic_values[best_idx])) {
+          selected_vars <- candidate_vars[best_idx]
+          if (verbose) print(paste("No variable improved over intercept-only, keeping best single variable:", selected_vars, "AIC:", round(aic_values[best_idx], 2)))
+        } else {
+          stop("No valid single-variable model could be fit after variable selection.")
+        }
+      }
     } else {
       # For other causes, use all variables to save time
       selected_vars <- expvars
@@ -329,7 +362,7 @@ CRModel_SurvReg <- function(data, expvars, timevar, eventvar, event_codes = NULL
 #'
 #' @param modelout the output from 'CRModel_SurvReg'
 #' @param newdata data frame with new observations for prediction
-#' @param newtimes optional numeric vector of time points for prediction.
+#' @param new_times optional numeric vector of time points for prediction.
 #'   If NULL (default), uses the times from the training data.
 #'   Can be any positive values - interpolation handles all time points.
 #' @param event_of_interest character or numeric scalar indicating the event code
@@ -341,8 +374,9 @@ CRModel_SurvReg <- function(data, expvars, timevar, eventvar, event_codes = NULL
 #'   \item{Times}{the times at which CIFs are calculated}
 #'
 #' @importFrom stats predict
+#' @importFrom survival psurvreg
 #' @export
-Predict_CRModel_SurvReg <- function(modelout, newdata, newtimes = NULL, event_of_interest = NULL) {
+Predict_CRModel_SurvReg <- function(modelout, newdata, new_times = NULL, event_of_interest = NULL) {
 
   # ============================================================================
   # Input Validation
@@ -382,12 +416,12 @@ Predict_CRModel_SurvReg <- function(modelout, newdata, newtimes = NULL, event_of
 
   target_event_numeric <- modelout$event_codes_numeric[event_idx]
 
-  use_native_times <- is.null(newtimes)
+  use_native_times <- is.null(new_times)
   if (!use_native_times) {
-    if (!is.numeric(newtimes) || any(newtimes < 0)) {
-      stop("'newtimes' must be a numeric vector of non-negative values")
+    if (!is.numeric(new_times) || any(new_times < 0)) {
+      stop("'new_times' must be a numeric vector of non-negative values")
     }
-    newtimes <- sort(unique(newtimes))
+    new_times <- sort(unique(new_times))
   }
 
   # ============================================================================
@@ -428,202 +462,135 @@ Predict_CRModel_SurvReg <- function(modelout, newdata, newtimes = NULL, event_of
   }
 
   # ============================================================================
-  # Make Predictions using Aalen-Johansen Estimator
+  # Make Predictions using proper parametric approach
   # ============================================================================
-  # Get survival predictions from ALL cause-specific SurvReg models
-  cause_specific_survs <- vector("list", length(modelout$event_codes_numeric))
-  names(cause_specific_survs) <- as.character(modelout$event_codes_numeric)
+  n_obs <- nrow(newdata_prepared)
 
-  # Predict survival for each cause
-  surv_times <- NULL
+  # Determine time grid for prediction
+  surv_times <- if (use_native_times) modelout$times else new_times
+  surv_times <- sort(unique(surv_times))
+
+  if (length(surv_times) == 0) {
+    stop("No valid time points available for prediction.")
+  }
+
+  # Compute cause-specific survival curves for each observation
+  cause_specific_survival <- list()
+
   for (cause in modelout$event_codes_numeric) {
     cause_char <- as.character(cause)
+    survreg_model <- modelout$survreg_models_all_causes[[cause_char]]
 
-    if (is.null(modelout$survreg_models_all_causes[[cause_char]])) {
-      # If model wasn't fitted for this cause, assume no events (S(t) = 1)
-      warning("No model available for cause ", cause, ". Assuming S(t) = 1 for all times.")
-      # We'll handle this in aalenJohansenCIF by providing a matrix of 1s
+    if (is.null(survreg_model)) {
       next
     }
 
-    # Get linear predictors from the SurvReg model for this cause
-    linear_preds_cause <- stats::predict(modelout$survreg_models_all_causes[[cause_char]],
-                                         newdata = newdata_prepared,
-                                         type = "linear")
-
-    # IMPORTANT: In survival models, higher linear predictors usually mean LONGER survival (lower risk)
-    # But for competing risks CIF, we want higher risk scores to give higher CIF
-    # So we need to negate the linear predictors to get proper risk scores
-    risk_scores_cause <- -linear_preds_cause
-
-    # Use the stored baseline hazard from the training fit
-    sf_cause <- tryCatch(
-      survival::survfit(
-        modelout$survreg_models_all_causes[[cause_char]]$baseline_model,
-        newdata = data.frame("score" = risk_scores_cause),
-        conf.int = 0.95
-      ),
+    # Linear predictors for newdata
+    linear_preds <- tryCatch(
+      stats::predict(survreg_model, newdata = newdata_prepared, type = "lp"),
       error = function(e) {
-        warning("Prediction failed for cause ", cause, ": ", e$message)
-        NULL
+        stop("Failed to obtain linear predictors for cause ", cause_char, ": ", e$message)
       }
     )
 
-    if (is.null(sf_cause)) {
-      next
-    }
+    # Ensure vector form
+    linear_preds <- as.numeric(linear_preds)
 
-    if (is.null(surv_times)) {
-      surv_times <- sf_cause$time
-    }
-
-    # Extract survival probabilities
-    surv_probs_cause <- sf_cause$surv
-
-    # Ensure matrix format
-    if (!is.matrix(surv_probs_cause)) {
-      surv_probs_cause <- matrix(surv_probs_cause, ncol = 1)
-    }
-
-    # Store in the list (rows = times, cols = observations)
-    cause_specific_survs[[cause_char]] <- surv_probs_cause
-  }
-
-  # Remove NULL entries
-  cause_specific_survs <- cause_specific_survs[!sapply(cause_specific_survs, is.null)]
-
-  if (length(cause_specific_survs) == 0) {
-    stop("No valid cause-specific survival predictions could be generated")
-  }
-
-  if (is.null(surv_times)) {
-    stop("Unable to derive survival time grid from cause-specific models")
-  }
-
-  # Use proper Aalen-Johansen approach by calculating overall survival first  
-  # Similar to XGBoost approach since SurvReg also uses baseline Cox models
-  n_obs <- nrow(newdata_prepared)
-  n_times <- length(surv_times)
-  
-  # Calculate cumulative hazards for each cause and each observation
-  cum_hazards_all_causes <- array(0, dim = c(n_times, n_obs, length(modelout$event_codes_numeric)))
-  
-  for (i in seq_along(modelout$event_codes_numeric)) {
-    cause <- modelout$event_codes_numeric[i]
-    cause_char <- as.character(cause)
-    
-    if (!is.null(modelout$survreg_models_all_causes[[cause_char]])) {
-      # Get linear predictors from SurvReg
-      linear_preds <- stats::predict(
-        modelout$survreg_models_all_causes[[cause_char]],
-        newdata = newdata_prepared,
-        type = "linear"
-      )
-      
-      # Convert to risk scores (negate since higher linear pred = longer survival)
-      risk_scores <- -linear_preds
-      
-      # Get baseline cumulative hazard from survfit  
-      sf_baseline <- survival::survfit(
-        modelout$survreg_models_all_causes[[cause_char]]$baseline_model,
-        newdata = data.frame("score" = rep(0, 1)) # Baseline hazard
-      )
-      
-      # Check if sf_baseline has valid data
-      if (length(sf_baseline$time) == 0 || any(is.na(sf_baseline$surv))) {
-        # If no valid baseline data, assume no events for this cause
-        baseline_cum_hazard <- rep(0, n_times)
-      } else {
-        # Interpolate baseline cumulative hazard to our time grid
-        baseline_cum_hazard <- stats::approx(
-          x = c(0, sf_baseline$time),
-          y = c(0, -log(pmax(sf_baseline$surv, 1e-10))), # Avoid log(0)
-          xout = surv_times,
-          method = "constant",
-          f = 0,
-          rule = 2
-        )$y
-      }
-      
-      # Apply individual risk factors: Λ_j(t|x) = Λ_0j(t) * exp(risk_score)
-      for (j in 1:n_obs) {
-        cum_hazards_all_causes[, j, i] <- baseline_cum_hazard * exp(risk_scores[j])
-      }
-    }
-  }
-  
-  # Step 2: Calculate overall survival S(t) = exp(-Σ_j Λ_j(t))
-  overall_cum_hazard <- apply(cum_hazards_all_causes, c(1, 2), sum)
-  overall_survival <- exp(-overall_cum_hazard)
-  
-  # Step 3: Calculate CIF using Aalen-Johansen formula
-  cif_matrix <- matrix(0, nrow = n_times, ncol = n_obs)
-  event_idx_numeric <- which(modelout$event_codes_numeric == target_event_numeric)
-  
-  if (length(event_idx_numeric) > 0) {
-    target_cum_hazards <- cum_hazards_all_causes[, , event_idx_numeric]
-    
+    # Compute survival curves using the parametric form
+    surv_matrix <- matrix(NA_real_, nrow = length(surv_times), ncol = n_obs)
     for (j in seq_len(n_obs)) {
-      for (t in seq_len(n_times)) {
-        if (t == 1) {
-          # For first time point, CIF = hazard increment
-          target_hazard_increment <- target_cum_hazards[t, j]
-          cif_matrix[t, j] <- 1.0 * target_hazard_increment
-        } else {
-          # CIF(t) = CIF(t-1) + S(t-1) * Δλ_j(t)
-          target_hazard_increment <- target_cum_hazards[t, j] - target_cum_hazards[t-1, j]
-          cif_matrix[t, j] <- cif_matrix[t-1, j] + overall_survival[t-1, j] * target_hazard_increment
-        }
-      }
+      surv_vals <- 1 - survival::psurvreg(
+        q = surv_times,
+        mean = linear_preds[j],
+        scale = survreg_model$scale,
+        distribution = survreg_model$dist
+      )
+      surv_matrix[, j] <- pmax(pmin(surv_vals, 1), 0)
+    }
+
+    cause_specific_survival[[cause_char]] <- surv_matrix
+  }
+
+  if (length(cause_specific_survival) == 0) {
+    result_times <- surv_times
+    if (result_times[1] > 0) {
+      result_times <- c(0, result_times)
+    }
+    result_cifs <- matrix(0, nrow = length(result_times), ncol = n_obs)
+    return(list(CIFs = result_cifs, Times = result_times))
+  }
+
+  # Ensure time zero is included for stability
+  if (surv_times[1] > 0) {
+    surv_times <- c(0, surv_times)
+    for (cause_char in names(cause_specific_survival)) {
+      surv_matrix <- cause_specific_survival[[cause_char]]
+      zero_row <- matrix(1, nrow = 1, ncol = n_obs)
+      cause_specific_survival[[cause_char]] <- rbind(zero_row, surv_matrix)
+    }
+  } else {
+    for (cause_char in names(cause_specific_survival)) {
+      surv_matrix <- cause_specific_survival[[cause_char]]
+      surv_matrix[1, ] <- 1
+      cause_specific_survival[[cause_char]] <- surv_matrix
     }
   }
-  
-  # Ensure bounds and monotonicity
-  # Use matrix() to preserve dimensions after pmax/pmin operations
-  original_dims <- dim(cif_matrix)
-  cif_matrix <- matrix(pmax(0, pmin(as.vector(cif_matrix), 1)), 
-                       nrow = original_dims[1], ncol = original_dims[2])
-  for (j in 1:n_obs) {
+
+  n_times <- length(surv_times)
+
+  # Convert survival curves to cumulative hazards
+  cause_cumhaz <- lapply(
+    cause_specific_survival,
+    function(surv_matrix) -log(pmax(surv_matrix, 1e-12))
+  )
+
+  # Overall survival from sum of cumulative hazards
+  overall_cumhaz <- Reduce(`+`, cause_cumhaz)
+  overall_survival <- exp(-overall_cumhaz)
+
+  # Compute CIF for target cause
+  target_cause_char <- as.character(target_event_numeric)
+  target_cumhaz <- cause_cumhaz[[target_cause_char]]
+
+  if (is.null(target_cumhaz)) {
+    stop("No model available for event_of_interest = ", target_cause_char)
+  }
+
+  cif_matrix <- matrix(0, nrow = n_times, ncol = n_obs)
+
+  for (t in seq_len(n_times)) {
+    prev_surv <- if (t == 1) rep(1, n_obs) else overall_survival[t - 1, ]
+    hazard_increment <- target_cumhaz[t, ] - if (t == 1) 0 else target_cumhaz[t - 1, ]
+    hazard_increment <- pmax(hazard_increment, 0)
+
+    if (t == 1) {
+      cif_matrix[t, ] <- hazard_increment
+    } else {
+      cif_matrix[t, ] <- cif_matrix[t - 1, ] + prev_surv * hazard_increment
+    }
+  }
+
+  # Enforce bounds and monotonicity
+  cif_matrix <- pmin(pmax(cif_matrix, 0), 1)
+  for (j in seq_len(n_obs)) {
     cif_matrix[, j] <- cummax(cif_matrix[, j])
   }
 
-  # ============================================================================
-  # ==========================================================================
-  # Apply Interpolation
-  # ==========================================================================
-  # Ensure time zero included with zero CIF
-  if (!any(abs(surv_times) < .Machine$double.eps)) {
-    surv_times <- c(0, surv_times)
-    cif_matrix <- rbind(rep(0, n_obs), cif_matrix)
-  } else {
-    zero_idx <- which.min(abs(surv_times))
-    cif_matrix[zero_idx, ] <- 0
-  }
-
-  if (use_native_times) {
-    # Return predictions in native time grid: [times, observations]
-    result_cifs <- cif_matrix  # cif_matrix is already [times, observations]
-    result_times <- surv_times
-  } else {
-    # Interpolate to new time points using standard CIF interpolation utility
-    pred_cifs <- cifMatInterpolaltor(
-      probsMat = t(cif_matrix),  # expects [observations, times]
+  if (!use_native_times) {
+    interpolated <- cifMatInterpolaltor(
+      probsMat = cif_matrix,
       times = surv_times,
-      newtimes = newtimes
+      new_times = new_times
     )
-
-    # cifMatInterpolaltor returns [newtimes, observations], keep as [times, observations]
-    result_cifs <- pred_cifs
-    result_times <- newtimes
+    result_cifs <- interpolated
+    result_times <- new_times
+  } else {
+    result_cifs <- cif_matrix
+    result_times <- surv_times
   }
 
-  # ============================================================================
-  # Return Results
-  # ============================================================================
-  result <- list(
+  list(
     CIFs = result_cifs,
     Times = result_times
   )
-
-  return(result)
 }

@@ -4,28 +4,22 @@
 \alias{timedepConcordance}
 \title{timedepConcordance}
 \usage{
-timedepConcordance(
-  predsurv,
-  predsurvtimes,
-  obstimes,
-  obsevents,
-  TestMat = NULL
-)
+timedepConcordance(predsurv, pred_times, obstimes, obsevents, TestMat = NULL)
 }
 \arguments{
-\item{predsurv}{Predicted survival probability matrix (rows=times, cols=observations)}
+\item{predsurv}{Predicted survival probability matrix. Rows should represent times and columns observations; if supplied as observations by times it will be aligned automatically.}
 
-\item{predsurvtimes}{The times for which the survival probabilities are predicted}
+\item{pred_times}{The times for which the survival probabilities are predicted}
 
 \item{obstimes}{Observed times vector}
 
 \item{obsevents}{Observed event indicator vector (0=censored, 1=event)}
 
-\item{TestMat}{Optional test dataset (used if formula needs predictors)}
+\item{TestMat}{Optional test dataset (ignored; retained for backward compatibility)}
 }
 \value{
-Output from the pec::cindex function
+List with concordance values stored in \code{AppCindex$matrix}; mimics the structure returned by \pkg{pec}.
 }
 \description{
-Calculate time-dependent concordance for survival predictions
+Calculate time-dependent concordance for survival predictions without relying on external \pkg{pec} utilities.
 }

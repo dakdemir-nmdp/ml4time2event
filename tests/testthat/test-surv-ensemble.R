@@ -64,7 +64,7 @@ test_that("PredictSurvModels excludes requested models that failed to train", {
     preds <- PredictSurvModels(
       models = fitted,
       newdata = test_data_surv,
-      newtimes = event_times,
+      new_times = event_times,
       models_to_use = c("RF_Model", "CPH_Model")
     ),
     "failed during training"
@@ -93,7 +93,7 @@ test_that("PredictSurvModels supports weighted ensembles", {
   preds <- PredictSurvModels(
     models = fitted,
     newdata = test_data_surv,
-    newtimes = event_times,
+    new_times = event_times,
     models_to_use = names(weights),
     ensemble_method = "weighted",
     model_weights = weights

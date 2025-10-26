@@ -141,7 +141,7 @@ test_that("Predict_CRModel_FineGray handles custom time points", {
                               eventvar = "fstatus",
                               event_codes = "1")
   custom_times <- c(1, 5, 10)
-  predictions <- Predict_CRModel_FineGray(modelout = model_fg, newdata = test_data_orig, newtimes = custom_times)
+  predictions <- Predict_CRModel_FineGray(modelout = model_fg, newdata = test_data_orig, new_times = custom_times)
 
   expect_type(predictions, "list")
   expect_true(is.matrix(predictions$CIFs))

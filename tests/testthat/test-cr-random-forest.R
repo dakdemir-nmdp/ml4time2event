@@ -149,7 +149,7 @@ test_that("Predict_CRModel_RF handles custom time points", {
                         event_codes = "1", ntree = 50)
 
   predictions <- Predict_CRModel_RF(modelout = model_rf, newdata = test_data,
-                                   newtimes = time_points, event_of_interest = "1")
+                                   new_times = time_points, event_of_interest = "1")
 
   # Check dimensions match requested time points
   expect_equal(length(predictions$Times), length(time_points))
@@ -185,8 +185,8 @@ test_that("Predict_CRModel_RF validates inputs", {
   expect_error(Predict_CRModel_RF(modelout = model_rf, newdata = test_data_missing, event_of_interest = "1"),
                "variables missing in newdata")
 
-  # Test invalid newtimes
+  # Test invalid new_times
   expect_error(Predict_CRModel_RF(modelout = model_rf, newdata = test_data,
-                                 newtimes = c(-1, 1), event_of_interest = "1"),
-               "'newtimes' must be a numeric vector of non-negative values")
+                                 new_times = c(-1, 1), event_of_interest = "1"),
+               "'new_times' must be a numeric vector of non-negative values")
 })

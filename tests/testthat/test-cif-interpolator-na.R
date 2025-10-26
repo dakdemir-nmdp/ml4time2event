@@ -1,7 +1,7 @@
 test_that("cifInterpolator propagates NAs correctly", {
   times <- c(10, 20, 30, 40)
   probs <- c(0.1, NA, 0.3, 0.4)
-  newtimes <- c(15, 25, 35)
+  new_times <- c(15, 25, 35)
   
   # Expected behavior:
   # 15 is between 10 and 20 (NA), so result should be NA.
@@ -10,7 +10,7 @@ test_that("cifInterpolator propagates NAs correctly", {
   
   expected_result <- c(NA, NA, 0.35)
   
-  actual_result <- cifInterpolator(newtimes, probs, times)
+  actual_result <- cifInterpolator(new_times, probs, times)
   
   expect_equal(actual_result, expected_result)
 })
@@ -18,7 +18,7 @@ test_that("cifInterpolator propagates NAs correctly", {
 test_that("cifInterpolator handles NA at the end", {
   times <- c(10, 20, 30, 40)
   probs <- c(0.1, 0.2, 0.3, NA)
-  newtimes <- c(15, 25, 35, 45)
+  new_times <- c(15, 25, 35, 45)
   
   # Expected behavior:
   # 15 -> 0.15
@@ -28,7 +28,7 @@ test_that("cifInterpolator handles NA at the end", {
   
   expected_result <- c(0.15, 0.25, NA, NA)
   
-  actual_result <- cifInterpolator(newtimes, probs, times)
+  actual_result <- cifInterpolator(new_times, probs, times)
   
   expect_equal(actual_result, expected_result)
 })
