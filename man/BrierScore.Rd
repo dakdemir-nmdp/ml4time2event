@@ -14,20 +14,20 @@ BrierScore(
 )
 }
 \arguments{
-\item{predsurv}{Predicted survival probability matrix (rows=times, cols=observations)}
+\item{predsurv}{Predicted survival probability matrix (rows=times, cols=observations). If needed, orientation is fixed automatically.}
 
-\item{pred_times}{The times for which the survival probabilities are predicted}
+\item{pred_times}{Numeric vector of prediction times matching the rows or columns of `predsurv`.}
 
-\item{obstimes}{Observed times vector}
+\item{obstimes}{Observed follow-up times.}
 
-\item{obsevents}{Observed event indicator vector (0=censored, 1=event)}
+\item{obsevents}{Observed event indicator (0=censored, 1=event).}
 
-\item{eval_times}{Optional vector of evaluation times (defaults to pred_times)}
+\item{eval_times}{Optional numeric vector of evaluation times (defaults to `pred_times`).}
 
-\item{TestMat}{Optional test dataset (ignored; retained for backward compatibility)}
+\item{TestMat}{Optional test dataset (ignored, preserved for backward compatibility).}
 }
 \value{
-List with Brier scores stored in \code{AppErr$model}; mimics the structure returned by \pkg{pec}.
+A `pec`-like list with element `AppErr$model` storing the Brier scores.
 }
 \description{
 Calculate Brier score for survival predictions at specific times.

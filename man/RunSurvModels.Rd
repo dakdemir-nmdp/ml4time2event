@@ -13,6 +13,7 @@ RunSurvModels(
     "WeibSurvReg", "bart", "deepsurv"),
   ntreeRF = 300,
   nvars = 20,
+  run_rf = TRUE,
   ...
 )
 }
@@ -32,6 +33,8 @@ RunSurvModels(
 \item{ntreeRF}{number of trees for Random Forest models.}
 
 \item{nvars}{number of top variables (based on RF importance) to use for the second RF model and potentially others.}
+
+\item{run_rf}{logical; if `FALSE`, skips fitting the baseline Random Forest models.}
 
 \item{...}{Additional arguments passed to individual model fitting functions (currently not explicitly handled, consider adding specific args).}
 }

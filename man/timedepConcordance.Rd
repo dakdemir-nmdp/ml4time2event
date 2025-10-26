@@ -7,19 +7,19 @@
 timedepConcordance(predsurv, pred_times, obstimes, obsevents, TestMat = NULL)
 }
 \arguments{
-\item{predsurv}{Predicted survival probability matrix. Rows should represent times and columns observations; if supplied as observations by times it will be aligned automatically.}
+\item{predsurv}{Predicted survival probability matrix (rows=times, cols=observations). If the matrix is observations x times it will be transposed automatically.}
 
-\item{pred_times}{The times for which the survival probabilities are predicted}
+\item{pred_times}{Numeric vector of prediction times matching the rows or columns of `predsurv`.}
 
-\item{obstimes}{Observed times vector}
+\item{obstimes}{Observed follow-up times.}
 
-\item{obsevents}{Observed event indicator vector (0=censored, 1=event)}
+\item{obsevents}{Observed event indicator (0=censored, 1=event).}
 
-\item{TestMat}{Optional test dataset (ignored; retained for backward compatibility)}
+\item{TestMat}{Optional test dataset (ignored, preserved for backward compatibility).}
 }
 \value{
-List with concordance values stored in \code{AppCindex$matrix}; mimics the structure returned by \pkg{pec}.
+A list with element `AppCindex$matrix` containing the time-specific concordance values.
 }
 \description{
-Calculate time-dependent concordance for survival predictions without relying on external \pkg{pec} utilities.
+Calculate time-dependent concordance for survival predictions without relying on external pec methods.
 }

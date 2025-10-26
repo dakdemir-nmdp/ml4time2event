@@ -4,7 +4,14 @@
 \alias{CalculateExpectedTimeLost}
 \title{CalculateExpectedTimeLost}
 \usage{
-CalculateExpectedTimeLost(PredictedCurves, modeltypes, times, UL, LL = 0)
+CalculateExpectedTimeLost(
+  PredictedCurves,
+  modeltypes,
+  times,
+  UL,
+  LL = 0,
+  quiet = FALSE
+)
 }
 \arguments{
 \item{PredictedCurves}{A list where each element is the prediction output from
@@ -18,6 +25,8 @@ named `NewProbs` (rows=times, cols=observations).}
 \item{UL}{Upper limit of integration for RMTL.}
 
 \item{LL}{Lower limit of integration (default: 0).}
+
+\item{quiet}{Logical; if TRUE, suppress cat() messages (default: FALSE).}
 }
 \value{
 A list of numeric vectors, where each vector contains the calculated RMTL for each observation

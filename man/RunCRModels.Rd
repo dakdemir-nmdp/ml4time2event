@@ -11,7 +11,8 @@ RunCRModels(
   eventvar,
   models = c("FG", "rulefit", "bart", "cox"),
   ntreeRF = 300,
-  varsel = FALSE
+  varsel = FALSE,
+  run_rf = TRUE
 )
 }
 \arguments{
@@ -32,6 +33,8 @@ automatically fitted and dont need to be listed here}
 
 \item{varsel}{logical indicating whether variable selection to be
 applied before fitting models "FG", "rulefit", "bart", "cox", "xgboost", "gam", "survreg"}
+
+\item{run_rf}{logical; if `FALSE`, skips fitting the baseline Random Forest models.}
 }
 \value{
 a list of two items. First is a list containing ExpVars: all of the explanatory vars,
