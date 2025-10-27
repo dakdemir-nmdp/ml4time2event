@@ -21,9 +21,19 @@ lung_df %>%
   dplyr::select(time, status, age, sex, ph.ecog, performance_good) %>%
   dplyr::slice_head(n = 5)
 
-# add missingness to demonstrate missing data handling
+# add missingness to demonstrate missing data handling (at random) in all variables including outcomes
+
 set.seed(42)
-lung_df$ph.ecog[sample(1:nrow(lung_df), 20)] <- NA
+
+for (col in names(lung_df)) {
+  missing_indices <- sample(
+    seq_len(nrow(lung_df)),
+    size = floor(0.1 * nrow(lung_df))
+  )
+  lung_df[missing_indices, col] <- NA
+}
+
+
 
 surv_pipeline <- ml4t2e_fit_pipeline(
   data = lung_df,
@@ -102,6 +112,17 @@ bmt_df %>%
   dplyr::select(ftime, status, age, sex, d, phase) %>%
   dplyr::slice_head(n = 5)
 
+# add missingness to demonstrate missing data handling (at random) in all variables including outcomes
+set.seed(42)
+for (col in names(bmt_df)) {
+  missing_indices <- sample(
+    seq_len(nrow(bmt_df)),
+    size = floor(0.1 * nrow(bmt_df))
+  )
+  bmt_df[missing_indices, col] <- NA
+}
+
+
 cr_pipeline <- ml4t2e_fit_pipeline(
   data = bmt_df,
   analysis_type = "competing_risks",
@@ -149,3 +170,4 @@ cr_plot <- plot_cif_curves(
 )
 
 print(cr_plot)
+
