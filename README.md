@@ -13,6 +13,19 @@ install.packages("ml4time2event")
 devtools::install_github("dakdemir-nmdp/ml4time2event")
 ```
 
+## Reproducible Development Environment
+
+This repo uses [`renv`](https://rstudio.github.io/renv) to lock dependency versions. To recreate the exact package set used during development:
+
+```r
+install.packages("renv")
+renv::restore()
+```
+
+Packages install into the project-local `renv/library` directory (configured via `.Renviron`) so the environment stays isolated from your global R library. Some dependencies, such as `igraph`, may require external toolchains (e.g., `gfortran`) when binaries are unavailable on your platform; install those system requirements before running `renv::restore()`.
+
+When you change dependencies, run `renv::snapshot()` to update `renv.lock` so teammates get the same versions.
+
 ## Pipeline Quickstart
 
 ```r
