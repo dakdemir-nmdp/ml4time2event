@@ -171,3 +171,18 @@ cr_plot <- plot_cif_curves(
 
 print(cr_plot)
 
+
+# model persistance for CR pipeline 
+save_path_cr <- tempfile("bmt_pipeline_", fileext = ".rds")
+ml4t2e_save_pipeline(cr_pipeline, save_path_cr)
+restored_cr_pipeline <- ml4t2e_load_pipeline(save_path_cr)
+print(restored_cr_pipeline)
+restored_cr_predictions <- predict(
+  restored_cr_pipeline,
+  newdata = bmt_holdout,
+  ensemble_method = "average"
+)
+all.equal(
+  cr_predictions$predictions$NewProbs,
+  restored_cr_predictions$predictions$NewProbs
+)
