@@ -487,7 +487,7 @@ PredictSurvModels<-function(models, newdata, new_times, models_to_use=NULL,
   # Helper function for prediction and interpolation
   predict_and_interp <- function(model_name, predict_func, model_obj) {
       if (!is.null(model_obj)) {
-          cat("Predicting", model_name, "...\n")
+          #cat("Predicting", model_name, "...\n")
           pred_out <- tryCatch(
               predict_func(model_obj, newdata=newdataFactor),
               error = function(e) {

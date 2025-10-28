@@ -44,9 +44,13 @@ Imports:
 Suggests:
     checkmate,
     cmprsk,
+    fastshap,
     forcats,
+    kernelshap,
     knitr,
     mlr3,
     mlr3learners,
-    pacman
+    pacman,
+    shapviz,
+    testthat (>= 3.0.0)
 Depends: R (>= 3.5.0), base

@@ -9,7 +9,9 @@ library(dplyr)
 library(ggplot2)
 library(gridExtra)
 
-devtools::load_all()
+if (interactive() && requireNamespace("devtools", quietly = TRUE)) {
+  devtools::load_all()
+}
 
 
 ## ----load-data----------------------------------------------------------------
@@ -218,4 +220,3 @@ performance_summary <- do.call(rbind, lapply(names(all_predictions), function(mo
 }))
 
 performance_summary
-

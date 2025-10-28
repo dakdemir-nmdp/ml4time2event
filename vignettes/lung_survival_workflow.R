@@ -7,7 +7,7 @@ library(ml4time2event)
 library(dplyr)
 library(survival)
 
-if (requireNamespace("devtools", quietly = TRUE)) {
+if (interactive() && requireNamespace("devtools", quietly = TRUE)) {
   devtools::load_all(quiet = TRUE)
 }
 
