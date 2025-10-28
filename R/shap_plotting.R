@@ -108,12 +108,20 @@ ml4t2e_shap_importance <- function(shap_result,
           (length(unique(feat_val)) + 1e-10)
       }
 
-      plot_data <- rbind(plot_data, data.frame(
-        feature = feat,
-        shap_value = feat_shap,
-        feature_value = feat_val,
-        feature_value_norm = feat_val_norm
-      ))
+      # Keep feature values as characters for categorical features to avoid factor
+      # level clashes when combining across predictors.
+      feat_val_display <- if (is.numeric(feat_val)) feat_val else as.character(feat_val)
+
+      plot_data <- rbind(
+        plot_data,
+        data.frame(
+          feature = feat,
+          shap_value = feat_shap,
+          feature_value = feat_val_display,
+          feature_value_norm = feat_val_norm,
+          stringsAsFactors = FALSE
+        )
+      )
     }
 
     # Order features by importance
