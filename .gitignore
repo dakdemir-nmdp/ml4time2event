@@ -6,6 +6,9 @@
 ..Rcheck/
 *.Rcheck/
 
+# Claude configuration
+.claude/
+
 # Compiled binaries
 *.o
 *.so
@@ -26,3 +29,7 @@ Thumbs.db
 # Package build artifacts
 *.tar.gz
 *.tgz
+inst/doc/
+doc/
+Meta/
+vignettes/*.html

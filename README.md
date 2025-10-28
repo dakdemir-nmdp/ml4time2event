@@ -5,12 +5,13 @@ Machine learning for time-to-event analysis. Provides tools for predicting survi
 ## Installation
 
 ```r
-# Install from CRAN (when available)
-install.packages("ml4time2event")
+# Install from GitHub with all runtime dependencies
+install.packages("pak")  # or remotes
+pak::pak("dakdemir-nmdp/ml4time2event")
 
-# Or install from GitHub
-# install.packages("devtools")
-devtools::install_github("dakdemir-nmdp/ml4time2event")
+# Alternatively with renv (recreates the development library)
+install.packages("renv")
+renv::restore()
 ```
 
 ## Reproducible Development Environment
@@ -78,10 +79,28 @@ cr_preds <- predict(
 )
 
 cr_preds$predictions$models_used
+
+# SHAP-based explainability -----------------------------------------------
+# Explain predictions using SHAP values
+shap_result <- ml4t2e_calculate_shap(
+  pipeline = surv_pipeline,
+  data = lung_df[1:50, ],
+  time_horizon = 365,  # 1-year expected time lost
+  nsim = 100
+)
+
+# Variable importance plot
+ml4t2e_shap_importance(shap_result)
+
+# Dependence plot showing feature effects
+ml4t2e_shap_dependence(shap_result, feature = "age")
+
+# Explain individual prediction
+ml4t2e_shap_waterfall(shap_result, obs_id = 1)
 ```
 
 The pipelines combine preprocessing, model fitting, ensemble construction, prediction,
-and persistence in a single object that can be reloaded and used for production scoring.
+persistence, and explainability in a single object that can be reloaded and used for production scoring.
 
 ## Features
 
@@ -90,6 +109,7 @@ and persistence in a single object that can be reloaded and used for production 
 - **Competing Risks**: Fine-Gray, cause-specific Cox, and ML models for competing risks
 - **Ensemble Methods**: Averaging, weighted averaging, super learner stacking
 - **Metrics**: C-index, Brier score, integrated metrics, expected time lost
+- **Explainability**: SHAP-based variable importance and dependence analysis for interpretable predictions
 - **Comprehensive Testing**: 1900+ passing tests
 
 ## Supported Models
@@ -101,6 +121,7 @@ and persistence in a single object that can be reloaded and used for production 
 
 - `vignettes/comprehensive_survival_analysis.R` - Complete survival analysis workflow
 - `vignettes/comprehensive_competing_risks_analysis.R` - Competing risks analysis
+- `vignettes/shap_explainability.Rmd` - SHAP-based explainability and interpretation
 
 ## License
 

@@ -1,0 +1,408 @@
+---
+title: "SHAP-Based Explainability for Time-to-Event Models"
+author: "ml4time2event"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    code_folding: show
+vignette: >
+  %\VignetteIndexEntry{SHAP-Based Explainability for Time-to-Event Models}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = TRUE,
+  warning = FALSE,
+  message = FALSE,
+  fig.width = 10,
+  fig.height = 6
+)
+```
+
+# Introduction
+
+This vignette demonstrates how to use SHAP (SHapley Additive exPlanations) analysis with ml4time2event pipelines to explain predictions from survival and competing risks models.
+
+## What is SHAP?
+
+SHAP values provide a unified measure of feature importance that explains individual predictions. For any prediction, SHAP values show:
+
+- Which features contributed most to the prediction
+- Whether each feature increased or decreased the predicted risk
+- How features interact with each other
+
+SHAP values satisfy an important property:
+$$\text{Prediction} = \text{Baseline} + \sum_{i} \text{SHAP}_i$$
+
+where the baseline is the average prediction across all observations.
+
+## Why SHAP for Time-to-Event Models?
+
+Time-to-event models predict survival curves or cumulative incidence functions (CIFs), which are complex outputs. SHAP requires scalar predictions, so we use **expected time lost** as our target metric:
+
+- **Expected time lost** = integral of event probability from 0 to time horizon
+- For survival: integral of $1 - S(t)$ from 0 to $T$
+- For competing risks: integral of CIF from 0 to $T$
+
+This gives an interpretable scalar: the expected amount of time lost to the event by time $T$.
+
+# Setup
+
+```{r load_packages}
+library(ml4time2event)
+library(dplyr)
+library(ggplot2)
+
+# Required for SHAP calculation
+# install.packages("fastshap")  # or kernelshap
+library(fastshap)
+
+# Set random seed for reproducibility
+set.seed(42)
+```
+
+# Example 1: Survival Analysis with Lung Cancer Data
+
+## Fit a Survival Pipeline
+
+First, we'll fit a survival model using the lung cancer dataset:
+
+```{r survival_pipeline}
+# Load lung cancer data
+lung_df <- get_lung_survival_data()
+
+# Examine the data
+head(lung_df)
+dim(lung_df)
+
+# Fit pipeline with multiple models
+surv_pipeline <- ml4t2e_fit_pipeline(
+  data = lung_df,
+  analysis_type = "survival",
+  timevar = "time",
+  eventvar = "status",
+  models = c("coxph", "glmnet","rulefit", "xgboost"),
+  include_rf = FALSE,
+  prediction_times = seq(0, 1000, length.out = 50)
+)
+
+print(surv_pipeline)
+```
+
+## Calculate SHAP Values
+
+Now we calculate SHAP values for a subset of observations. We'll use a 1-year time horizon (365 days):
+
+```{r calculate_shap_survival}
+# Select observations to explain
+explain_data <- lung_df[1:50, ]
+
+# Calculate SHAP values
+# Using nsim = 50 for speed; use higher (e.g., 100-200) for production
+shap_surv <- ml4t2e_calculate_shap(
+  pipeline = surv_pipeline,
+  data = explain_data,
+  time_horizon = 365,  # 1-year expected time lost
+  nsim = 50
+)
+
+print(shap_surv)
+```
+
+## Variable Importance Plot
+
+The importance plot shows which features have the biggest impact on predictions:
+
+```{r importance_plot_survival, fig.width=10, fig.height=7}
+# Create importance plot (beeswarm style)
+ml4t2e_shap_importance(shap_surv, plot_type = "beeswarm")
+
+# Alternative: bar plot
+ml4t2e_shap_importance(shap_surv, plot_type = "bar", max_features = 10)
+```
+
+**Interpretation:**
+- Features are ranked by mean absolute SHAP value (average impact)
+- In beeswarm plots:
+  - Each point is one observation
+  - Red points = high feature value
+  - Blue points = low feature value
+  - Position on x-axis = SHAP value (contribution to prediction)
+
+## Dependence Plots
+
+Dependence plots show how a specific feature affects predictions:
+
+```{r dependence_plots_survival, fig.width=10, fig.height=6}
+# Dependence plot for age
+# Automatically detects interactions with other features
+ml4t2e_shap_dependence(shap_surv, feature = "age")
+
+# You can also specify which feature to use for coloring
+if ("sex" %in% colnames(lung_df)) {
+  ml4t2e_shap_dependence(shap_surv, feature = "age", color_by = "sex")
+}
+```
+
+**Interpretation:**
+- X-axis: feature value
+- Y-axis: SHAP value (impact on expected time lost)
+- Color: value of interacting feature
+- Positive SHAP = increases expected time lost (worse prognosis)
+- Negative SHAP = decreases expected time lost (better prognosis)
+
+## Waterfall Plot for Individual Predictions
+
+Waterfall plots explain individual predictions:
+
+```{r waterfall_plot_survival, fig.width=10, fig.height=6}
+# Explain the first observation
+ml4t2e_shap_waterfall(shap_surv, obs_id = 1, max_features = 10)
+
+# Explain another observation
+ml4t2e_shap_waterfall(shap_surv, obs_id = 10, max_features = 10)
+```
+
+**Interpretation:**
+- Starts with baseline (average expected time lost)
+- Each bar shows a feature's contribution
+- Red = increases risk
+- Blue = decreases risk
+- Final bar = actual prediction for this patient
+
+## Compare Multiple Time Horizons
+
+We can calculate SHAP values for different time horizons:
+
+```{r multiple_horizons, fig.width=12, fig.height=5}
+# 6-month time horizon
+shap_6mo <- ml4t2e_calculate_shap(
+  pipeline = surv_pipeline,
+  data = explain_data[1:30, ],
+  time_horizon = 180,
+  nsim = 50
+)
+
+# 2-year time horizon
+shap_2yr <- ml4t2e_calculate_shap(
+  pipeline = surv_pipeline,
+  data = explain_data[1:30, ],
+  time_horizon = 730,
+  nsim = 50
+)
+
+# Compare importance at different horizons
+library(gridExtra)
+p1 <- ml4t2e_shap_importance(shap_6mo, max_features = 8, plot_type = "bar") +
+  ggtitle("6-Month Time Horizon")
+p2 <- ml4t2e_shap_importance(shap_2yr, max_features = 8, plot_type = "bar") +
+  ggtitle("2-Year Time Horizon")
+
+grid.arrange(p1, p2, ncol = 2)
+```
+
+# Example 2: Competing Risks Analysis
+
+## Fit a Competing Risks Pipeline
+
+```{r cr_pipeline}
+# Load BMT competing risks data
+bmt_df <- get_bmt_competing_risks_data()
+
+head(bmt_df)
+dim(bmt_df)
+
+# Fit competing risks pipeline
+cr_pipeline <- ml4t2e_fit_pipeline(
+  data = bmt_df,
+  analysis_type = "competing_risks",
+  timevar = "ftime",
+  eventvar = "status",
+  models = c("FG", "cox","rulefit", "xgboost"),
+  include_rf = FALSE,
+  prediction_times = seq(0, 150, length.out = 40)
+)
+
+print(cr_pipeline)
+```
+
+## Calculate SHAP Values for Competing Risks
+
+```{r shap_cr}
+# Calculate SHAP values for competing risks
+explain_cr <- bmt_df[1:40, ]
+
+shap_cr <- ml4t2e_calculate_shap(
+  pipeline = cr_pipeline,
+  data = explain_cr,
+  time_horizon = 100,  # 100-day expected time lost
+  nsim = 50
+)
+
+print(shap_cr)
+```
+
+### Understanding Competing Risks Event Selection
+
+**Important**: In competing risks analysis, the pipeline predicts **Event 1 (Relapse)** by default. The BMT dataset has:
+
+- **Event 0**: Censored (no event)
+- **Event 1**: Relapse (event of primary interest - **this is what we're predicting**)
+- **Event 2**: Treatment-related mortality (TRM)
+
+```{r check_events}
+# Check event distribution
+cat("Event counts in BMT data:\n")
+print(table(bmt_df$status))
+cat("\nAnalyzing: Event 1 (Relapse)\n")
+```
+
+**Key insight**: Age can have **opposite effects** on different competing events:
+- Younger patients may have more aggressive disease → higher relapse risk
+- Older patients may be more frail → higher TRM risk but potentially lower relapse risk
+
+Therefore, if you see negative SHAP values for older age, this may be **clinically correct** for relapse, even though it seems counterintuitive. Always interpret results in the context of the specific event being analyzed.
+
+## Visualize Competing Risks SHAP Results
+
+```{r cr_plots, fig.width=10, fig.height=6}
+# Variable importance
+ml4t2e_shap_importance(shap_cr, max_features = 10)
+
+# Dependence plot
+ml4t2e_shap_dependence(shap_cr, feature = "age")
+
+# Waterfall for individual prediction
+ml4t2e_shap_waterfall(shap_cr, obs_id = 5, max_features = 8)
+```
+
+# Practical Tips
+
+## Choosing Time Horizon
+
+The time horizon should be:
+1. **Clinically meaningful**: e.g., 1-year, 5-year survival
+2. **Within data range**: don't exceed maximum observed time
+3. **Relevant to decision**: match the timeframe of clinical decisions
+
+## Computational Considerations
+
+- **nsim**: Higher = more accurate but slower
+  - Testing: 20-50
+  - Production: 100-200
+  - High precision: 500+
+
+- **Sample size**: For large datasets, can calculate SHAP on a representative sample
+  ```{r sample_shap}
+  # Sample up to 100 patients (or all if dataset is smaller)
+  sample_size <- min(100, nrow(lung_df))
+  sample_idx <- sample(nrow(lung_df), sample_size)
+  shap_result <- ml4t2e_calculate_shap(
+    pipeline = surv_pipeline,
+    data = lung_df[sample_idx, ],
+    time_horizon = 365,
+    nsim = 30
+  )
+  ```
+
+## Interpreting SHAP Values
+
+- **Sign**:
+  - Positive SHAP = increases expected time lost (worse outcome)
+  - Negative SHAP = decreases expected time lost (better outcome)
+  - **For competing risks**: Interpret relative to the specific event being analyzed (default: Event 1). Age effects can differ between competing events.
+
+- **Magnitude**:
+  - Larger |SHAP| = bigger impact
+  - Units are same as prediction (expected time lost in days)
+
+- **Feature interactions**:
+  - Look at dependence plots colored by other features
+  - Non-linear patterns indicate interactions
+
+## Feature Engineering
+
+SHAP values work on **raw features** (before preprocessing). The pipeline automatically:
+1. Takes raw data
+2. Applies preprocessing (imputation, encoding, scaling)
+3. Generates predictions
+4. Calculates SHAP values relative to raw features
+
+This means SHAP values directly explain the original variables, which is important for interpretability.
+
+# Advanced: Custom Analysis
+
+## Identify High-Risk Patients
+
+```{r high_risk}
+# Find patients with highest predicted time lost
+high_risk_idx <- order(shap_surv$predictions, decreasing = TRUE)[1:5]
+
+cat("Top 5 high-risk patients:\n")
+for (i in high_risk_idx) {
+  cat(sprintf("Patient %d: Expected time lost = %.1f days\n",
+              i, shap_surv$predictions[i]))
+}
+
+# Explain why they're high risk
+for (i in high_risk_idx[1:2]) {
+  print(ml4t2e_shap_waterfall(shap_surv, obs_id = i, max_features = 8))
+}
+```
+
+## Feature Interactions
+
+```{r interactions}
+# Examine how two features interact
+# Create a grid of age and performance values
+if (all(c("age", "ph.ecog") %in% colnames(lung_df))) {
+
+  # Dependence plot shows interactions
+  p1 <- ml4t2e_shap_dependence(shap_surv, feature = "age", color_by = "ph.ecog")
+  p2 <- ml4t2e_shap_dependence(shap_surv, feature = "ph.ecog", color_by = "age")
+
+  grid.arrange(p1, p2, ncol = 2)
+}
+```
+
+## Export SHAP Values for Further Analysis
+
+```{r export}
+# SHAP values are stored as a matrix
+shap_matrix <- shap_surv$shap_values
+head(shap_matrix)
+
+# Can be exported to CSV
+# write.csv(shap_matrix, "shap_values.csv")
+
+# Or combined with predictions
+results_df <- data.frame(
+  observation = 1:nrow(shap_matrix),
+  prediction = shap_surv$predictions,
+  shap_surv$shap_values
+)
+
+head(results_df)
+```
+
+# Summary
+
+This vignette demonstrated:
+
+1. **Calculating SHAP values** for survival and competing risks models
+2. **Variable importance plots** to identify key features
+3. **Dependence plots** to understand feature effects and interactions
+4. **Waterfall plots** to explain individual predictions
+5. **Practical considerations** for time horizon selection and computation
+
+SHAP analysis provides powerful tools for understanding and explaining time-to-event model predictions, which is essential for clinical applications and model validation.
+
+# Session Info
+
+```{r session_info}
+sessionInfo()
+```

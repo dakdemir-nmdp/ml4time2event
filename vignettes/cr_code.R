@@ -12,7 +12,9 @@ if (!requireNamespace("cmprsk", quietly = TRUE)) {
   stop("Install the 'cmprsk' package to run this vignette.")
 }
 library(cmprsk)
-devtools::load_all()
+if (interactive() && requireNamespace("devtools", quietly = TRUE)) {
+  devtools::load_all()
+}
 
 
 ## ----load-data----------------------------------------------------------------
@@ -405,4 +407,3 @@ data.frame(
     length(reloaded_predictions$NewProbs)
   )
 )
-

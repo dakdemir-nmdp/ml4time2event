@@ -26,13 +26,11 @@ knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
 # 1. Setup and Load Libraries
 
 ```{r load-libraries}
-#library(ml4time2event)
+library(ml4time2event)
 library(survival)
 library(dplyr)
 library(ggplot2)
 library(gridExtra)
-
-devtools::load_all()
 ```
 
 # 2. Load Prepared Dataset

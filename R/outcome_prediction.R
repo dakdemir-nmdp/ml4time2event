@@ -20,7 +20,7 @@ PredictAllPossibleOutcomesSurvOrCifs<-function(data, modelslist, modeltypes, tim
   predictions_list <- lapply(1:length(modelslist), function(i){
     model_obj <- modelslist[[i]]
     model_type <- toupper(modeltypes[i]) # Ensure uppercase
-    cat("Predicting using model", i, "(Type:", model_type, ")...\n")
+    #cat("Predicting using model", i, "(Type:", model_type, ")...\n")
 
     if (is.null(model_obj)) {
         warning("Model object at index", i, "is NULL. Skipping prediction.")
