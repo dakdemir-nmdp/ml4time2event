@@ -25,6 +25,7 @@ Thumbs.db
 # Temporary files
 *.tmp
 *.bak
+TODO.md
 
 # Package build artifacts
 *.tar.gz
