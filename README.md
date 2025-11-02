@@ -36,12 +36,13 @@ library(dplyr)
 # Survival pipeline -------------------------------------------------------
 lung_df <- get_lung_survival_data()
 
+# Fit with the new discrete-time head alongside classical learners
 surv_pipeline <- ml4t2e_fit_pipeline(
   data = lung_df,
   analysis_type = "survival",
   timevar = "time",
   eventvar = "status",
-  models = c("glmnet", "coxph"),
+  models = c("glmnet", "coxph", "ttah"),
   include_rf = FALSE,
   prediction_times = seq(0, 1000, length.out = 50)
 )
@@ -67,7 +68,7 @@ cr_pipeline <- ml4t2e_fit_pipeline(
   analysis_type = "competing_risks",
   timevar = "ftime",
   eventvar = "status",
-  models = c("FG", "cox"),
+  models = c("FG", "cox", "ttah"),
   include_rf = FALSE,
   prediction_times = seq(0, 150, length.out = 40)
 )
@@ -105,7 +106,7 @@ persistence, and explainability in a single object that can be reloaded and used
 ## Features
 
 - **Pipeline API**: `ml4t2e_fit_pipeline()` creates end-to-end survival or competing-risks workflows with preprocessing, modeling, and persistence.
-- **Survival Models**: Cox, Random Forest, XGBoost, GAM, BART, DeepSurv, GLMNet, GBM, RuleFit
+- **Survival Models**: Cox, Random Forest, XGBoost, GAM, BART, Shallow NN, GLMNet, GBM, RuleFit
 - **Competing Risks**: Fine-Gray, cause-specific Cox, and ML models for competing risks
 - **Ensemble Methods**: Averaging, weighted averaging, super learner stacking
 - **Metrics**: C-index, Brier score, integrated metrics, expected time lost
@@ -114,8 +115,9 @@ persistence, and explainability in a single object that can be reloaded and used
 
 ## Supported Models
 
-- **Survival (RunSurvModels `models` argument)**: `glmnet`, `coxph`, `rulefit`, `xgboost`, `gam`, `gbm`, `ExpSurvReg`, `WeibSurvReg`, `bart`, `deepsurv` (plus two Random Forest baselines when `include_rf = TRUE`).
+- **Survival (RunSurvModels `models` argument)**: `glmnet`, `coxph`, `rulefit`, `xgboost`, `gam`, `gbm`, `ExpSurvReg`, `WeibSurvReg`, `bart`, `shallownn` (plus two Random Forest baselines when `include_rf = TRUE`).
 - **Competing Risks (RunCRModels `models` argument)**: `FG`, `rulefit`, `bart`, `cox`, `xgboost`, `gam`, `survreg` (plus two Random Forest baselines when `include_rf = TRUE`).
+
 
 ## Vignettes
 

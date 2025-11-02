@@ -57,9 +57,9 @@ unpack_weights <- function(w_vec, n_in, n_hidden) {
   )
 }
 
-#' @title SurvModel_DeepSurv
+#' @title SurvModel_ShallowNN
 #'
-#' @description Fit a DeepSurv neural network model for survival outcomes using a custom implementation with Cox loss.
+#' @description Fit a single-hidden-layer neural network for survival outcomes using a custom implementation with Cox loss.
 #'
 #' @param data data frame with explanatory and outcome variables
 #' @param expvars character vector of names of explanatory variables in data
@@ -79,8 +79,8 @@ unpack_weights <- function(w_vec, n_in, n_hidden) {
 #'
 #' @importFrom stats model.matrix as.formula complete.cases
 #' @export
-SurvModel_DeepSurv <- function(data, expvars, timevar, eventvar,
-                               size = 5, decay = 0.01, maxit = 1000, verbose = FALSE) {
+SurvModel_ShallowNN <- function(data, expvars, timevar, eventvar,
+                                size = 5, decay = 0.01, maxit = 1000, verbose = FALSE) {
 
   # ============================================================================
   # Input Validation
@@ -141,9 +141,9 @@ SurvModel_DeepSurv <- function(data, expvars, timevar, eventvar,
   times <- sort(unique(event_times))
 
   # ============================================================================
-  # Model Fitting (Custom DeepSurv Implementation)
+  # Model Fitting (Custom Shallow Neural Network Implementation)
   # ============================================================================
-  if (verbose) cat("Fitting DeepSurv neural network...\n")
+  if (verbose) cat("Fitting shallow neural network survival model...\n")
 
   # Standardize numeric variables
   numeric_vars <- expvars[sapply(XYTrain[, expvars, drop=FALSE], is.numeric)]
@@ -254,7 +254,7 @@ SurvModel_DeepSurv <- function(data, expvars, timevar, eventvar,
   # ============================================================================
   # Return Results
   # ============================================================================
-  if (verbose) cat("DeepSurv model fitting complete.\n")
+  if (verbose) cat("Shallow neural network model fitting complete.\n")
 
   # Create a model object that mimics nnet structure for compatibility
   model <- list(
@@ -274,15 +274,15 @@ SurvModel_DeepSurv <- function(data, expvars, timevar, eventvar,
     factor_levels = factor_levels
   )
 
-  class(result) <- "ml4t2e_surv_deepsurv"
+  class(result) <- "ml4t2e_surv_shallownn"
   return(result)
 }
 
-#' @title Predict_SurvModel_DeepSurv
+#' @title Predict_SurvModel_ShallowNN
 #'
-#' @description Get predictions from a fitted DeepSurv survival model for new data.
+#' @description Get predictions from a fitted shallow neural network survival model for new data.
 #'
-#' @param modelout the output from 'SurvModel_DeepSurv'
+#' @param modelout the output from 'SurvModel_ShallowNN'
 #' @param newdata data frame with new observations for prediction
 #' @param new_times optional numeric vector of time points for prediction.
 #'   If NULL (default), uses the baseline hazard times from training.
@@ -294,7 +294,7 @@ SurvModel_DeepSurv <- function(data, expvars, timevar, eventvar,
 #'
 #' @importFrom stats model.matrix
 #' @export
-Predict_SurvModel_DeepSurv <- function(modelout, newdata, new_times = NULL) {
+Predict_SurvModel_ShallowNN <- function(modelout, newdata, new_times = NULL) {
 
   # ============================================================================
   # Input Validation

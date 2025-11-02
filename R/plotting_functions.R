@@ -1,10 +1,65 @@
+#' @title organize_predictions_for_plotting
+#' @description Internal function to organize prediction outputs for plotting
+#' @param predictions_output List from PredictSurvModels or PredictCRModels
+#' @param model_type Character: "survival" or "competing_risks"
+#' @param include_ensemble Logical, include ensemble predictions
+#' @return Named list of prediction objects
+#' @noRd
+.organize_predictions_for_plotting <- function(predictions_output,
+                                              model_type = "survival",
+                                              include_ensemble = TRUE) {
+
+  # Validate input
+  if (!is.list(predictions_output)) {
+    stop("predictions_output must be a list from PredictSurvModels or PredictCRModels")
+  }
+
+  if (is.null(predictions_output$ModelPredictions) || is.null(predictions_output$NewTimes)) {
+    stop("predictions_output must contain 'ModelPredictions' and 'NewTimes' components")
+  }
+
+  individual_predictions <- predictions_output$ModelPredictions
+  common_times <- predictions_output$NewTimes
+  ensemble_probs <- predictions_output$NewProbs
+
+  # Determine the probability/CIF component name
+  prob_name <- if (tolower(model_type) == "competing_risks" || tolower(model_type) == "cr") {
+    "CIFs"
+  } else {
+    "Probs"
+  }
+
+  # Organize individual model predictions
+  model_prediction_objects <- lapply(individual_predictions, function(mat) {
+    pred_obj <- list(Times = common_times)
+    pred_obj[[prob_name]] <- mat
+    pred_obj
+  })
+
+  # Format model names
+  raw_names <- names(individual_predictions)
+  formatted_names <- format_model_name(raw_names, model_type = model_type)
+  names(model_prediction_objects) <- formatted_names
+
+  # Add ensemble if requested and available
+  if (include_ensemble && !is.null(ensemble_probs)) {
+    ensemble_obj <- list(Times = common_times)
+    ensemble_obj[[prob_name]] <- ensemble_probs
+    model_prediction_objects[["Ensemble"]] <- ensemble_obj
+  }
+
+  return(model_prediction_objects)
+}
+
+
 #' @title plot_survival_curves
 #'
-#' @description Plot survival curves from one or more survival model predictions
+#' @description Plot survival curves from survival model predictions
 #'
-#' @param predictions A list of prediction objects from survival models, or a single prediction object.
-#'   Each prediction object should have components 'Probs' (survival probabilities matrix) 
-#'   and 'Times' (time points vector).
+#' @param predictions Either:
+#'   (1) Output from PredictSurvModels() containing ModelPredictions, NewProbs, and NewTimes, OR
+#'   (2) A list of prediction objects where each has 'Probs' and 'Times' components, OR
+#'   (3) A single prediction object with 'Probs' and 'Times' components
 #' @param model_names Character vector of model names. If NULL, uses names from predictions list.
 #' @param patients_to_plot Integer vector specifying which patients (row indices) to plot.
 #'   If NULL, plots first 3 patients.
@@ -20,16 +75,13 @@
 #'
 #' @examples
 #' \dontrun{
-#' # Single model
+#' # From ensemble predictions
+#' preds <- PredictSurvModels(models, newdata = test_data)
+#' plot_survival_curves(preds, patients_to_plot = 1:3)
+#'
+#' # From individual model
 #' cox_pred <- Predict_SurvModel_Cox(cox_model, test_data)
 #' plot_survival_curves(cox_pred, model_names = "Cox")
-#' 
-#' # Multiple models
-#' predictions <- list(
-#'   Cox = Predict_SurvModel_Cox(cox_model, test_data),
-#'   RF = Predict_SurvModel_RF(rf_model, test_data)
-#' )
-#' plot_survival_curves(predictions, patients_to_plot = 1:5)
 #' }
 #'
 #' @importFrom rlang .data
@@ -46,12 +98,21 @@ plot_survival_curves <- function(predictions,
                                  ncol_facets = 3,
                                  add_median_line = FALSE,
                                  legend_position = "bottom") {
-  
+
   # Input validation
   if (is.null(predictions)) {
     stop("'predictions' cannot be NULL")
   }
-  
+
+  # Check if this is output from PredictSurvModels()
+  if (!is.null(predictions$ModelPredictions) && !is.null(predictions$NewTimes)) {
+    predictions <- .organize_predictions_for_plotting(
+      predictions,
+      model_type = "survival",
+      include_ensemble = highlight_ensemble
+    )
+  }
+
   # Handle single prediction object
   if (!is.list(predictions) || (!is.null(predictions$Probs) && !is.null(predictions$Times))) {
     predictions <- list(Model1 = predictions)
@@ -178,11 +239,12 @@ plot_survival_curves <- function(predictions,
 
 #' @title plot_cif_curves
 #'
-#' @description Plot cumulative incidence function (CIF) curves from one or more competing risks model predictions
+#' @description Plot cumulative incidence function (CIF) curves from competing risks model predictions
 #'
-#' @param predictions A list of prediction objects from competing risks models, or a single prediction object.
-#'   Each prediction object should have components 'CIFs' (cumulative incidence matrix) 
-#'   and 'Times' (time points vector).
+#' @param predictions Either:
+#'   (1) Output from PredictCRModels() containing ModelPredictions, NewProbs, and NewTimes, OR
+#'   (2) A list of prediction objects where each has 'CIFs' and 'Times' components, OR
+#'   (3) A single prediction object with 'CIFs' and 'Times' components
 #' @param model_names Character vector of model names. If NULL, uses names from predictions list.
 #' @param patients_to_plot Integer vector specifying which patients (row indices) to plot.
 #'   If NULL, plots first 3 patients.
@@ -198,16 +260,13 @@ plot_survival_curves <- function(predictions,
 #'
 #' @examples
 #' \dontrun{
-#' # Single model
+#' # From ensemble predictions
+#' preds <- PredictCRModels(models, newdata = test_data)
+#' plot_cif_curves(preds, patients_to_plot = 1:3, event_label = "Relapse")
+#'
+#' # From individual model
 #' cox_pred <- Predict_CRModel_Cox(cox_model, test_data)
-#' plot_cif_curves(cox_pred, model_names = "Cox", event_label = "Relapse")
-#' 
-#' # Multiple models
-#' predictions <- list(
-#'   Cox = Predict_CRModel_Cox(cox_model, test_data),
-#'   FineGray = Predict_CRModel_FineGray(fg_model, test_data)
-#' )
-#' plot_cif_curves(predictions, patients_to_plot = 1:5, event_label = "Disease Progression")
+#' plot_cif_curves(cox_pred, model_names = "Cox")
 #' }
 #'
 #' @importFrom rlang .data
@@ -223,12 +282,21 @@ plot_cif_curves <- function(predictions,
                            ncol_facets = 3,
                            legend_position = "bottom",
                            event_label = "Event") {
-  
+
   # Input validation
   if (is.null(predictions)) {
     stop("'predictions' cannot be NULL")
   }
-  
+
+  # Check if this is output from PredictCRModels()
+  if (!is.null(predictions$ModelPredictions) && !is.null(predictions$NewTimes)) {
+    predictions <- .organize_predictions_for_plotting(
+      predictions,
+      model_type = "competing_risks",
+      include_ensemble = highlight_ensemble
+    )
+  }
+
   # Handle single prediction object
   if (!is.list(predictions) || (!is.null(predictions$CIFs) && !is.null(predictions$Times))) {
     predictions <- list(Model1 = predictions)

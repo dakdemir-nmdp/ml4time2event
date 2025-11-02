@@ -6,7 +6,7 @@ Author: Deniz Akdemir
 Maintainer: Deniz Akdemir <dakdemir@nmdp.org>
 Description: Provides a comprehensive framework for survival analysis and competing risks 
     modeling using machine learning approaches. Implements multiple survival models 
-    (Cox, BART, DeepSurv, etc.) and competing risks models with ensemble methods and 
+    (Cox, BART, shallow neural network, etc.) and competing risks models with ensemble methods and 
     various performance metrics for time-to-event prediction.
 License: file LICENSE
 Encoding: UTF-8
@@ -28,11 +28,13 @@ Imports:
     methods,
     mgcv,
     missRanger,
+    nnet,
     openxlsx,
     partykit,
     pbapply,
     pracma,
     pseudo,
+    splines,
     randomForestSRC,
     recipes,
     rpart,

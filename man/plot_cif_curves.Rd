@@ -18,9 +18,10 @@ plot_cif_curves(
 )
 }
 \arguments{
-\item{predictions}{A list of prediction objects from competing risks models, or a single prediction object.
-Each prediction object should have components 'CIFs' (cumulative incidence matrix) 
-and 'Times' (time points vector).}
+\item{predictions}{Either:
+(1) Output from PredictCRModels() containing ModelPredictions, NewProbs, and NewTimes, OR
+(2) A list of prediction objects where each has 'CIFs' and 'Times' components, OR
+(3) A single prediction object with 'CIFs' and 'Times' components}
 
 \item{model_names}{Character vector of model names. If NULL, uses names from predictions list.}
 
@@ -45,20 +46,17 @@ If NULL, plots first 3 patients.}
 A ggplot object
 }
 \description{
-Plot cumulative incidence function (CIF) curves from one or more competing risks model predictions
+Plot cumulative incidence function (CIF) curves from competing risks model predictions
 }
 \examples{
 \dontrun{
-# Single model
-cox_pred <- Predict_CRModel_Cox(cox_model, test_data)
-plot_cif_curves(cox_pred, model_names = "Cox", event_label = "Relapse")
+# From ensemble predictions
+preds <- PredictCRModels(models, newdata = test_data)
+plot_cif_curves(preds, patients_to_plot = 1:3, event_label = "Relapse")
 
-# Multiple models
-predictions <- list(
-  Cox = Predict_CRModel_Cox(cox_model, test_data),
-  FineGray = Predict_CRModel_FineGray(fg_model, test_data)
-)
-plot_cif_curves(predictions, patients_to_plot = 1:5, event_label = "Disease Progression")
+# From individual model
+cox_pred <- Predict_CRModel_Cox(cox_model, test_data)
+plot_cif_curves(cox_pred, model_names = "Cox")
 }
 
 }

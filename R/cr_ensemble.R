@@ -6,7 +6,7 @@
 #' @param eventvar character name of event variable in data (coded as 0,1,2),
 #' 1 is the event of interest
 #' @param models  a vector of models to be fitted to be chosen among
-#' "FG", "rulefit", "bart", "cox", "xgboost", "gam", "survreg". Two random forest models are
+#' "FG", "rulefit", "bart", "cox", "xgboost", "gam", "survreg", "ttah", "shallownn". Two random forest models are
 #' automatically fitted and dont need to be listed here
 #' @param ntreeRF number of trees for Random Forest models
 #' @param varsel  logical indicating whether variable selection to be
@@ -20,7 +20,7 @@
 #'  The second is also a list that contain the individual model outputs.
 #' @export
 RunCRModels<-function(datatrain, ExpVars, timevar, eventvar,
-                      models=c("FG", "rulefit", "bart", "cox"), ntreeRF=300,
+                      models=c("FG", "rulefit", "bart", "cox", "ttah"), ntreeRF=300,
                       varsel=FALSE, run_rf = TRUE){
 
   if (missing(datatrain) || is.null(datatrain) || !is.data.frame(datatrain)) {
@@ -158,6 +158,62 @@ RunCRModels<-function(datatrain, ExpVars, timevar, eventvar,
     })
     model_status["survreg_Model"] <- !is.null(survreg_Model)
   }
+  if ("ttah" %in% models){
+    ttah_Model <- tryCatch(
+      CRModel_TTAH(
+        data = datatrainFact,
+        expvars = ExpVars,
+        timevar = timevar,
+        eventvar = eventvar,
+        event_codes = available_events
+      ),
+      error = function(e) {
+        message("Failed fitting TTAH: ", e$message)
+        return(NULL)
+      }
+    )
+    model_status["ttah_Model"] <- !is.null(ttah_Model)
+  }
+  if ("shallownn" %in% models){
+    # Train one ShallowNN model per event type for Aalen-Johansen estimator
+    shallownn_models_list <- list()
+    shallownn_success <- TRUE
+
+    for (event_code in available_events) {
+      model_i <- tryCatch(
+        CRModel_ShallowNN(
+          data = datatrainFact,
+          expvars = ExpVars,
+          timevar = timevar,
+          eventvar = eventvar,
+          event_codes = event_code
+        ),
+        error = function(e) {
+          message("Failed fitting ShallowNN for event ", event_code, ": ", e$message)
+          return(NULL)
+        }
+      )
+
+      if (!is.null(model_i)) {
+        event_key <- paste0("event_", event_code)
+        shallownn_models_list[[event_key]] <- model_i
+      } else {
+        shallownn_success <- FALSE
+      }
+    }
+
+    # Store as a list with class attribute to identify it as multi-event ShallowNN
+    if (shallownn_success && length(shallownn_models_list) > 0) {
+      shallownn_Model <- shallownn_models_list
+      class(shallownn_Model) <- c("ml4t2e_cr_shallownn_ensemble", "list")
+      # Store default_event_code for prediction
+      attr(shallownn_Model, "default_event_code") <- default_event_code
+    } else {
+      shallownn_Model <- NULL
+    }
+
+    model_status["shallownn_Model"] <- !is.null(shallownn_Model)
+  }
  } else {
    if ("FG" %in% models){
      FG_Model<-tryCatch(CRModel_FineGray(data=datatrainFact,expvars=ExpVars2, timevar=timevar, eventvar=eventvar), error=function(e){
@@ -188,7 +244,7 @@ RunCRModels<-function(datatrain, ExpVars, timevar, eventvar,
      })
      model_status["rulefit_Model"] <- !is.null(rulefit_Model)
    }
-   if ("xgboost" %in% models){
+  if ("xgboost" %in% models){
   xgboost_Model<-tryCatch(CRModel_xgboost(data=datatrainFact,expvars=ExpVars2, timevar=timevar, eventvar=eventvar, event_codes=default_event_code, nrounds=100), error=function(e){
        message("Failed fitting XGBoost: ", e$message)
        return(NULL)
@@ -203,11 +259,67 @@ RunCRModels<-function(datatrain, ExpVars, timevar, eventvar,
      model_status["gam_Model"] <- !is.null(gam_Model)
    }
    if ("survreg" %in% models){
-  survreg_Model<-tryCatch(CRModel_SurvReg(data=datatrainFact,expvars=ExpVars2, timevar=timevar, eventvar=eventvar, dist="exponential", event_of_interest=1), error=function(e){
+     survreg_Model<-tryCatch(CRModel_SurvReg(data=datatrainFact,expvars=ExpVars2, timevar=timevar, eventvar=eventvar, dist="exponential", event_of_interest=1), error=function(e){
        message("Failed fitting SurvReg: ", e$message)
        return(NULL)
      })
      model_status["survreg_Model"] <- !is.null(survreg_Model)
+   }
+   if ("ttah" %in% models){
+     ttah_Model <- tryCatch(
+       CRModel_TTAH(
+         data = datatrainFact,
+         expvars = ExpVars2,
+         timevar = timevar,
+         eventvar = eventvar,
+         event_codes = available_events
+       ),
+       error = function(e) {
+         message("Failed fitting TTAH: ", e$message)
+         return(NULL)
+       }
+     )
+     model_status["ttah_Model"] <- !is.null(ttah_Model)
+   }
+   if ("shallownn" %in% models){
+     # Train one ShallowNN model per event type for Aalen-Johansen estimator
+     shallownn_models_list <- list()
+     shallownn_success <- TRUE
+
+     for (event_code in available_events) {
+       model_i <- tryCatch(
+         CRModel_ShallowNN(
+           data = datatrainFact,
+           expvars = ExpVars2,
+           timevar = timevar,
+           eventvar = eventvar,
+           event_codes = event_code
+         ),
+         error = function(e) {
+           message("Failed fitting ShallowNN for event ", event_code, ": ", e$message)
+           return(NULL)
+         }
+       )
+
+       if (!is.null(model_i)) {
+         event_key <- paste0("event_", event_code)
+         shallownn_models_list[[event_key]] <- model_i
+       } else {
+         shallownn_success <- FALSE
+       }
+     }
+
+     # Store as a list with class attribute to identify it as multi-event ShallowNN
+     if (shallownn_success && length(shallownn_models_list) > 0) {
+       shallownn_Model <- shallownn_models_list
+       class(shallownn_Model) <- c("ml4t2e_cr_shallownn_ensemble", "list")
+       # Store default_event_code for prediction
+       attr(shallownn_Model, "default_event_code") <- default_event_code
+     } else {
+       shallownn_Model <- NULL
+     }
+
+     model_status["shallownn_Model"] <- !is.null(shallownn_Model)
    }
  }
 
@@ -241,6 +353,12 @@ RunCRModels<-function(datatrain, ExpVars, timevar, eventvar,
   }
   if ("survreg" %in% models){
     input2<-c(input2,list(survreg_Model=survreg_Model))
+  }
+  if ("ttah" %in% models){
+    input2<-c(input2,list(ttah_Model=ttah_Model))
+  }
+  if ("shallownn" %in% models){
+    input2<-c(input2,list(shallownn_Model=shallownn_Model))
   }
 
   # Print summary of model fitting
@@ -528,6 +646,54 @@ PredictCRModels<-function(models, newdata, new_times, models_to_use=NULL,
       }
     )
   }
+  if ("ttah_Model" %in% active_models && !is.null(models$ttah_Model)){
+    Predict_tta<-tryCatch(
+      Predict_CRModel_TTAH(
+        models$ttah_Model,
+        newdata = newdata,
+        event_of_interest = models$ttah_Model$cause_codes[1]
+      ),
+      error = function(e) {
+        warning("Prediction failed for ttah_Model: ", e$message)
+        return(NULL)
+      }
+    )
+  }
+  if ("shallownn_Model" %in% active_models && !is.null(models$shallownn_Model)){
+    # Handle multi-event ShallowNN ensemble (one model per event type)
+    if (inherits(models$shallownn_Model, "ml4t2e_cr_shallownn_ensemble")) {
+      default_event_code <- attr(models$shallownn_Model, "default_event_code")
+      primary_key <- paste0("event_", default_event_code)
+
+      # Extract primary model and other models for competing events
+      primary_model <- models$shallownn_Model[[primary_key]]
+      other_models_for_shallownn <- list()
+
+      for (key in names(models$shallownn_Model)) {
+        if (key != primary_key) {
+          other_models_for_shallownn[[key]] <- models$shallownn_Model[[key]]
+        }
+      }
+
+      Predict_shallownn<-tryCatch(
+        Predict_CRModel_ShallowNN(primary_model, newdata=newdata,
+                                  other_models=other_models_for_shallownn),
+        error = function(e) {
+          warning("Prediction failed for shallownn_Model: ", e$message)
+          return(NULL)
+        }
+      )
+    } else {
+      # Legacy: single ShallowNN model (shouldn't happen with new training code)
+      Predict_shallownn<-tryCatch(
+        Predict_CRModel_ShallowNN(models$shallownn_Model, newdata=newdata),
+        error = function(e) {
+          warning("Prediction failed for shallownn_Model: ", e$message)
+          return(NULL)
+        }
+      )
+    }
+  }
 
   # Assuming cifMatInterpolaltor is loaded/available
   ModelPredictions<-list()
@@ -585,6 +751,22 @@ PredictCRModels<-function(models, newdata, new_times, models_to_use=NULL,
       ModelPredictions[["survreg_Model"]] <- newprobsurvreg
     }
   }
+  if ("ttah_Model" %in% active_models && !is.null(models$ttah_Model) && exists("Predict_tta") && !is.null(Predict_tta)){
+    newprobsttah<-cifMatInterpolaltor(
+      probsMat = Predict_tta$CauseSpecificCIF,
+      times = Predict_tta$Times,
+      new_times = new_times
+    )
+    if (!is.null(newprobsttah)) {
+      ModelPredictions[["ttah_Model"]] <- newprobsttah
+    }
+  }
+  if ("shallownn_Model" %in% active_models && !is.null(models$shallownn_Model) && exists("Predict_shallownn") && !is.null(Predict_shallownn)){
+    newprobsshallownn<-cifMatInterpolaltor(probsMat=Predict_shallownn$CIFs,times=Predict_shallownn$Times, new_times=new_times)
+    if (!is.null(newprobsshallownn)) {
+      ModelPredictions[["shallownn_Model"]] <- newprobsshallownn
+    }
+  }
 
   # Remove any NULL predictions (safety)
   ModelPredictions <- Filter(Negate(is.null), ModelPredictions)
@@ -636,24 +818,8 @@ PredictCRModels<-function(models, newdata, new_times, models_to_use=NULL,
     } else {
       invalid_models <- c(invalid_models, model_name)
       warning(sprintf("Invalid prediction matrix for model %s: Not a matrix or invalid dimensions", model_name))
-      # Show more details about what went wrong
-      if (is.matrix(pred_mat)) {
-        warning(sprintf("  Matrix dimensions: %s", paste(dim(pred_mat), collapse="x")))
-      } else {
-        warning(sprintf("  Object class: %s", class(pred_mat)))
-      }
       ModelPredictions[[model_name]] <- NULL
     }
-  }
-  
-  if (length(valid_models) > 0) {
-    message(sprintf("Valid models: %s", paste(valid_models, collapse=", ")))
-  } else {
-    message("No valid models found")
-  }
-  
-  if (length(invalid_models) > 0) {
-    message(sprintf("Invalid models: %s", paste(invalid_models, collapse=", ")))
   }
   
   # Check if we still have valid predictions after filtering

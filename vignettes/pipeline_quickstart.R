@@ -40,7 +40,7 @@ surv_pipeline <- ml4t2e_fit_pipeline(
   analysis_type = "survival",
   timevar = "time",
   eventvar = "status",
-  models = c("glmnet", "coxph"),
+  models = c("glmnet", "coxph", "ttah"),
   include_rf = FALSE,
   prediction_times = seq(0, 1000, length.out = 50)
 )
@@ -128,7 +128,7 @@ cr_pipeline <- ml4t2e_fit_pipeline(
   analysis_type = "competing_risks",
   timevar = "ftime",
   eventvar = "status",
-  models = c("FG", "cox"),
+  models = c("FG", "cox", "ttah"),
   include_rf = FALSE,
   prediction_times = seq(0, 150, length.out = 40)
 )

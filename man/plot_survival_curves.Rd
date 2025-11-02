@@ -18,9 +18,10 @@ plot_survival_curves(
 )
 }
 \arguments{
-\item{predictions}{A list of prediction objects from survival models, or a single prediction object.
-Each prediction object should have components 'Probs' (survival probabilities matrix) 
-and 'Times' (time points vector).}
+\item{predictions}{Either:
+(1) Output from PredictSurvModels() containing ModelPredictions, NewProbs, and NewTimes, OR
+(2) A list of prediction objects where each has 'Probs' and 'Times' components, OR
+(3) A single prediction object with 'Probs' and 'Times' components}
 
 \item{model_names}{Character vector of model names. If NULL, uses names from predictions list.}
 
@@ -45,20 +46,17 @@ If NULL, plots first 3 patients.}
 A ggplot object
 }
 \description{
-Plot survival curves from one or more survival model predictions
+Plot survival curves from survival model predictions
 }
 \examples{
 \dontrun{
-# Single model
+# From ensemble predictions
+preds <- PredictSurvModels(models, newdata = test_data)
+plot_survival_curves(preds, patients_to_plot = 1:3)
+
+# From individual model
 cox_pred <- Predict_SurvModel_Cox(cox_model, test_data)
 plot_survival_curves(cox_pred, model_names = "Cox")
-
-# Multiple models
-predictions <- list(
-  Cox = Predict_SurvModel_Cox(cox_model, test_data),
-  RF = Predict_SurvModel_RF(rf_model, test_data)
-)
-plot_survival_curves(predictions, patients_to_plot = 1:5)
 }
 
 }

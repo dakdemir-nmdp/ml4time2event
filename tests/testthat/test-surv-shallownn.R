@@ -1,5 +1,5 @@
 # ==============================================================================
-# Test Suite for DeepSurv Neural Network Survival Model
+# Test Suite for ShallowNN Neural Network Survival Model
 # ==============================================================================
 
 library(testthat)
@@ -9,7 +9,7 @@ library(nnet)
 # Source required files
 source("/Users/dakdemir/Library/CloudStorage/OneDrive-NMDP/Year2025/Github/ml4time2event/R/general_utils.R")
 source("/Users/dakdemir/Library/CloudStorage/OneDrive-NMDP/Year2025/Github/ml4time2event/R/surv_interpolation.R")
-source("/Users/dakdemir/Library/CloudStorage/OneDrive-NMDP/Year2025/Github/ml4time2event/R/surv_deepsurv.R")
+source("/Users/dakdemir/Library/CloudStorage/OneDrive-NMDP/Year2025/Github/ml4time2event/R/surv_shallownn.R")
 source("/Users/dakdemir/Library/CloudStorage/OneDrive-NMDP/Year2025/Github/ml4time2event/R/surv_ensemble.R")
 source("/Users/dakdemir/Library/CloudStorage/OneDrive-NMDP/Year2025/Github/ml4time2event/R/survival_target_builder.R")
 
@@ -54,11 +54,11 @@ expvars_all <- c("x1", "x2", "x3", "cat1", "cat2")
 expvars_many <- c("x1", "x2", "x3", "x4", "cat1", "cat2")
 
 # ==============================================================================
-# Tests for SurvModel_DeepSurv - Basic Functionality
+# Tests for SurvModel_ShallowNN - Basic Functionality
 # ==============================================================================
 
-test_that("SurvModel_DeepSurv fits basic model", {
-  model <- SurvModel_DeepSurv(
+test_that("SurvModel_ShallowNN fits basic model", {
+  model <- SurvModel_ShallowNN(
     data = train_data,
     expvars = expvars_numeric,
     timevar = "time",
@@ -66,7 +66,7 @@ test_that("SurvModel_DeepSurv fits basic model", {
   )
 
   # Check output structure
-  expect_s3_class(model, "ml4t2e_surv_deepsurv")
+  expect_s3_class(model, "ml4t2e_surv_shallownn")
   expect_true(is.list(model))
   expect_named(model, c("model", "times", "varprof", "expvars", "factor_levels"))
 
@@ -77,15 +77,15 @@ test_that("SurvModel_DeepSurv fits basic model", {
   expect_equal(model$expvars, expvars_numeric)
 })
 
-test_that("SurvModel_DeepSurv handles factor variables", {
-  model <- SurvModel_DeepSurv(
+test_that("SurvModel_ShallowNN handles factor variables", {
+  model <- SurvModel_ShallowNN(
     data = train_data,
     expvars = expvars_all,
     timevar = "time",
     eventvar = "event"
   )
 
-  expect_s3_class(model, "ml4t2e_surv_deepsurv")
+  expect_s3_class(model, "ml4t2e_surv_shallownn")
   expect_s3_class(model$model, "nnet")
 
   # Check varprof captures factor levels
@@ -95,8 +95,8 @@ test_that("SurvModel_DeepSurv handles factor variables", {
   expect_setequal(names(model$varprof$cat2), c("Low", "High"))
 })
 
-test_that("SurvModel_DeepSurv accepts custom parameters", {
-  model <- SurvModel_DeepSurv(
+test_that("SurvModel_ShallowNN accepts custom parameters", {
+  model <- SurvModel_ShallowNN(
     data = train_data,
     expvars = expvars_numeric,
     timevar = "time",
@@ -106,24 +106,24 @@ test_that("SurvModel_DeepSurv accepts custom parameters", {
     maxit = 100
   )
 
-  expect_s3_class(model, "ml4t2e_surv_deepsurv")
+  expect_s3_class(model, "ml4t2e_surv_shallownn")
   expect_s3_class(model$model, "nnet")
   expect_equal(model$model$n[2], 5)  # Check hidden layer size
 })
 
 # ==============================================================================
-# Tests for Predict_SurvModel_DeepSurv - Basic Functionality
+# Tests for Predict_SurvModel_ShallowNN - Basic Functionality
 # ==============================================================================
 
-test_that("Predict_SurvModel_DeepSurv returns correct output structure", {
-  model <- SurvModel_DeepSurv(
+test_that("Predict_SurvModel_ShallowNN returns correct output structure", {
+  model <- SurvModel_ShallowNN(
     data = train_data,
     expvars = expvars_numeric,
     timevar = "time",
     eventvar = "event"
   )
 
-  preds <- Predict_SurvModel_DeepSurv(model, test_data)
+  preds <- Predict_SurvModel_ShallowNN(model, test_data)
 
   # Check output structure
   expect_true(is.list(preds))
@@ -136,15 +136,15 @@ test_that("Predict_SurvModel_DeepSurv returns correct output structure", {
   expect_equal(ncol(preds$Probs), nrow(test_data))
 })
 
-test_that("Predict_SurvModel_DeepSurv predictions are valid probabilities", {
-  model <- SurvModel_DeepSurv(
+test_that("Predict_SurvModel_ShallowNN predictions are valid probabilities", {
+  model <- SurvModel_ShallowNN(
     data = train_data,
     expvars = expvars_numeric,
     timevar = "time",
     eventvar = "event"
   )
 
-  preds <- Predict_SurvModel_DeepSurv(model, test_data)
+  preds <- Predict_SurvModel_ShallowNN(model, test_data)
 
   # Check probabilities are between 0 and 1
   expect_true(all(preds$Probs >= 0))
@@ -157,8 +157,8 @@ test_that("Predict_SurvModel_DeepSurv predictions are valid probabilities", {
   }
 })
 
-test_that("Predict_SurvModel_DeepSurv handles custom time points", {
-  model <- SurvModel_DeepSurv(
+test_that("Predict_SurvModel_ShallowNN handles custom time points", {
+  model <- SurvModel_ShallowNN(
     data = train_data,
     expvars = expvars_numeric,
     timevar = "time",
@@ -166,50 +166,50 @@ test_that("Predict_SurvModel_DeepSurv handles custom time points", {
   )
 
   custom_times <- c(1, 5, 10, 15)
-  preds <- Predict_SurvModel_DeepSurv(model, test_data, new_times = custom_times)
+  preds <- Predict_SurvModel_ShallowNN(model, test_data, new_times = custom_times)
 
   expect_equal(preds$Times, custom_times)
   expect_equal(nrow(preds$Probs), length(custom_times))
 })
 
-test_that("Predict_SurvModel_DeepSurv includes time 0", {
-  model <- SurvModel_DeepSurv(
+test_that("Predict_SurvModel_ShallowNN includes time 0", {
+  model <- SurvModel_ShallowNN(
     data = train_data,
     expvars = expvars_numeric,
     timevar = "time",
     eventvar = "event"
   )
 
-  preds <- Predict_SurvModel_DeepSurv(model, test_data)
+  preds <- Predict_SurvModel_ShallowNN(model, test_data)
 
   expect_true(preds$Times[1] == 0)
 })
 
 # ==============================================================================
-# Tests for DeepSurv in Ensemble Framework
+# Tests for ShallowNN in Ensemble Framework
 # ==============================================================================
 
-test_that("DeepSurv works in RunSurvModels ensemble", {
+test_that("ShallowNN works in RunSurvModels ensemble", {
   fitted_models <- RunSurvModels(
     datatrain = train_data,
     ExpVars = expvars_numeric,
     timevar = "time",
     eventvar = "event",
-    models = c("glmnet", "deepsurv")
+    models = c("glmnet", "shallownn")
   )
 
-  # Check DeepSurv model was fitted
-  expect_true(!is.null(fitted_models$deepsurv_Model))
-  expect_s3_class(fitted_models$deepsurv_Model, "ml4t2e_surv_deepsurv")
+  # Check ShallowNN model was fitted
+  expect_true(!is.null(fitted_models$shallownn_Model))
+  expect_s3_class(fitted_models$shallownn_Model, "ml4t2e_surv_shallownn")
 })
 
-test_that("DeepSurv works in PredictSurvModels ensemble", {
+test_that("ShallowNN works in PredictSurvModels ensemble", {
   fitted_models <- RunSurvModels(
     datatrain = train_data,
     ExpVars = expvars_numeric,
     timevar = "time",
     eventvar = "event",
-    models = c("glmnet", "deepsurv")
+    models = c("glmnet", "shallownn")
   )
 
   predictions <- PredictSurvModels(
@@ -218,8 +218,8 @@ test_that("DeepSurv works in PredictSurvModels ensemble", {
     new_times = c(5, 10, 15)
   )
 
-  # Check DeepSurv predictions are available
-  expect_true("deepsurv_Model" %in% names(predictions$ModelPredictions))
+  # Check ShallowNN predictions are available
+  expect_true("shallownn_Model" %in% names(predictions$ModelPredictions))
   expect_true(!is.null(predictions$NewProbs))
 })
 
@@ -227,26 +227,26 @@ test_that("DeepSurv works in PredictSurvModels ensemble", {
 # Tests for Input Validation
 # ==============================================================================
 
-test_that("SurvModel_DeepSurv validates inputs", {
+test_that("SurvModel_ShallowNN validates inputs", {
   # Missing data
   expect_error(
-    SurvModel_DeepSurv(expvars = expvars_numeric, timevar = "time", eventvar = "event")
+    SurvModel_ShallowNN(expvars = expvars_numeric, timevar = "time", eventvar = "event")
   )
 
   # Missing required parameters
   expect_error(
-    SurvModel_DeepSurv(data = train_data, timevar = "time", eventvar = "event")
+    SurvModel_ShallowNN(data = train_data, timevar = "time", eventvar = "event")
   )
   expect_error(
-    SurvModel_DeepSurv(data = train_data, expvars = expvars_numeric, eventvar = "event")
+    SurvModel_ShallowNN(data = train_data, expvars = expvars_numeric, eventvar = "event")
   )
   expect_error(
-    SurvModel_DeepSurv(data = train_data, expvars = expvars_numeric, timevar = "time")
+    SurvModel_ShallowNN(data = train_data, expvars = expvars_numeric, timevar = "time")
   )
 })
 
-test_that("Predict_SurvModel_DeepSurv validates inputs", {
-  model <- SurvModel_DeepSurv(
+test_that("Predict_SurvModel_ShallowNN validates inputs", {
+  model <- SurvModel_ShallowNN(
     data = train_data,
     expvars = expvars_numeric,
     timevar = "time",
@@ -254,10 +254,10 @@ test_that("Predict_SurvModel_DeepSurv validates inputs", {
   )
 
   # Missing newdata
-  expect_error(Predict_SurvModel_DeepSurv(model))
+  expect_error(Predict_SurvModel_ShallowNN(model))
 
   # Invalid new_times
   expect_error(
-    Predict_SurvModel_DeepSurv(model, test_data, new_times = c(-1, 5, 10))
+    Predict_SurvModel_ShallowNN(model, test_data, new_times = c(-1, 5, 10))
   )
 })

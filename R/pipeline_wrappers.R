@@ -283,9 +283,9 @@ predict.ml4t2e_pipeline <- function(object, newdata, new_times = NULL,
     return(models)
   }
   if (identical(analysis_type, "survival")) {
-    return(c("glmnet", "coxph", "xgboost", "gam"))
+    return(c("glmnet", "coxph", "xgboost", "gam", "ttah"))
   }
-  c("FG", "cox", "xgboost")
+  c("FG", "cox", "xgboost", "ttah")
 }
 
 .ml4t2e_prepare_newdata <- function(newdata, required) {

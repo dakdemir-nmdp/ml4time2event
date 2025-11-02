@@ -34,3 +34,6 @@ inst/doc/
 doc/
 Meta/
 vignettes/*.html
+
+# design folder
+design/

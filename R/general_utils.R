@@ -26,6 +26,75 @@ VariableProfile<-function(data, expvars){
   varprofile
 }
 
+#' @title format_model_name
+#' @description Convert internal model names to human-readable display names
+#' @param model_names Character vector of internal model names (e.g., "CPH_Model", "glmnet_Model")
+#' @param model_type Character string: "survival" or "competing_risks" (default: "survival")
+#' @return Character vector of formatted display names
+#' @export
+#' @examples
+#' format_model_name(c("CPH_Model", "glmnet_Model", "Ensemble"))
+#' format_model_name("FG_Model", model_type = "competing_risks")
+format_model_name <- function(model_names, model_type = "survival") {
+
+  # Define mapping for survival models
+  surv_mapping <- c(
+    RF_Model = "Random Forest",
+    RF_Model2 = "Random Forest (Top Vars)",
+    glmnet_Model = "GLMNet",
+    CPH_Model = "Cox PH",
+    bart_Model = "BART",
+    shallownn_Model = "Shallow NN",
+    gam_Model = "GAM",
+    gbm_Model = "GBM",
+    survregexp_Model = "ExpSurvReg",
+    survregweib_Model = "WeibSurvReg",
+    xgboost_Model = "XGBoost",
+    RuleFit_Model = "RuleFit",
+    ttah_Model = "TTAH",
+    Ensemble = "Ensemble"
+  )
+
+  # Define mapping for competing risks models
+  cr_mapping <- c(
+    Cox_Model = "Cox (Cause-Specific)",
+    FG_Model = "Fine-Gray",
+    RF_Model = "Random Forest",
+    glmnet_Model = "GLMNet",
+    bart_Model = "BART",
+    shallownn_Model = "Shallow NN",
+    gam_Model = "GAM",
+    xgboost_Model = "XGBoost",
+    RuleFit_Model = "RuleFit",
+    ttah_Model = "TTAH",
+    survregexp_Model = "ExpSurvReg",
+    Ensemble = "Ensemble"
+  )
+
+  # Select appropriate mapping
+  mapping <- if (tolower(model_type) == "competing_risks" || tolower(model_type) == "cr") {
+    cr_mapping
+  } else {
+    surv_mapping
+  }
+
+  # Apply mapping
+  formatted <- vapply(model_names, function(x) {
+    if (x %in% names(mapping)) {
+      mapping[[x]]
+    } else {
+      # Fallback: convert underscores to spaces and title case
+      gsub("_Model$", "", x) |>
+        gsub("_", " ", x = _) |>
+        tools::toTitleCase()
+    }
+  }, character(1), USE.NAMES = FALSE)
+
+  names(formatted) <- model_names
+  formatted
+}
+
+
 #' @title listrules
 #' @description Extract rules from a partykit tree object.
 #' (Adapted from partykit:::.list.rules.party)

@@ -376,11 +376,12 @@ integratedBrierCR <- function(SurvObj, Predictions, eval_times = NULL, cause = 1
   }
 
   # Calculate Brier score at each time point
+  # Use the non-deprecated 'eval_times' argument to avoid warnings
   brier_values <- sapply(eval_times, function(t) {
     BrierScoreCR(
       SurvObj = SurvObj,
       Predictions = pred_matrix,
-      time = t,
+      eval_times = t,
       cause = cause,
       TestMat = TestMat,
       pred_times = pred_times

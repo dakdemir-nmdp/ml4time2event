@@ -9,7 +9,7 @@
 #' @param eventvar character name of event variable in data (needs to be 0/1)
 #' @param models character vector of additional models to fit, chosen from:
 #' "glmnet" (penalized Cox with elastic net), "coxph" (Cox with backward selection),
-#' "rulefit", "xgboost", "gam", "gbm", "ExpSurvReg", "WeibSurvReg", "bart".
+#' "rulefit", "xgboost", "gam", "gbm", "ExpSurvReg", "WeibSurvReg", "bart", "shallownn", "ttah".
 #' @param ntreeRF number of trees for Random Forest models.
 #' @param nvars number of top variables (based on RF importance) to use for the second RF model and potentially others.
 #' @param run_rf logical; if `FALSE`, skips fitting the baseline Random Forest models.
@@ -23,7 +23,7 @@
 #'
 #' @export
 RunSurvModels<-function(datatrain, ExpVars, timevar, eventvar,
-                        models=c("glmnet","coxph","rulefit","xgboost","gam","gbm","ExpSurvReg","WeibSurvReg","bart","deepsurv"),
+                        models=c("glmnet","coxph","rulefit","xgboost","gam","gbm","ExpSurvReg","WeibSurvReg","bart","shallownn","ttah"),
                         ntreeRF=300, nvars=20, run_rf = TRUE, ...){
 
   if (missing(datatrain) || is.null(datatrain) || !is.data.frame(datatrain)) {
@@ -170,11 +170,23 @@ RunSurvModels<-function(datatrain, ExpVars, timevar, eventvar,
     model_status["bart_Model"] <- !is.null(bartout)
   }
 
-  if ("deepsurv"%in% models){
-    # Assuming SurvModel_DeepSurv is loaded/available
-    deepsurv_Model<-fit_model("deepsurv", SurvModel_DeepSurv, data=datatrainFact, expvars=ExpVarsForOthers, timevar=timevar, eventvar=eventvar, size=5, decay=0.01, maxit=500)
-    input2<-c(input2,list(deepsurv_Model=deepsurv_Model))
-    model_status["deepsurv_Model"] <- !is.null(deepsurv_Model)
+  if ("shallownn"%in% models){
+    shallownn_Model<-fit_model("shallownn", SurvModel_ShallowNN, data=datatrainFact, expvars=ExpVarsForOthers, timevar=timevar, eventvar=eventvar, size=5, decay=0.01, maxit=500)
+    input2<-c(input2,list(shallownn_Model=shallownn_Model))
+    model_status["shallownn_Model"] <- !is.null(shallownn_Model)
+  }
+
+  if ("ttah" %in% models) {
+    ttah_Model <- fit_model(
+      "ttah",
+      SurvModel_TTAH,
+      data = datatrainFact,
+      expvars = ExpVarsForOthers,
+      timevar = timevar,
+      eventvar = eventvar
+    )
+    input2 <- c(input2, list(ttah_Model = ttah_Model))
+    model_status["ttah_Model"] <- !is.null(ttah_Model)
   }
 
   if ("ExpSurvReg" %in% models) {
@@ -531,8 +543,8 @@ PredictSurvModels<-function(models, newdata, new_times, models_to_use=NULL,
   if ("bart_Model" %in% active_models) {
     ModelPredictionsList[["bart_Model"]] <- predict_and_interp("BART", Predict_SurvModel_BART, models$bart_Model)
   }
-  if ("deepsurv_Model" %in% active_models) {
-    ModelPredictionsList[["deepsurv_Model"]] <- predict_and_interp("DeepSurv", Predict_SurvModel_DeepSurv, models$deepsurv_Model)
+  if ("shallownn_Model" %in% active_models) {
+    ModelPredictionsList[["shallownn_Model"]] <- predict_and_interp("Shallow NN", Predict_SurvModel_ShallowNN, models$shallownn_Model)
   }
   if ("gam_Model" %in% active_models) {
     ModelPredictionsList[["gam_Model"]] <- predict_and_interp("GAM", Predict_SurvModel_GAM, models$gam_Model)
@@ -548,6 +560,9 @@ PredictSurvModels<-function(models, newdata, new_times, models_to_use=NULL,
   }
   if ("xgboost_Model" %in% active_models) {
     ModelPredictionsList[["xgboost_Model"]] <- predict_and_interp("XGBoost", Predict_SurvModel_xgboost, models$xgboost_Model)
+  }
+  if ("ttah_Model" %in% active_models) {
+    ModelPredictionsList[["ttah_Model"]] <- predict_and_interp("TTAH", Predict_SurvModel_TTAH, models$ttah_Model)
   }
 
   # Filter out NULL predictions (from failed models/predictions/interpolations)

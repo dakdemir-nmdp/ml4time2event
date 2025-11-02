@@ -9,7 +9,7 @@ RunCRModels(
   ExpVars,
   timevar,
   eventvar,
-  models = c("FG", "rulefit", "bart", "cox"),
+  models = c("FG", "rulefit", "bart", "cox", "ttah"),
   ntreeRF = 300,
   varsel = FALSE,
   run_rf = TRUE
@@ -26,7 +26,7 @@ RunCRModels(
 1 is the event of interest}
 
 \item{models}{a vector of models to be fitted to be chosen among
-"FG", "rulefit", "bart", "cox", "xgboost", "gam", "survreg". Two random forest models are
+"FG", "rulefit", "bart", "cox", "xgboost", "gam", "survreg", "ttah", "shallownn". Two random forest models are
 automatically fitted and dont need to be listed here}
 
 \item{ntreeRF}{number of trees for Random Forest models}

@@ -10,7 +10,7 @@ RunSurvModels(
   timevar,
   eventvar,
   models = c("glmnet", "coxph", "rulefit", "xgboost", "gam", "gbm", "ExpSurvReg",
-    "WeibSurvReg", "bart", "deepsurv"),
+    "WeibSurvReg", "bart", "shallownn", "ttah"),
   ntreeRF = 300,
   nvars = 20,
   run_rf = TRUE,
@@ -28,7 +28,7 @@ RunSurvModels(
 
 \item{models}{character vector of additional models to fit, chosen from:
 "glmnet" (penalized Cox with elastic net), "coxph" (Cox with backward selection),
-"rulefit", "xgboost", "gam", "gbm", "ExpSurvReg", "WeibSurvReg", "bart".}
+"rulefit", "xgboost", "gam", "gbm", "ExpSurvReg", "WeibSurvReg", "bart", "shallownn", "ttah".}
 
 \item{ntreeRF}{number of trees for Random Forest models.}
 

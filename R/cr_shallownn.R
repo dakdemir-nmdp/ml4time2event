@@ -36,9 +36,9 @@ forward_pass <- function(X, weights) {
   list(output = Z2, hidden_activations = A1)
 }
 
-#' @title (Helper) Prepare New Data for DeepSurv Models
+#' @title (Helper) Prepare New Data for ShallowNN Models
 #' @description Applies factor level alignment and numeric scaling to new data.
-#' @param modelout Fitted DeepSurv model object.
+#' @param modelout Fitted ShallowNN model object.
 #' @param newdata Data frame of new observations.
 #' @return A list containing the prepared data frame and the model matrix.
 #' @keywords internal
@@ -107,7 +107,7 @@ hazard_increment_matrix <- function(step_fun, times, risk_scores) {
 
 #' @title (Helper) Compute Risk Scores
 #' @description Generates exponentiated linear predictors for a prepared design matrix.
-#' @param modelout Fitted DeepSurv model object.
+#' @param modelout Fitted ShallowNN model object.
 #' @param x_matrix Model matrix produced by `prepare_newdata_for_model`.
 #' @return Numeric vector of risk scores exp(η(x)).
 #' @keywords internal
@@ -139,18 +139,19 @@ unpack_weights <- function(w_vec, n_in, n_hidden) {
   )
 }
 
-#' @title CRModel_DeepSurv
+#' @title CRModel_ShallowNN
 #'
-#' @description Fit a DeepSurv neural network model for competing risks outcomes
+#' @description Fit a single-hidden-layer neural network model for competing risks outcomes
 #'   using a Fine-Gray style loss.
 #'
 #' @param data data frame with explanatory and outcome variables
 #' @param expvars character vector of names of explanatory variables in data
 #' @param timevar character name of time variable in data
 #' @param eventvar character name of event variable in data (coded 0=censored, 1=cause1, 2=cause2, etc.)
-#' @param event_of_interest character or numeric vector identifying the event code(s) to
-#'   model. DeepSurv competing risks currently supports a single event code. If
-#'   NULL (default), the first non-zero event code observed in the data is used.
+#' @param event_codes character or numeric vector identifying the event code(s) to
+#'   model. The shallow neural network competing risks implementation currently
+#'   supports a single event code. If NULL (default), the first non-zero event
+#'   code observed in the data is used.
 #' @param size integer, number of units in the hidden layer (default: 5)
 #' @param decay numeric, L2 regularization parameter (default: 0.01)
 #' @param maxit integer, maximum iterations for optimization (default: 1000)
@@ -166,12 +167,12 @@ unpack_weights <- function(w_vec, n_in, n_hidden) {
 #'   \item{event_codes_numeric}{numeric vector of event codes included}
 #'   \item{default_event_code}{character scalar for the default event code}
 #'   \item{time_range}{vector with min and max observed event times}
-#'   \item{model_type}{character string "cr_deepsurv"}
+#'   \item{model_type}{character string "cr_shallownn"}
 #'
 #' @importFrom stats model.matrix as.formula complete.cases
 #' @export
-CRModel_DeepSurv <- function(data, expvars, timevar, eventvar, event_of_interest = NULL,
-                             size = 5, decay = 0.01, maxit = 1000, verbose = FALSE) {
+CRModel_ShallowNN <- function(data, expvars, timevar, eventvar, event_codes = NULL,
+                              size = 5, decay = 0.01, maxit = 1000, verbose = FALSE) {
 
   # ============================================================================
   # Input Validation
@@ -195,8 +196,8 @@ CRModel_DeepSurv <- function(data, expvars, timevar, eventvar, event_of_interest
   if (length(missing_vars) > 0) {
     stop(paste0("The following `expvars` not found in data: ", paste(missing_vars, collapse=", ")))
   }
-  if (!is.null(event_of_interest) && length(event_of_interest) == 0) {
-    stop("`event_of_interest` must be NULL or a non-empty vector")
+  if (!is.null(event_codes) && length(event_codes) == 0) {
+    stop("`event_codes` must be NULL or a non-empty vector")
   }
 
   # ============================================================================
@@ -235,21 +236,21 @@ CRModel_DeepSurv <- function(data, expvars, timevar, eventvar, event_of_interest
     stop("No events found in the training data.")
   }
 
-  if (is.null(event_of_interest)) {
-    event_of_interest <- available_events[1]
+  if (is.null(event_codes)) {
+    event_codes <- available_events[1]
   }
-  event_of_interest <- as.character(event_of_interest)
-  if (length(event_of_interest) != 1) {
-    stop("`event_of_interest` must be a single value (one event code)")
+  event_codes <- as.character(event_codes)
+  if (length(event_codes) != 1) {
+    stop("`event_codes` must be a single value (one event code)")
   }
-  if (!event_of_interest %in% available_events) {
-    stop(paste0("`event_of_interest` ", event_of_interest, " not present in training data. No events of type ", event_of_interest, "."))
+  if (!event_codes %in% available_events) {
+    stop(paste0("`event_codes` ", event_codes, " not present in training data. No events of type ", event_codes, "."))
   }
-  event_codes_numeric <- suppressWarnings(as.numeric(event_of_interest))
+  event_codes_numeric <- suppressWarnings(as.numeric(event_codes))
   if (is.na(event_codes_numeric)) {
-    stop(paste0("`event_of_interest` must be numeric or coercible to numeric. Unable to coerce '", event_of_interest, "' to numeric."))
+    stop(paste0("`event_codes` must be numeric or coercible to numeric. Unable to coerce '", event_codes, "' to numeric."))
   }
-  primary_event_code <- event_of_interest[1]
+  primary_event_code <- event_codes[1]
   primary_event_numeric <- event_codes_numeric[1]
   # Get unique event times for the event of interest
   event_times <- XYTrain[[timevar]][XYTrain[[eventvar]] == primary_event_numeric]
@@ -261,9 +262,9 @@ CRModel_DeepSurv <- function(data, expvars, timevar, eventvar, event_of_interest
   time_range <- range(c(0, XYTrain[[timevar]][XYTrain[[eventvar]] %in% primary_event_numeric]), na.rm = TRUE)
 
   # ============================================================================
-  # Model Fitting (Custom DeepSurv Implementation for Competing Risks)
+  # Model Fitting (Custom Shallow Neural Network for Competing Risks)
   # ============================================================================
-  if (verbose) cat("Fitting DeepSurv neural network for competing risks (event type", primary_event_code, ")...\n")
+  if (verbose) cat("Fitting shallow neural network for competing risks (event type", primary_event_code, ")...\n")
 
   # Standardize numeric variables
   numeric_vars <- expvars[sapply(XYTrain[, expvars, drop = FALSE], is.numeric)]
@@ -429,7 +430,7 @@ CRModel_DeepSurv <- function(data, expvars, timevar, eventvar, event_of_interest
   # ============================================================================
   # Return Results
   # ============================================================================
-  if (verbose) cat("DeepSurv competing risks model fitting complete.\n")
+  if (verbose) cat("Shallow neural network competing risks model fitting complete.\n")
 
   # Create a model object that mimics nnet structure for compatibility
   model <- list(
@@ -448,34 +449,34 @@ CRModel_DeepSurv <- function(data, expvars, timevar, eventvar, event_of_interest
     varprof = varprof,
     expvars = expvars,
     factor_levels = factor_levels,
-    event_codes = event_of_interest,
+    event_codes = primary_event_code,
     event_codes_numeric = event_codes_numeric,
     default_event_code = primary_event_code,
-    model_type = "cr_deepsurv",
+    model_type = "cr_shallownn",
     timevar = timevar,
     eventvar = eventvar,
     time_range = time_range
   )
 
-  class(result) <- "ml4t2e_cr_deepsurv"
+  class(result) <- "ml4t2e_cr_shallownn"
   return(result)
 }
 
-#' @title Predict_CRModel_DeepSurv
+#' @title Predict_CRModel_ShallowNN
 #'
-#' @description Get predictions from a fitted DeepSurv competing risks model for
+#' @description Get predictions from a fitted shallow neural network competing risks model for
 #'   new data.
 #'
-#' @param modelout the output from 'CRModel_DeepSurv'
+#' @param modelout the output from 'CRModel_ShallowNN'
 #' @param newdata data frame with new observations for prediction
 #' @param new_times optional numeric vector of time points for prediction.
 #'   If NULL (default), uses the baseline hazard times from training.
 #' @param event_of_interest character or numeric scalar indicating the event code
 #'   for which CIFs should be returned. If NULL (default), uses the event code
-#'   stored in the fitted model. DeepSurv models can only predict the event they
+#'   stored in the fitted model. Shallow neural network models can only predict the event they
 #'   were trained on.
 #' @param other_models optional named list of additional fitted
-#'   `CRModel_DeepSurv` objects (one per competing event). When provided,
+#'   `CRModel_ShallowNN` objects (one per competing event). When provided,
 #'   the function combines all
 #'   cause-specific hazard models using the Aalen-Johansen estimator to obtain
 #'   cumulative incidence functions. If omitted, only the cause-specific hazard
@@ -497,8 +498,8 @@ CRModel_DeepSurv <- function(data, expvars, timevar, eventvar, event_of_interest
 #'
 #' @importFrom stats model.matrix
 #' @export
-Predict_CRModel_DeepSurv <- function(modelout, newdata, new_times = NULL,
-                                     event_of_interest = NULL, other_models = NULL) {
+Predict_CRModel_ShallowNN <- function(modelout, newdata, new_times = NULL,
+                                      event_of_interest = NULL, other_models = NULL) {
 
   # ============================================================================
   # Input Validation
@@ -507,7 +508,7 @@ Predict_CRModel_DeepSurv <- function(modelout, newdata, new_times = NULL,
     stop("`modelout` is missing")
   }
   if (!is.list(modelout) || !all(c("expvars", "default_event_code") %in% names(modelout))) {
-    stop("Input 'modelout' must be output from CRModel_DeepSurv")
+    stop("Input 'modelout' must be output from CRModel_ShallowNN")
   }
   if (missing(newdata)) {
     stop("`newdata` is missing")
@@ -529,7 +530,7 @@ Predict_CRModel_DeepSurv <- function(modelout, newdata, new_times = NULL,
     stop("`event_of_interest` must be a single value (one event code)")
   }
   if (!identical(event_of_interest, modelout$default_event_code)) {
-    stop(paste0("DeepSurv models can only predict for the event they were trained on (event code = ",
+    stop(paste0("Shallow neural network models can only predict for the event they were trained on (event code = ",
                 modelout$default_event_code, "). Requested event code: ", event_of_interest))
   }
   # Validate new_times if provided
@@ -583,7 +584,7 @@ Predict_CRModel_DeepSurv <- function(modelout, newdata, new_times = NULL,
   other_model_list <- list()
   if (!is.null(other_models)) {
     if (!is.list(other_models)) {
-      stop("`other_models` must be a list of fitted CRModel_DeepSurv objects")
+      stop("`other_models` must be a list of fitted CRModel_ShallowNN objects")
     }
 
     other_model_list <- other_models
@@ -591,8 +592,8 @@ Predict_CRModel_DeepSurv <- function(modelout, newdata, new_times = NULL,
     observed_event_codes <- modelout$default_event_code
     for (i in seq_along(other_model_list)) {
       model_i <- other_model_list[[i]]
-      if (!inherits(model_i, "ml4t2e_cr_deepsurv")) {
-        stop("All elements of `other_models` must be outputs from CRModel_DeepSurv")
+      if (!inherits(model_i, "ml4t2e_cr_shallownn")) {
+        stop("All elements of `other_models` must be outputs from CRModel_ShallowNN")
       }
       if (identical(model_i$default_event_code, modelout$default_event_code)) {
         stop("`other_models` contains a model for the same event code as the primary model")
