@@ -2,12 +2,6 @@
 # Advanced Ensemble Methods - Weighted Averaging, Stacking, Super Learner
 # ==============================================================================
 
-#' @title Weighted Average for Survival Probability Matrices
-#' @description Average survival probability matrices with user-specified weights
-#' @param listprobsMat List of survival probability matrices (rows=times, cols=observations)
-#' @param weights Named numeric vector of weights (must sum to 1)
-#' @return Weighted average survival probability matrix
-#' @noRd
 survprobMatWeightedAveraging <- function(listprobsMat, weights) {
   # Validate inputs
   if (length(listprobsMat) == 0) return(NULL)
@@ -84,13 +78,6 @@ survprobMatWeightedAveraging <- function(listprobsMat, weights) {
   NewProbs
 }
 
-#' @title Weighted Average for CIF Matrices
-#' @description Average CIF matrices with user-specified weights
-#' @param listprobsMat List of CIF matrices (rows=times, cols=observations)
-#' @param weights Named numeric vector of weights (must sum to 1)
-#' @param type Character, either "CumHaz" or "prob"
-#' @return Weighted average CIF matrix
-#' @noRd
 cifMatWeightedAveraging <- function(listprobsMat, weights, type = "CumHaz") {
   if (!type %in% c("CumHaz", "prob")) {
     stop("Type must be either 'CumHaz' or 'prob'")
@@ -174,22 +161,14 @@ cifMatWeightedAveraging <- function(listprobsMat, weights, type = "CumHaz") {
   NewProbs
 }
 
-#' @title Optimize Super Learner Weights
-#' @description Find optimal weights for ensemble using cross-validation loss
-#' @param predictions_list List of prediction matrices from different models
-#' @param actual_surv Actual survival matrix from training data
-#' @param loss_type Type of loss function ("mse", "loglik")
-#' @return Numeric vector of optimal weights
-#' @importFrom stats optim
-#' @noRd
 optimizeSuperLearnerWeights <- function(predictions_list, actual_surv, loss_type = "mse") {
-  n_models <- length(predictions_list)
-
   # Filter NULL and check dimensions
   predictions_list <- Filter(Negate(is.null), predictions_list)
   if (length(predictions_list) == 0) {
     stop("No valid predictions available")
   }
+  
+  n_models <- length(predictions_list)
 
   if (!is.matrix(actual_surv)) {
     stop("actual_surv must be a matrix of observed survival or CIF values")
@@ -250,19 +229,19 @@ optimizeSuperLearnerWeights <- function(predictions_list, actual_surv, loss_type
   )
 
   # Normalize to sum to 1
-  optimal_weights <- result$par / sum(result$par)
+  weight_sum <- sum(result$par)
+  if (weight_sum <= 0 || !is.finite(weight_sum)) {
+    # Fallback to equal weights if optimization fails
+    warning("Super learner weight optimization produced invalid weights, using equal weights")
+    optimal_weights <- rep(1 / n_models, n_models)
+  } else {
+    optimal_weights <- result$par / weight_sum
+  }
   names(optimal_weights) <- names(predictions_list)
 
   optimal_weights
 }
 
-#' @title Simple Meta-Learner for Stacking
-#' @description Optimise ensemble weights for stacked survival predictions
-#' @param base_predictions List of prediction matrices from individual base learners
-#' @param outcomes Matrix of observed survival/CIF values aligned with the prediction matrices
-#' @param meta_learner Loss type for optimisation ("mse" or "loglik")
-#' @return List containing the optimised weights and loss specification
-#' @noRd
 fitMetaLearner <- function(base_predictions, outcomes, meta_learner = "mse") {
   if (!meta_learner %in% c("mse", "loglik")) {
     stop("meta_learner must be one of 'mse' or 'loglik'")
@@ -277,23 +256,6 @@ fitMetaLearner <- function(base_predictions, outcomes, meta_learner = "mse") {
   )
 }
 
-#' @title Ensemble Predictions with Different Methods
-#' @description Combine model predictions using specified ensemble method
-#' @param model_predictions List of individual model predictions
-#' @param ensemble_method Method to use: "average", "weighted", "super_learner"
-#' @param model_weights Named numeric vector of weights (for weighted method)
-#' @param type Type of predictions: "survival" or "competing_risks"
-#' @param sl_training_predictions Optional list of training-set prediction matrices (for super learner optimisation)
-#' @param sl_actual Optional matrix of observed survival/CIF values matching `sl_training_predictions`
-#' @param sl_loss Loss function for super learner optimisation ("mse" or "loglik")
-#' @param sl_weights Optional pre-computed super learner weights
-#' @param times Optional vector of time points (required for some methods)
-#' @param ... Additional arguments passed to specific methods
-#' @return Combined ensemble predictions
-#' @details When `ensemble_method = "super_learner"`, the returned matrix includes an
-#'   attribute `sl_weights` containing the optimised weights used for the combination.
-#' @importFrom stats median
-#' @export
 EnsemblePredictions <- function(model_predictions,
                                  ensemble_method = "average",
                                  model_weights = NULL,
@@ -434,7 +396,11 @@ EnsemblePredictions <- function(model_predictions,
     }
 
     weights <- optimizeSuperLearnerWeights(sl_training_predictions, sl_actual, loss_type = sl_loss)
-    combined_probs <- survprobMatWeightedAveraging(model_predictions, weights)
+    if (type == "survival") {
+      combined_probs <- survprobMatWeightedAveraging(model_predictions, weights)
+    } else {
+      combined_probs <- cifMatWeightedAveraging(model_predictions, weights, type = "CumHaz")
+    }
     result <- list(Probs = combined_probs, Times = times)
     attr(result, "stacking_weights") <- weights
   }

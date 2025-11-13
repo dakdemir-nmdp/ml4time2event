@@ -1,40 +1,8 @@
-#' @title CRModel_SurvReg
 #'
-#' @description Fit a parametric survival regression model for competing risks outcomes using cause-specific modeling.
 #'
-#' @param data data frame with explanatory and outcome variables
-#' @param expvars character vector of names of explanatory variables in data
-#' @param timevar character name of time variable in data
-#' @param eventvar character name of event variable in data (coded 0=censored, 1=cause1, 2=cause2, etc.)
-#' @param event_codes character or numeric vector identifying the event code(s)
-#'   to model. If NULL (default), all non-zero event codes observed in the data
-#'   are used. The first entry defines the default event of interest.
-#' @param dist distribution for the parametric model, one of "weibull", "exponential", "gaussian", "logistic","lognormal" or "loglogistic".
-#' @param ntimes integer, number of time points to use for prediction grid (default: 50)
-#' @param verbose logical, print progress messages (default: FALSE)
 #'
-#' @return a list with the following components:
-#'   \item{survreg_model}{the fitted cause-specific parametric survival model object}
-#'   \item{times}{vector of unique event times in the training data for the event of interest}
-#'   \item{varprof}{variable profile list containing factor levels and numeric ranges}
-#'   \item{model_type}{character string "cr_survreg"}
-#'   \item{expvars}{character vector of explanatory variables used}
-#'   \item{timevar}{character name of time variable}
-#'   \item{eventvar}{character name of event variable}
-#'   \item{event_codes}{character vector of event codes included in the model}
-#'   \item{event_codes_numeric}{numeric vector of event codes included}
-#'   \item{default_event_code}{character scalar for the default event code}
-#'   \item{default_event_code_numeric}{numeric scalar for the default event code}
-#'   \item{time_range}{vector with min and max observed event times}
-#'   \item{dist}{the distribution used for the parametric model}
 #'
-#' @importFrom survival survreg Surv
-#' @importFrom stats AIC as.formula predict quantile complete.cases
-#' @export
 
-#' @param event_of_interest optional character or numeric scalar indicating a specific event code
-#'   that should be prioritized as the primary event of interest. If provided, this
-#'   event code must be one of the codes specified in 'event_codes'.
 CRModel_SurvReg <- function(data, expvars, timevar, eventvar, event_codes = NULL,
                            dist = "exponential", ntimes = 50, verbose = FALSE, event_of_interest = NULL) {
 
@@ -157,7 +125,7 @@ CRModel_SurvReg <- function(data, expvars, timevar, eventvar, event_codes = NULL
     # ============================================================================
     # Forward Selection with AIC (adapted for cause-specific modeling)
     # ============================================================================
-  if (verbose && cause == primary_event_numeric) cat("Performing forward selection with AIC for event", cause, "...\n")
+    if (verbose) cat("Performing forward selection with AIC for event", cause, "...\n")
 
     selected_vars <- c()
     candidate_vars <- expvars
@@ -178,11 +146,10 @@ CRModel_SurvReg <- function(data, expvars, timevar, eventvar, event_codes = NULL
     }
     
     best_aic <- stats::AIC(null_model)
-  if (verbose && cause == primary_event_numeric) print(paste("Initial AIC (Intercept only):", round(best_aic, 2)))
+    if (verbose) print(paste("Cause", cause, "- Initial AIC (Intercept only):", round(best_aic, 2)))
 
-    # Only do variable selection for the main event to save time
-  if (cause == primary_event_numeric) {
-      while (length(candidate_vars) > 0) {
+    # Perform variable selection for all causes
+    while (length(candidate_vars) > 0) {
         aic_values <- numeric(length(candidate_vars))
         names(aic_values) <- candidate_vars
 
@@ -256,10 +223,6 @@ CRModel_SurvReg <- function(data, expvars, timevar, eventvar, event_codes = NULL
           stop("No valid single-variable model could be fit after variable selection.")
         }
       }
-    } else {
-      # For other causes, use all variables to save time
-      selected_vars <- expvars
-    }
 
     # ============================================================================
     # Fit the Final Selected Model
@@ -276,7 +239,7 @@ CRModel_SurvReg <- function(data, expvars, timevar, eventvar, event_codes = NULL
       )
     } else {
       # If no variables selected, use the intercept-only model
-  if (verbose && cause == primary_event_numeric) warning("No variables selected by forward selection. Using intercept-only model.")
+      if (verbose) warning("No variables selected by forward selection. Using intercept-only model.")
       final_model_cause <- tryCatch(
         survival::survreg(null_formula, data = XYTrain_cause, dist = dist, x = TRUE, y = TRUE),
         error = function(e) {
@@ -319,6 +282,7 @@ CRModel_SurvReg <- function(data, expvars, timevar, eventvar, event_codes = NULL
     # Store baseline model in the survreg model object
     final_model_cause$baseline_model <- baseline_info$model
     final_model_cause$baseline_sf <- baseline_info$sf
+    final_model_cause$selected_vars <- selected_vars  # Store selected variables for this cause
 
     survreg_models_all_causes[[as.character(cause)]] <- final_model_cause
   }
@@ -356,26 +320,10 @@ CRModel_SurvReg <- function(data, expvars, timevar, eventvar, event_codes = NULL
   return(result)
 }
 
-#' @title Predict_CRModel_SurvReg
 #'
-#' @description Get predictions from a fitted cause-specific parametric survival competing risks model for new data.
 #'
-#' @param modelout the output from 'CRModel_SurvReg'
-#' @param newdata data frame with new observations for prediction
-#' @param new_times optional numeric vector of time points for prediction.
-#'   If NULL (default), uses the times from the training data.
-#'   Can be any positive values - interpolation handles all time points.
-#' @param event_of_interest character or numeric scalar indicating the event code
-#'   to predict. If NULL (default), uses the event code stored during training.
 #'
-#' @return a list containing:
-#'   \item{CIFs}{predicted cumulative incidence function matrix
-#'     (rows=times, cols=observations)}
-#'   \item{Times}{the times at which CIFs are calculated}
 #'
-#' @importFrom stats predict
-#' @importFrom survival psurvreg
-#' @export
 Predict_CRModel_SurvReg <- function(modelout, newdata, new_times = NULL, event_of_interest = NULL) {
 
   # ============================================================================
@@ -474,20 +422,32 @@ Predict_CRModel_SurvReg <- function(modelout, newdata, new_times = NULL, event_o
     stop("No valid time points available for prediction.")
   }
 
-  # Compute cause-specific survival curves for each observation
-  cause_specific_survival <- list()
+  # Compute cause-specific hazards for each observation
+  cause_specific_hazards <- list()
 
   for (cause in modelout$event_codes_numeric) {
     cause_char <- as.character(cause)
     survreg_model <- modelout$survreg_models_all_causes[[cause_char]]
 
     if (is.null(survreg_model)) {
+      warning("No model fitted for cause ", cause_char, ". This may indicate insufficient events for this cause.")
       next
     }
 
+    # message("Predicting for cause ", cause_char, " with ", length(survreg_model$selected_vars), " variables")
+
+    # Use the variables that this specific model was trained on
+    model_vars <- survreg_model$selected_vars
+    if (is.null(model_vars) || length(model_vars) == 0) {
+      model_vars <- modelout$expvars  # fallback to all variables
+    }
+    
+    # Subset newdata to only the variables this model was trained on
+    newdata_cause <- newdata_prepared[, model_vars, drop = FALSE]
+
     # Linear predictors for newdata
     linear_preds <- tryCatch(
-      stats::predict(survreg_model, newdata = newdata_prepared, type = "lp"),
+      stats::predict(survreg_model, newdata = newdata_cause, type = "lp"),
       error = function(e) {
         stop("Failed to obtain linear predictors for cause ", cause_char, ": ", e$message)
       }
@@ -496,81 +456,62 @@ Predict_CRModel_SurvReg <- function(modelout, newdata, new_times = NULL, event_o
     # Ensure vector form
     linear_preds <- as.numeric(linear_preds)
 
-    # Compute survival curves using the parametric form
-    surv_matrix <- matrix(NA_real_, nrow = length(surv_times), ncol = n_obs)
+    # Compute hazard rates using the parametric form
+    hazard_matrix <- matrix(NA_real_, nrow = length(surv_times), ncol = n_obs)
     for (j in seq_len(n_obs)) {
-      surv_vals <- 1 - survival::psurvreg(
-        q = surv_times,
-        mean = linear_preds[j],
-        scale = survreg_model$scale,
-        distribution = survreg_model$dist
-      )
-      surv_matrix[, j] <- pmax(pmin(surv_vals, 1), 0)
+      # For exponential distribution, hazard = 1 / exp(lp)
+      # For Weibull, hazard = (shape / exp(lp)) * (t / exp(lp))^(shape-1)
+      if (survreg_model$dist == "exponential") {
+        hazard_matrix[, j] <- rep(1 / exp(linear_preds[j]), length(surv_times))
+      } else {
+        # Weibull hazard
+        shape <- 1 / survreg_model$scale
+        scale_param <- exp(linear_preds[j])
+        hazard_matrix[, j] <- shape * (surv_times / scale_param)^(shape - 1) / scale_param
+      }
     }
 
-    cause_specific_survival[[cause_char]] <- surv_matrix
+    cause_specific_hazards[[cause_char]] <- hazard_matrix
   }
 
-  if (length(cause_specific_survival) == 0) {
-    result_times <- surv_times
-    if (result_times[1] > 0) {
-      result_times <- c(0, result_times)
-    }
-    result_cifs <- matrix(0, nrow = length(result_times), ncol = n_obs)
-    return(list(CIFs = result_cifs, Times = result_times))
+  if (length(cause_specific_hazards) == 0) {
+    stop("No cause-specific models available for prediction")
   }
 
-  # Ensure time zero is included for stability
-  if (surv_times[1] > 0) {
-    surv_times <- c(0, surv_times)
-    for (cause_char in names(cause_specific_survival)) {
-      surv_matrix <- cause_specific_survival[[cause_char]]
-      zero_row <- matrix(1, nrow = 1, ncol = n_obs)
-      cause_specific_survival[[cause_char]] <- rbind(zero_row, surv_matrix)
-    }
-  } else {
-    for (cause_char in names(cause_specific_survival)) {
-      surv_matrix <- cause_specific_survival[[cause_char]]
-      surv_matrix[1, ] <- 1
-      cause_specific_survival[[cause_char]] <- surv_matrix
-    }
-  }
-
+  # Compute CIF using exact parametric formulas for competing risks
   n_times <- length(surv_times)
-
-  # Convert survival curves to cumulative hazards
-  cause_cumhaz <- lapply(
-    cause_specific_survival,
-    function(surv_matrix) -log(pmax(surv_matrix, 1e-12))
-  )
-
-  # Overall survival from sum of cumulative hazards
-  overall_cumhaz <- Reduce(`+`, cause_cumhaz)
-  overall_survival <- exp(-overall_cumhaz)
-
-  # Compute CIF for target cause
-  target_cause_char <- as.character(target_event_numeric)
-  target_cumhaz <- cause_cumhaz[[target_cause_char]]
-
-  if (is.null(target_cumhaz)) {
-    stop("No model available for event_of_interest = ", target_cause_char)
-  }
-
   cif_matrix <- matrix(0, nrow = n_times, ncol = n_obs)
 
-  for (t in seq_len(n_times)) {
-    prev_surv <- if (t == 1) rep(1, n_obs) else overall_survival[t - 1, ]
-    hazard_increment <- target_cumhaz[t, ] - if (t == 1) 0 else target_cumhaz[t - 1, ]
-    hazard_increment <- pmax(hazard_increment, 0)
-
-    if (t == 1) {
-      cif_matrix[t, ] <- hazard_increment
-    } else {
-      cif_matrix[t, ] <- cif_matrix[t - 1, ] + prev_surv * hazard_increment
+  for (j in seq_len(n_obs)) {
+    # Extract hazard rates at time 0 (constant for exponential, but for Weibull we need to handle differently)
+    # For exponential, hazard is constant over time
+    hazard_rates <- sapply(cause_specific_hazards, function(hmat) hmat[1, j])
+    
+    if (anyNA(hazard_rates)) {
+      cif_matrix[, j] <- NA
+      next
+    }
+    
+    total_hazard <- sum(hazard_rates)
+    
+    if (total_hazard == 0) {
+      # No risk, CIF remains 0
+      cif_matrix[, j] <- 0
+      next
+    }
+    
+    target_cause_char <- as.character(target_event_numeric)
+    if (target_cause_char %in% names(hazard_rates)) {
+      target_hazard <- hazard_rates[target_cause_char]
+      
+      # For exponential distribution, use exact CIF formula
+      # CIF_j(t) = (λ_j / Σλ_k) * (1 - exp(-Σλ_k * t))
+      proportion <- target_hazard / total_hazard
+      cif_matrix[, j] <- proportion * (1 - exp(-total_hazard * surv_times))
     }
   }
 
-  # Enforce bounds and monotonicity
+  # Ensure bounds and monotonicity
   cif_matrix <- pmin(pmax(cif_matrix, 0), 1)
   for (j in seq_len(n_obs)) {
     cif_matrix[, j] <- cummax(cif_matrix[, j])

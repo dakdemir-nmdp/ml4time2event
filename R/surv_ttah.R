@@ -1,26 +1,6 @@
-#' @title SurvModel_TTAH
 #'
-#' @description Fit a lightweight discrete-time time-varying additive hazard (TTAH) model
-#'   for survival outcomes. The implementation uses spline-augmented feature encoders,
-#'   low-rank time interactions, and ridge-stabilised logistic regression for a
-#'   fully CPU-friendly workflow.
 #'
-#' @param data data.frame containing predictors and outcome columns
-#' @param expvars character vector of predictor column names
-#' @param timevar character name of time-to-event column
-#' @param eventvar character name of event indicator (0/1)
-#' @param time_grid optional numeric vector of discrete time points; if `NULL`, a grid
-#'   is constructed from the observed data using quantiles
-#' @param n_time integer, target number of time points when `time_grid` is not supplied
-#' @param spline_knots integer, degrees of freedom for numeric spline bases
-#' @param latent_dim integer, number of latent interaction factors
-#' @param time_basis_df integer, degrees of freedom for the B-spline time basis
-#' @param lambda numeric, ridge penalty applied to the logistic fit (excludes intercept)
-#' @param engine character, one of `c("auto", "base")`
-#' @param verbose logical; if `TRUE`, prints training diagnostics
 #'
-#' @return list with class `ml4t2e_surv_ttah` containing the fitted model and metadata
-#' @export
 SurvModel_TTAH <- function(data, expvars, timevar, eventvar,
                            time_grid = NULL, n_time = 50,
                            spline_knots = 5, latent_dim = 8,
@@ -167,18 +147,9 @@ SurvModel_TTAH <- function(data, expvars, timevar, eventvar,
   result
 }
 
-#' @title Predict_SurvModel_TTAH
 #'
-#' @description Generate survival probability curves from a fitted TTAH survival model.
 #'
-#' @param modelout fitted model returned by `SurvModel_TTAH`
-#' @param newdata data frame with predictor columns matching training predictors
-#' @param new_times optional numeric vector of times for interpolation
 #'
-#' @return list with components:
-#'   \item{Probs}{matrix of survival probabilities (rows = times, cols = observations)}
-#'   \item{Times}{vector of times corresponding to the rows of `Probs`}
-#' @export
 Predict_SurvModel_TTAH <- function(modelout, newdata, new_times = NULL) {
   if (missing(modelout)) stop("'modelout' is required.")
   if (!inherits(modelout, "ml4t2e_surv_ttah")) {

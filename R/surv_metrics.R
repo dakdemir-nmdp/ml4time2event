@@ -147,17 +147,8 @@ ml4t2e_cindex_at_time <- function(pred_surv, eval_time, obstimes, obsevents) {
   concordant / comparable
 }
 
-#' @title timedepConcordance
 #'
-#' @description Calculate time-dependent concordance for survival predictions without relying on external pec methods.
-#' @param predsurv Predicted survival probability matrix (rows=times, cols=observations). If the matrix is observations x times it will be transposed automatically.
-#' @param pred_times Numeric vector of prediction times matching the rows or columns of `predsurv`.
-#' @param obstimes Observed follow-up times.
-#' @param obsevents Observed event indicator (0=censored, 1=event).
-#' @param TestMat Optional test dataset (ignored, preserved for backward compatibility).
 #'
-#' @return A list with element `AppCindex$matrix` containing the time-specific concordance values.
-#' @export
 timedepConcordance <- function(predsurv, pred_times, obstimes, obsevents, TestMat = NULL) {
   alignment <- ml4t2e_align_surv_predictions(predsurv, pred_times, obstimes, context = "predsurv")
   obsevents_numeric <- ml4t2e_validate_events(obsevents)
@@ -189,17 +180,8 @@ timedepConcordance <- function(predsurv, pred_times, obstimes, obsevents, TestMa
 }
 
 
-#' @title BrierScore
 #'
-#' @description Calculate Brier score for survival predictions at specific times.
-#' @param predsurv Predicted survival probability matrix (rows=times, cols=observations). If needed, orientation is fixed automatically.
-#' @param pred_times Numeric vector of prediction times matching the rows or columns of `predsurv`.
-#' @param obstimes Observed follow-up times.
-#' @param obsevents Observed event indicator (0=censored, 1=event).
-#' @param eval_times Optional numeric vector of evaluation times (defaults to `pred_times`).
-#' @param TestMat Optional test dataset (ignored, preserved for backward compatibility).
 #'
-#' @return A `pec`-like list with element `AppErr$model` storing the Brier scores.
 BrierScore <- function(predsurv, pred_times, obstimes, obsevents,
                        eval_times = NULL, TestMat = NULL) {
 
@@ -226,8 +208,15 @@ BrierScore <- function(predsurv, pred_times, obstimes, obsevents,
         return(NA_real_)
       }
 
-      event_by_t <- obsevents_numeric[valid] == 1 & obstimes[valid] <= t_eval
-      surv_pred <- pred_surv[valid]
+      # Only include observations at risk at time t_eval
+      # At risk if: obstimes > t_eval (still at risk) OR (obstimes <= t_eval AND obsevents == 1) (event occurred)
+      at_risk <- (obstimes[valid] > t_eval) | (obstimes[valid] <= t_eval & obsevents_numeric[valid] == 1)
+      event_by_t <- obsevents_numeric[valid] == 1 & obstimes[valid] <= t_eval & at_risk
+      surv_pred <- pred_surv[valid][at_risk]
+      
+      if (length(surv_pred) == 0) {
+        return(NA_real_)
+      }
 
       scores <- ifelse(event_by_t, surv_pred^2, (1 - surv_pred)^2)
       if (all(is.na(scores))) {
@@ -251,18 +240,8 @@ BrierScore <- function(predsurv, pred_times, obstimes, obsevents,
 }
 
 
-#' @title integratedBrier
 #'
-#' @description Calculate integrated Brier score over time range
-#' @param predsurv Predicted survival probability matrix (rows=times, cols=observations)
-#' @param pred_times The times for which the survival probabilities are predicted
-#' @param obstimes Observed times vector
-#' @param obsevents Observed event indicator vector (0=censored, 1=event)
-#' @param eval_times Optional vector of evaluation times for integration
-#' @param TestMat Optional test dataset
 #'
-#' @return Integrated Brier score (scalar)
-#' @export
 integratedBrier <- function(predsurv, pred_times, obstimes, obsevents,
                             eval_times = NULL, TestMat = NULL) {
 
@@ -298,17 +277,8 @@ integratedBrier <- function(predsurv, pred_times, obstimes, obsevents,
 }
 
 
-#' @title integratedC
 #'
-#' @description Calculate integrated concordance index over time range
-#' @param predsurv Predicted survival probability matrix (rows=times, cols=observations)
-#' @param pred_times The times for which the survival probabilities are predicted
-#' @param obstimes Observed times vector
-#' @param obsevents Observed event indicator vector (0=censored, 1=event)
-#' @param TestMat Optional test dataset
 #'
-#' @return Integrated concordance index (scalar)
-#' @export
 integratedC <- function(predsurv, pred_times, obstimes, obsevents, TestMat = NULL) {
 
   # Get time-dependent concordance

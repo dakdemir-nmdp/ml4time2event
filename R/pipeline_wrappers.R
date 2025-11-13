@@ -1,321 +1,213 @@
-#' @title Fit an ml4time2event modeling pipeline
+#' Fit a time-to-event pipeline (backwards-compatible helper)
 #'
-#' @description Convenience wrapper that combines preprocessing, model fitting,
-#' persistence, and prediction for survival or competing-risks analyses.
+#' This convenience wrapper bridges the legacy `ml4t2e_fit_pipeline()` workflow
+#' onto the new `ml4t2e_pipeline()` + `T2EPipeline` infrastructure. It accepts
+#' the original argument names but internally builds a modern pipeline,
+#' returning an object with classes `c("ml4t2e_pipeline", "T2EPipeline", "R6")`.
 #'
 #' @param data Training data frame.
-#' @param analysis_type Either `"survival"` or `"competing_risks"`.
-#' @param timevar Name of time-to-event column.
-#' @param eventvar Name of event indicator column (0/1 for survival, 0/1/2... for CR).
-#' @param expvars Optional character vector of predictors. Defaults to all columns
-#'   except outcomes and IDs.
-#' @param idvars Optional character vector of identifier columns that should pass
-#'   through preprocessing unchanged.
-#' @param recipe_fn Preprocessing function accepting `model_recipe` as first argument
-#'   (defaults to [minimal_data_recipe()]).
-#' @param recipe_args Named list of additional arguments passed to `recipe_fn`.
-#' @param prediction_times Optional numeric vector specifying the default time grid
-#'   for downstream predictions. When `NULL`, the grid spans the observed follow-up.
-#' @param models Optional character vector passed to [RunSurvModels()] or
-#'   [RunCRModels()]. When `NULL`, sensible defaults are used.
-#' @param ntreeRF Number of trees for random forest models (forwarded to Run* helpers).
-#' @param varsel Logical flag forwarded to [RunCRModels()] indicating variable selection.
-#' @param include_rf Logical; if `FALSE`, skips fitting the baseline random forest
-#'   models within [RunSurvModels()] and [RunCRModels()].
-#' @param ... Additional arguments forwarded to [RunSurvModels()] or [RunCRModels()].
+#' @param analysis_type `"survival"` or `"competing_risks"`.
+#' @param timevar Name of the time column.
+#' @param eventvar Name of the event/status column.
+#' @param causevar Optional cause column for competing-risk tasks. When
+#'   `NULL`, event codes from `eventvar` are reused for causes.
+#' @param expvars Optional predictor set (defaults to all non-outcome columns).
+#' @param idvars Optional identifier column (first entry is used).
+#' @param recipe_fn Optional preprocessing function (defaults to
+#'   `minimal_data_recipe()`); set to `NULL` to skip recipes.
+#' @param recipe_args Named list of additional arguments for `recipe_fn`.
+#' @param prediction_times Optional numeric time grid forwarded to `controls$times`.
+#' @param models Character vector of engine names (legacy aliases are supported).
+#' @param ensemble Ensemble strategy passed to `ml4t2e_fit()`.
+#' @param controls Optional named list of per-engine controls.
+#' @param resampling Optional `rsample` resampling object.
+#' @param metrics Optional metric identifiers for `ml4t2e_evaluate()`.
+#' @param include_rf,ntreeRF,varsel Legacy arguments retained for compatibility.
+#'   They are ignored (with a warning when changed from defaults).
+#' @param ... Unused; retained for compatibility.
 #'
-#' @return An object of class `ml4t2e_pipeline` containing the fitted preprocessing
-#'   recipe, ensemble model, and metadata.
-#' @export
-ml4t2e_fit_pipeline <- function(
-    data,
-    analysis_type = c("survival", "competing_risks"),
-    timevar,
-    eventvar,
-    expvars = NULL,
-    idvars = character(0),
-    recipe_fn = minimal_data_recipe,
-    recipe_args = list(pmiss = 0.25, pother = 0.05, dummy = FALSE),
-    prediction_times = NULL,
-    models = NULL,
-    ntreeRF = 300,
-    varsel = FALSE,
-    include_rf = TRUE,
-    ...
-) {
+#' @return A fitted `T2EPipeline` object (also inheriting the
+#'   `ml4t2e_pipeline` class for S3 helpers).
+#' @keywords internal
+#' @noRd
+ml4t2e_fit_pipeline <- function(data,
+                                analysis_type = c("survival", "competing_risks"),
+                                timevar,
+                                eventvar,
+                                causevar = NULL,
+                                expvars = NULL,
+                                idvars = character(0),
+                                recipe_fn = minimal_data_recipe,
+                                recipe_args = list(pmiss = 0.25, pother = 0.05, dummy = FALSE),
+                                prediction_times = NULL,
+                                models = NULL,
+                                ensemble = "auto",
+                                controls = list(),
+                                resampling = NULL,
+                                metrics = NULL,
+                                include_rf = TRUE,
+                                ntreeRF = NULL,
+                                varsel = NULL,
+                                ...) {
   analysis_type <- match.arg(analysis_type)
+  data <- as.data.frame(data)
 
-  if (!requireNamespace("recipes", quietly = TRUE)) {
-    stop("Package 'recipes' must be installed to use ml4t2e_fit_pipeline().", call. = FALSE)
+  # Warn about deprecated knobs
+  if (!isTRUE(include_rf)) {
+    rlang::warn("`include_rf` is deprecated; specify engines explicitly via `models`.")
   }
-  if (!is.data.frame(data)) {
-    stop("'data' must be a data.frame.")
+  if (!is.null(ntreeRF)) {
+    rlang::warn("`ntreeRF` is deprecated and ignored; use `controls$random_forest` if needed.")
   }
-  if (missing(timevar) || !timevar %in% colnames(data)) {
-    stop("'timevar' must be present in 'data'.")
+  if (!is.null(varsel)) {
+    rlang::warn("`varsel` is deprecated and ignored.")
   }
-  if (missing(eventvar) || !eventvar %in% colnames(data)) {
-    stop("'eventvar' must be present in 'data'.")
+  if (length(idvars) > 1) {
+    rlang::warn("Only one id column is supported; using the first entry in `idvars`.")
+    idvars <- idvars[1]
   }
-  if (!is.function(recipe_fn)) {
-    stop("'recipe_fn' must be a function (e.g., minimal_data_recipe).")
+
+  required_cols <- c(timevar, eventvar)
+  if (!all(required_cols %in% colnames(data))) {
+    missing <- setdiff(required_cols, colnames(data))
+    rlang::abort(paste0("Training data missing required columns: ", paste(missing, collapse = ", ")))
   }
+
+  outcome_type <- if (identical(analysis_type, "survival")) "survival" else "competing_risk"
+  data_prepped <- data
+  id_col <- if (length(idvars) == 1) idvars else NULL
+  cause_col <- NULL
+
+  if (identical(outcome_type, "competing_risk")) {
+    status_raw <- data_prepped[[eventvar]]
+    if (is.null(causevar)) {
+      cause_col <- ".ml4t2e_cause"
+      data_prepped[[cause_col]] <- status_raw
+    } else {
+      if (!causevar %in% colnames(data_prepped)) {
+        rlang::abort(paste0("Cause column '", causevar, "' not found in data."))
+      }
+      cause_col <- causevar
+    }
+    data_prepped[[eventvar]] <- ifelse(as.numeric(status_raw) == 0, 0L, 1L)
+    data_prepped[[cause_col]][status_raw == 0] <- NA
+  }
+
+  drop_cols <- unique(c(timevar, eventvar, id_col, cause_col))
   if (is.null(expvars)) {
-    expvars <- setdiff(colnames(data), c(timevar, eventvar, idvars))
+    expvars <- setdiff(colnames(data_prepped), drop_cols)
   }
   if (length(expvars) == 0) {
-    stop("No predictor variables identified. Provide 'expvars' or check input data.")
+    rlang::abort("No predictor variables identified. Provide `expvars` or adjust input data.")
   }
 
-  base_recipe <- t2emodel_data_recipe_init(
-    timevar = timevar,
-    eventvar = eventvar,
-    expvar = expvars,
-    idvars = idvars,
-    traindata = data
+  outcome <- list(
+    type = outcome_type,
+    time = timevar,
+    id = id_col,
+    features = expvars
   )
-
-  recipe_call <- c(list(model_recipe = base_recipe), recipe_args)
-  processed_recipe <- do.call(recipe_fn, recipe_call)
-  prepped_recipe <- prep_data_recipe(processed_recipe, training = data)
-
-  baked_train <- bake_data_recipe(prepped_recipe, data = data)
-  processed_expvars <- setdiff(colnames(baked_train), c(timevar, eventvar, idvars))
-
-  if (length(processed_expvars) == 0) {
-    stop("Preprocessing removed all predictors. Adjust recipe settings.")
-  }
-
-  default_time_grid <- .ml4t2e_compute_time_grid(
-    baked_train[[timevar]],
-    prediction_times
-  )
-
-  model_defaults <- .ml4t2e_default_models(analysis_type, models)
-
-  if (identical(analysis_type, "survival")) {
-    fitted_models <- RunSurvModels(
-      datatrain = baked_train,
-      ExpVars = processed_expvars,
-      timevar = timevar,
-      eventvar = eventvar,
-      models = model_defaults,
-      ntreeRF = ntreeRF,
-      run_rf = include_rf,
-      ...
-    )
-    ensemble_object <- SurvEnsemble(fitted_models)
+  if (identical(outcome_type, "survival")) {
+    outcome$event <- eventvar
   } else {
-    fitted_models <- RunCRModels(
-      datatrain = baked_train,
-      ExpVars = processed_expvars,
-      timevar = timevar,
-      eventvar = eventvar,
-      models = model_defaults,
-      ntreeRF = ntreeRF,
-      varsel = varsel,
-      run_rf = include_rf,
-      ...
-    )
-    ensemble_object <- CREnsemble(fitted_models)
+    outcome$status <- eventvar
+    outcome$cause <- cause_col
   }
 
-  pipeline <- list(
-    analysis_type = analysis_type,
-    timevar = timevar,
-    eventvar = eventvar,
-    idvars = idvars,
-    original_expvars = expvars,
-    processed_expvars = processed_expvars,
-    recipe = prepped_recipe,
-    recipe_fn = .ml4t2e_fn_name(recipe_fn, substitute(recipe_fn)),
-    recipe_args = recipe_args,
-    model = ensemble_object,
-    prediction_grid = default_time_grid,
-    training_summary = .ml4t2e_training_summary(baked_train, timevar, eventvar, analysis_type),
-    include_rf = include_rf
-  )
+  recipe_obj <- NULL
+  if (!is.null(recipe_fn)) {
+    if (!requireNamespace("recipes", quietly = TRUE)) {
+      rlang::abort("Package 'recipes' must be installed to use preprocessing.")
+    }
+    base_recipe <- t2emodel_data_recipe_init(
+      timevar = timevar,
+      eventvar = eventvar,
+      expvar = expvars,
+      idvars = id_col %||% character(0),
+      traindata = data_prepped
+    )
+    recipe_obj <- do.call(recipe_fn, c(list(model_recipe = base_recipe), recipe_args))
+  }
 
-  class(pipeline) <- c("ml4t2e_pipeline", "list")
+  translated_models <- .ml4t2e_translate_models(models, outcome_type)
+  if (!is.null(prediction_times)) {
+    controls$times <- prediction_times
+  }
+
+  pipeline <- ml4t2e_pipeline(
+    outcome = outcome,
+    models = translated_models,
+    ensemble = ensemble,
+    controls = controls,
+    recipe = recipe_obj,
+    resampling = resampling,
+    metrics = metrics
+  )
+  pipeline$fit(data_prepped)
+  class(pipeline) <- unique(c("ml4t2e_pipeline", class(pipeline)))
   pipeline
 }
 
 #' @export
 print.ml4t2e_pipeline <- function(x, ...) {
-  cat("ml4time2event Pipeline\n")
-  cat("======================\n")
-  cat("Analysis type :", x$analysis_type, "\n")
-  cat("Time variable :", x$timevar, "\n")
-  cat("Event variable:", x$eventvar, "\n")
-  cat(sprintf("Predictors    : %d processed (%d original)\n",
-              length(x$processed_expvars), length(x$original_expvars)))
-  cat("Recipe        :", x$recipe_fn, "\n")
-  if (!is.null(x$training_summary$rows)) {
-    cat("Observations  :", x$training_summary$rows, "\n")
+  if (inherits(x, "T2EPipeline")) {
+    x$print(...)
+  } else {
+    NextMethod()
   }
-  invisible(x)
 }
 
-#' @title Save an ml4time2event pipeline
-#' @param pipeline Object returned by [ml4t2e_fit_pipeline()].
-#' @param file File path (an `.rds` extension is added when missing).
-#' @param compress Compression setting passed to [saveRDS()].
-#' @return Invisibly returns the file path.
 #' @export
+predict.ml4t2e_pipeline <- function(object, ...) {
+  if (!inherits(object, "T2EPipeline")) {
+    rlang::abort("`object` must be created with `ml4t2e_pipeline()` or `ml4t2e_fit_pipeline()`.")
+  }
+  object$predict(...)
+}
+
+#' @keywords internal
+#' @noRd
 ml4t2e_save_pipeline <- function(pipeline, file, compress = TRUE) {
-  if (!inherits(pipeline, "ml4t2e_pipeline")) {
-    stop("'pipeline' must be created with ml4t2e_fit_pipeline().")
+  if (!inherits(pipeline, "T2EPipeline")) {
+    rlang::abort("'pipeline' must be created with `ml4t2e_pipeline()` or `ml4t2e_fit_pipeline()`.")
   }
   if (!grepl("\\.rds$", file, ignore.case = TRUE)) {
     file <- paste0(file, ".rds")
   }
-  pipeline$.__metadata__ <- list(
-    saved_date = Sys.time(),
-    r_version = R.version.string,
-    package_version = utils::packageVersion("ml4time2event")
-  )
   saveRDS(pipeline, file = file, compress = compress)
   invisible(file)
 }
 
-#' @title Load an ml4time2event pipeline
-#' @param file Path to an `.rds` file created by [ml4t2e_save_pipeline()].
-#' @return A reconstructed `ml4t2e_pipeline` object.
-#' @export
+#' @keywords internal
+#' @noRd
 ml4t2e_load_pipeline <- function(file) {
   if (!file.exists(file)) {
-    stop("Pipeline file not found: ", file)
+    rlang::abort("Pipeline file not found: ", file)
   }
   pipeline <- readRDS(file)
-  if (!inherits(pipeline, "ml4t2e_pipeline")) {
-    stop("File does not contain an ml4t2e_pipeline object.")
+  if (!inherits(pipeline, "T2EPipeline")) {
+    rlang::abort("File does not contain a saved `ml4t2e_pipeline` object.")
   }
+  class(pipeline) <- unique(c("ml4t2e_pipeline", class(pipeline)))
   pipeline
 }
 
-#' @export
-predict.ml4t2e_pipeline <- function(object, newdata, new_times = NULL,
-                                    ensemble_method = "average", ...) {
-  if (!inherits(object, "ml4t2e_pipeline")) {
-    stop("object must be created with ml4t2e_fit_pipeline().")
+.ml4t2e_translate_models <- function(models, outcome_type) {
+  if (is.null(models)) {
+    return(if (identical(outcome_type, "survival")) c("cox", "random_forest") else c("cox", "fine_gray"))
   }
-  if (!is.data.frame(newdata)) {
-    stop("'newdata' must be a data.frame.")
-  }
-
-  completed_newdata <- .ml4t2e_prepare_newdata(
-    newdata,
-    required = unique(c(object$timevar, object$eventvar,
-                        object$original_expvars, object$idvars))
+  map <- c(
+    coxph = "cox",
+    cox = "cox",
+    fg = "fine_gray",
+    finegray = "fine_gray",
+    fine_gray = "fine_gray",
+    randomforest = "random_forest",
+    random_forest = "random_forest",
+    rf = "random_forest"
   )
-
-  baked_new <- bake_data_recipe(object$recipe, data = completed_newdata)
-
-  prediction_grid <- .ml4t2e_compute_time_grid(
-    baked_new[[object$timevar]],
-    new_times,
-    fallback = object$prediction_grid
-  )
-
-  if (identical(object$analysis_type, "survival")) {
-    preds <- PredictSurvModels(
-      models = object$model,
-      newdata = baked_new,
-      new_times = prediction_grid,
-      ensemble_method = ensemble_method,
-      ...
-    )
-  } else {
-    preds <- PredictCRModels(
-      models = object$model,
-      newdata = baked_new,
-      new_times = prediction_grid,
-      ensemble_method = ensemble_method,
-      ...
-    )
-  }
-
-  list(
-    predictions = preds,
-    baked_data = baked_new,
-    times = prediction_grid,
-    analysis_type = object$analysis_type
-  )
-}
-
-.ml4t2e_compute_time_grid <- function(observed_times, override = NULL, fallback = NULL) {
-  if (!is.null(override)) {
-    override <- sort(unique(as.numeric(override)))
-    override <- override[!is.na(override)]
-    if (length(override) > 0) {
-      return(unique(c(0, override)))
-    }
-  }
-
-  if (!is.null(fallback)) {
-    return(fallback)
-  }
-
-  observed_times <- as.numeric(observed_times)
-  observed_times <- observed_times[is.finite(observed_times)]
-  if (length(observed_times) == 0) {
-    return(seq(0, 1, length.out = 50))
-  }
-  max_time <- max(observed_times, na.rm = TRUE)
-  seq(0, max_time, length.out = 50)
-}
-
-.ml4t2e_training_summary <- function(data, timevar, eventvar, analysis_type) {
-  out <- list(rows = nrow(data))
-  if (analysis_type == "survival") {
-    events <- data[[eventvar]]
-    out$event_rate <- mean(events == 1, na.rm = TRUE)
-    out$time_range <- range(data[[timevar]], na.rm = TRUE)
-  } else {
-    out$event_counts <- as.list(table(data[[eventvar]], useNA = "no"))
-    out$time_range <- range(data[[timevar]], na.rm = TRUE)
-  }
-  out
-}
-
-.ml4t2e_default_models <- function(analysis_type, models) {
-  if (!is.null(models)) {
-    return(models)
-  }
-  if (identical(analysis_type, "survival")) {
-    return(c("glmnet", "coxph", "xgboost", "gam", "ttah"))
-  }
-  c("FG", "cox", "xgboost", "ttah")
-}
-
-.ml4t2e_prepare_newdata <- function(newdata, required) {
-  missing_cols <- setdiff(required, colnames(newdata))
-  if (length(missing_cols) > 0) {
-    for (col in missing_cols) {
-      newdata[[col]] <- NA
-    }
-  }
-  newdata[required]
-}
-
-.ml4t2e_fn_name <- function(fn, expr = NULL) {
-  if (is.character(fn)) {
-    return(fn)
-  }
-  if (!is.null(expr)) {
-    expr_char <- tryCatch(deparse(expr), error = function(e) character())
-    if (length(expr_char) > 0) {
-      candidate <- trimws(expr_char[1])
-      if (nzchar(candidate) && !candidate %in% c("fn")) {
-        return(candidate)
-      }
-    }
-  }
-  fn_name <- tryCatch({
-    attr(fn, "name")
-  }, error = function(e) NULL)
-  if (!is.null(fn_name) && nzchar(fn_name)) {
-    return(fn_name)
-  }
-  "function"
+  normalized <- tolower(models)
+  translated <- map[normalized]
+  translated[is.na(translated)] <- normalized[is.na(translated)]
+  unique(translated)
 }

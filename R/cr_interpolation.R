@@ -504,8 +504,13 @@ aalenJohansenFromCoxModels <- function(cox_models, newdata, times, event_of_inte
       
       for (t in 1:n_times) {
         if (t == 1) {
-          # At first time point, S(0-) = 1
-          cif_matrix[t, i] <- 1.0 * target_hazards[t]
+          # At time 0, CIF should be 0
+          if (abs(times[t]) < .Machine$double.eps) {
+            cif_matrix[t, i] <- 0
+          } else {
+            # First time point is not 0, use Aalen-Johansen formula: S(0-) = 1
+            cif_matrix[t, i] <- 1.0 * target_hazards[t]
+          }
         } else {
           # CIF(t) = CIF(t-1) + S(t-1) * Δλ_j(t)
           cif_matrix[t, i] <- cif_matrix[t-1, i] + overall_surv[t-1] * target_hazards[t]

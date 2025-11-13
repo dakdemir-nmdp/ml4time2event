@@ -1,0 +1,330 @@
+- The project is out-of-sync -- use `renv::status()` for details.
+i Installing ml4time2event in temporary library
+i Building vignettes for ml4time2event
+- The project is out-of-sync -- use `renv::status()` for details.
+--- re-building 'comprehensive_competing_risks_analysis.Rmd' using rmarkdown
+
+
+processing file: comprehensive_competing_risks_analysis.Rmd
+1/29                   
+2/29 [setup]           
+3/29                   
+4/29 [libraries]       
+5/29                   
+6/29 [data]            
+7/29                   
+8/29 [split]           
+9/29                   
+10/29 [task]            
+11/29                   
+12/29 [fit]             
+13/29                   
+14/29 [train-metrics]   
+15/29                   
+16/29 [validate]        
+17/29                   
+18/29 [autoplot-fit]    
+19/29                   
+20/29 [autoplot-preds]  
+21/29                   
+22/29 [pipeline]        
+23/29                   
+24/29 [pipeline-eval]   
+25/29                   
+26/29 [pipeline-predict]
+27/29                   
+28/29 [persistence]     
+29/29                   
+output file: comprehensive_competing_risks_analysis.knit.md
+
+Warning: The vignette title specified in \VignetteIndexEntry{} is different from the title in the YAML metadata. The former is "Comprehensive Competing Risks Analysis", and the latter is "Comprehensive Competing-Risks Analysis with ml4time2event". If that is intentional, you may set options(rmarkdown.html_vignette.check_title = FALSE) to suppress this check.
+/opt/homebrew/bin/pandoc +RTS -K512m -RTS comprehensive_competing_risks_analysis.knit.md --to html4 --from markdown+autolink_bare_uris+tex_math_single_backslash --output /Users/dakdemir/Library/CloudStorage/OneDrive-NMDP/Year2025/Github/ml4time2event/vignettes/comprehensive_competing_risks_analysis.html --lua-filter /Users/dakdemir/Library/Caches/org.R-project.R/R/renv/cache/v5/macos/R-4.4/aarch64-apple-darwin20/rmarkdown/2.30/efe19db0fde0fff13cea7eec6f695021/rmarkdown/rmarkdown/lua/pagebreak.lua --lua-filter /Users/dakdemir/Library/Caches/org.R-project.R/R/renv/cache/v5/macos/R-4.4/aarch64-apple-darwin20/rmarkdown/2.30/efe19db0fde0fff13cea7eec6f695021/rmarkdown/rmarkdown/lua/latex-div.lua --lua-filter /Users/dakdemir/Library/Caches/org.R-project.R/R/renv/cache/v5/macos/R-4.4/aarch64-apple-darwin20/rmarkdown/2.30/efe19db0fde0fff13cea7eec6f695021/rmarkdown/rmarkdown/lua/table-classes.lua --embed-resources --standalone --section-divs --table-of-contents --toc-depth 2 --template /Users/dakdemir/Library/Caches/org.R-project.R/R/renv/cache/v5/macos/R-4.4/aarch64-apple-darwin20/rmarkdown/2.30/efe19db0fde0fff13cea7eec6f695021/rmarkdown/rmd/h/default.html --highlight-style pygments --css /Users/dakdemir/Library/Caches/org.R-project.R/R/renv/cache/v5/macos/R-4.4/aarch64-apple-darwin20/rmarkdown/2.30/efe19db0fde0fff13cea7eec6f695021/rmarkdown/rmarkdown/templates/html_vignette/resources/vignette.css --mathjax --variable 'mathjax-url=https://mathjax.rstudio.com/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML' --include-in-header /var/folders/8n/1l40cygn069cwys_v97vljmr0000gp/T//RtmpSBbX2I/rmarkdown-str826e26408b96.html 
+
+Output created: comprehensive_competing_risks_analysis.html
+--- finished re-building 'comprehensive_competing_risks_analysis.Rmd'
+
+--- re-building 'comprehensive_survival_analysis.Rmd' using rmarkdown
+
+
+processing file: comprehensive_survival_analysis.Rmd
+1/29                 
+2/29 [setup]         
+3/29                 
+4/29 [libraries]     
+5/29                 
+6/29 [data]          
+7/29                 
+8/29 [split]         
+9/29                 
+10/29 [task]          
+11/29                 
+12/29 [fit]           
+13/29                 
+14/29 [train-metrics] 
+15/29                 
+16/29 [validate]      
+17/29                 
+18/29 [autoplot-fit]  
+19/29                 
+20/29 [autoplot-preds]
+21/29                 
+22/29 [explain]       
+23/29                 
+24/29 [pipeline]      
+25/29                 
+26/29 [pipeline-eval] 
+27/29                 
+28/29 [persistence]   
+29/29                 
+output file: comprehensive_survival_analysis.knit.md
+
+Warning: The vignette title specified in \VignetteIndexEntry{} is different from the title in the YAML metadata. The former is "Comprehensive Survival Analysis", and the latter is "Comprehensive Survival Analysis with ml4time2event". If that is intentional, you may set options(rmarkdown.html_vignette.check_title = FALSE) to suppress this check.
+/opt/homebrew/bin/pandoc +RTS -K512m -RTS comprehensive_survival_analysis.knit.md --to html4 --from markdown+autolink_bare_uris+tex_math_single_backslash --output /Users/dakdemir/Library/CloudStorage/OneDrive-NMDP/Year2025/Github/ml4time2event/vignettes/comprehensive_survival_analysis.html --lua-filter /Users/dakdemir/Library/Caches/org.R-project.R/R/renv/cache/v5/macos/R-4.4/aarch64-apple-darwin20/rmarkdown/2.30/efe19db0fde0fff13cea7eec6f695021/rmarkdown/rmarkdown/lua/pagebreak.lua --lua-filter /Users/dakdemir/Library/Caches/org.R-project.R/R/renv/cache/v5/macos/R-4.4/aarch64-apple-darwin20/rmarkdown/2.30/efe19db0fde0fff13cea7eec6f695021/rmarkdown/rmarkdown/lua/latex-div.lua --lua-filter /Users/dakdemir/Library/Caches/org.R-project.R/R/renv/cache/v5/macos/R-4.4/aarch64-apple-darwin20/rmarkdown/2.30/efe19db0fde0fff13cea7eec6f695021/rmarkdown/rmarkdown/lua/table-classes.lua --embed-resources --standalone --section-divs --table-of-contents --toc-depth 2 --template /Users/dakdemir/Library/Caches/org.R-project.R/R/renv/cache/v5/macos/R-4.4/aarch64-apple-darwin20/rmarkdown/2.30/efe19db0fde0fff13cea7eec6f695021/rmarkdown/rmd/h/default.html --highlight-style pygments --css /Users/dakdemir/Library/Caches/org.R-project.R/R/renv/cache/v5/macos/R-4.4/aarch64-apple-darwin20/rmarkdown/2.30/efe19db0fde0fff13cea7eec6f695021/rmarkdown/rmarkdown/templates/html_vignette/resources/vignette.css --mathjax --variable 'mathjax-url=https://mathjax.rstudio.com/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML' --include-in-header /var/folders/8n/1l40cygn069cwys_v97vljmr0000gp/T//RtmpSBbX2I/rmarkdown-str826e32da6047.html 
+
+Output created: comprehensive_survival_analysis.html
+--- finished re-building 'comprehensive_survival_analysis.Rmd'
+
+--- re-building 'pipeline_quickstart.Rmd' using rmarkdown
+
+
+processing file: pipeline_quickstart.Rmd
+1/12                  
+2/12 [setup]          
+3/12                  
+4/12 [unnamed-chunk-1]
+5/12                  
+6/12 [unnamed-chunk-2]
+7/12                  
+8/12 [unnamed-chunk-3]
+9/12                  
+10/12 [unnamed-chunk-4]
+11/12                  
+12/12 [unnamed-chunk-5]
+output file: pipeline_quickstart.knit.md
+
+/opt/homebrew/bin/pandoc +RTS -K512m -RTS pipeline_quickstart.knit.md --to html4 --from markdown+autolink_bare_uris+tex_math_single_backslash --output /Users/dakdemir/Library/CloudStorage/OneDrive-NMDP/Year2025/Github/ml4time2event/vignettes/pipeline_quickstart.html --lua-filter /Users/dakdemir/Library/Caches/org.R-project.R/R/renv/cache/v5/macos/R-4.4/aarch64-apple-darwin20/rmarkdown/2.30/efe19db0fde0fff13cea7eec6f695021/rmarkdown/rmarkdown/lua/pagebreak.lua --lua-filter /Users/dakdemir/Library/Caches/org.R-project.R/R/renv/cache/v5/macos/R-4.4/aarch64-apple-darwin20/rmarkdown/2.30/efe19db0fde0fff13cea7eec6f695021/rmarkdown/rmarkdown/lua/latex-div.lua --lua-filter /Users/dakdemir/Library/Caches/org.R-project.R/R/renv/cache/v5/macos/R-4.4/aarch64-apple-darwin20/rmarkdown/2.30/efe19db0fde0fff13cea7eec6f695021/rmarkdown/rmarkdown/lua/table-classes.lua --embed-resources --standalone --section-divs --template /Users/dakdemir/Library/Caches/org.R-project.R/R/renv/cache/v5/macos/R-4.4/aarch64-apple-darwin20/rmarkdown/2.30/efe19db0fde0fff13cea7eec6f695021/rmarkdown/rmd/h/default.html --highlight-style pygments --css /Users/dakdemir/Library/Caches/org.R-project.R/R/renv/cache/v5/macos/R-4.4/aarch64-apple-darwin20/rmarkdown/2.30/efe19db0fde0fff13cea7eec6f695021/rmarkdown/rmarkdown/templates/html_vignette/resources/vignette.css --mathjax --variable 'mathjax-url=https://mathjax.rstudio.com/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML' --include-in-header /var/folders/8n/1l40cygn069cwys_v97vljmr0000gp/T//RtmpSBbX2I/rmarkdown-str826e70dbce4c.html 
+
+Output created: pipeline_quickstart.html
+--- finished re-building 'pipeline_quickstart.Rmd'
+
+--- re-building 'shap_explainability.Rmd' using rmarkdown
+
+
+processing file: shap_explainability.Rmd
+1/27                  
+2/27 [setup]          
+3/27                  
+4/27 [libraries]      
+5/27                  
+6/27 [surv-pipeline]  
+7/27                  
+8/27 [surv-shap]      
+9/27                  
+10/27 [surv-importance]
+11/27                  
+12/27 [surv-beeswarm]  
+13/27                  
+14/27 [surv-dependence]
+15/27                  
+16/27 [surv-waterfall] 
+17/27                  
+18/27 [cr-pipeline]    
+19/27                  
+20/27 [cr-shap]        
+21/27                  
+22/27 [cr-importance]  
+23/27                  
+24/27 [cr-dependence]  
+25/27                  
+26/27 [cr-waterfall]   
+27/27                  
+output file: shap_explainability.knit.md
+
+/opt/homebrew/bin/pandoc +RTS -K512m -RTS shap_explainability.knit.md --to html4 --from markdown+autolink_bare_uris+tex_math_single_backslash --output /Users/dakdemir/Library/CloudStorage/OneDrive-NMDP/Year2025/Github/ml4time2event/vignettes/shap_explainability.html --lua-filter /Users/dakdemir/Library/Caches/org.R-project.R/R/renv/cache/v5/macos/R-4.4/aarch64-apple-darwin20/rmarkdown/2.30/efe19db0fde0fff13cea7eec6f695021/rmarkdown/rmarkdown/lua/pagebreak.lua --lua-filter /Users/dakdemir/Library/Caches/org.R-project.R/R/renv/cache/v5/macos/R-4.4/aarch64-apple-darwin20/rmarkdown/2.30/efe19db0fde0fff13cea7eec6f695021/rmarkdown/rmarkdown/lua/latex-div.lua --lua-filter /Users/dakdemir/Library/Caches/org.R-project.R/R/renv/cache/v5/macos/R-4.4/aarch64-apple-darwin20/rmarkdown/2.30/efe19db0fde0fff13cea7eec6f695021/rmarkdown/rmarkdown/lua/table-classes.lua --embed-resources --standalone --variable bs3=TRUE --section-divs --table-of-contents --toc-depth 3 --variable toc_float=1 --variable toc_selectors=h1,h2,h3 --variable toc_collapsed=1 --variable toc_smooth_scroll=1 --variable toc_print=1 --template /Users/dakdemir/Library/Caches/org.R-project.R/R/renv/cache/v5/macos/R-4.4/aarch64-apple-darwin20/rmarkdown/2.30/efe19db0fde0fff13cea7eec6f695021/rmarkdown/rmd/h/default.html --no-highlight --variable highlightjs=1 --variable theme=bootstrap --mathjax --variable 'mathjax-url=https://mathjax.rstudio.com/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML' --include-in-header /var/folders/8n/1l40cygn069cwys_v97vljmr0000gp/T//RtmpSBbX2I/rmarkdown-str826e7db08de5.html --variable code_folding=show --variable code_menu=1 
+pandoc: /Users/dakdemir/Library/CloudStorage/OneDrive-NMDP/Year2025/Github/ml4time2event/vignettes/shap_explainability_files/figure-html/surv-importance-1.png: withBinaryFile: does not exist (No such file or directory)
+Error: processing vignette 'shap_explainability.Rmd' failed with diagnostics:
+pandoc document conversion failed with error 1
+--- failed re-building 'shap_explainability.Rmd'
+
+SUMMARY: processing the following file failed:
+  'shap_explainability.Rmd'
+
+Warning message:
+In tools::buildVignettes(...) :
+  Files named as vignettes but with no recognized vignette engine:
+   'vignettes/quickstart.Rmd'
+(Is a VignetteBuilder field missing?)
+Error: 
+! in callr subprocess.
+Caused by error: 
+! Vignette re-building failed.
+---
+Standard output:
+- The project is out-of-sync -- use `renv::status()` for details.
+1/29                   
+2/29 [setup]           
+3/29                   
+4/29 [libraries]       
+5/29                   
+6/29 [data]            
+7/29                   
+8/29 [split]           
+9/29                   
+10/29 [task]            
+11/29                   
+12/29 [fit]             
+13/29                   
+14/29 [train-metrics]   
+15/29                   
+16/29 [validate]        
+17/29                   
+18/29 [autoplot-fit]    
+19/29                   
+20/29 [autoplot-preds]  
+21/29                   
+22/29 [pipeline]        
+23/29                   
+24/29 [pipeline-eval]   
+25/29                   
+26/29 [pipeline-predict]
+27/29                   
+28/29 [persistence]     
+29/29                   
+/opt/homebrew/bin/pandoc +RTS -K512m -RTS comprehensive_competing_risks_analysis.knit.md --to html4 --from markdown+autolink_bare_uris+tex_math_single_backslash --output /Users/dakdemir/Library/CloudStorage/OneDrive-NMDP/Year2025/Github/ml4time2event/vignettes/comprehensive_competing_risks_analysis.html --lua-filter /Users/dakdemir/Library/Caches/org.R-project.R/R/renv/cache/v5/macos/R-4.4/aarch64-apple-darwin20/rmarkdown/2.30/efe19db0fde0fff13cea7eec6f695021/rmarkdown/rmarkdown/lua/pagebreak.lua --lua-filter /Users/dakdemir/Library/Caches/org.R-project.R/R/renv/cache/v5/macos/R-4.4/aarch64-apple-darwin20/rmarkdown/2.30/efe19db0fde0fff13cea7eec6f695021/rmarkdown/rmarkdown/lua/latex-div.lua --lua-filter /Users/dakdemir/Library/Caches/org.R-project.R/R/renv/cache/v5/macos/R-4.4/aarch64-apple-darwin20/rmarkdown/2.30/efe19db0fde0fff13cea7eec6f695021/rmarkdown/rmarkdown/lua/table-classes.lua --embed-resources --standalone --section-divs --table-of-contents --toc-depth 2 --template /Users/dakdemir/Library/Caches/org.R-project.R/R/renv/cache/v5/macos/R-4.4/aarch64-apple-darwin20/rmarkdown/2.30/efe19db0fde0fff13cea7eec6f695021/rmarkdown/rmd/h/default.html --highlight-style pygments --css /Users/dakdemir/Library/Caches/org.R-project.R/R/renv/cache/v5/macos/R-4.4/aarch64-apple-darwin20/rmarkdown/2.30/efe19db0fde0fff13cea7eec6f695021/rmarkdown/rmarkdown/templates/html_vignette/resources/vignette.css --mathjax --variable 'mathjax-url=https://mathjax.rstudio.com/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML' --include-in-header /var/folders/8n/1l40cygn069cwys_v97vljmr0000gp/T//RtmpSBbX2I/rmarkdown-str826e26408b96.html 
+1/29                 
+2/29 [setup]         
+3/29                 
+4/29 [libraries]     
+5/29                 
+6/29 [data]          
+7/29                 
+8/29 [split]         
+9/29                 
+10/29 [task]          
+11/29                 
+12/29 [fit]           
+13/29                 
+14/29 [train-metrics] 
+15/29                 
+16/29 [validate]      
+17/29                 
+18/29 [autoplot-fit]  
+19/29                 
+20/29 [autoplot-preds]
+21/29                 
+22/29 [explain]       
+23/29                 
+24/29 [pipeline]      
+25/29                 
+26/29 [pipeline-eval] 
+27/29                 
+28/29 [persistence]   
+29/29                 
+/opt/homebrew/bin/pandoc +RTS -K512m -RTS comprehensive_survival_analysis.knit.md --to html4 --from markdown+autolink_bare_uris+tex_math_single_backslash --output /Users/dakdemir/Library/CloudStorage/OneDrive-NMDP/Year2025/Github/ml4time2event/vignettes/comprehensive_survival_analysis.html --lua-filter /Users/dakdemir/Library/Caches/org.R-project.R/R/renv/cache/v5/macos/R-4.4/aarch64-apple-darwin20/rmarkdown/2.30/efe19db0fde0fff13cea7eec6f695021/rmarkdown/rmarkdown/lua/pagebreak.lua --lua-filter /Users/dakdemir/Library/Caches/org.R-project.R/R/renv/cache/v5/macos/R-4.4/aarch64-apple-darwin20/rmarkdown/2.30/efe19db0fde0fff13cea7eec6f695021/rmarkdown/rmarkdown/lua/latex-div.lua --lua-filter /Users/dakdemir/Library/Caches/org.R-project.R/R/renv/cache/v5/macos/R-4.4/aarch64-apple-darwin20/rmarkdown/2.30/efe19db0fde0fff13cea7eec6f695021/rmarkdown/rmarkdown/lua/table-classes.lua --embed-resources --standalone --section-divs --table-of-contents --toc-depth 2 --template /Users/dakdemir/Library/Caches/org.R-project.R/R/renv/cache/v5/macos/R-4.4/aarch64-apple-darwin20/rmarkdown/2.30/efe19db0fde0fff13cea7eec6f695021/rmarkdown/rmd/h/default.html --highlight-style pygments --css /Users/dakdemir/Library/Caches/org.R-project.R/R/renv/cache/v5/macos/R-4.4/aarch64-apple-darwin20/rmarkdown/2.30/efe19db0fde0fff13cea7eec6f695021/rmarkdown/rmarkdown/templates/html_vignette/resources/vignette.css --mathjax --variable 'mathjax-url=https://mathjax.rstudio.com/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML' --include-in-header /var/folders/8n/1l40cygn069cwys_v97vljmr0000gp/T//RtmpSBbX2I/rmarkdown-str826e32da6047.html 
+1/12                  
+2/12 [setup]          
+3/12                  
+4/12 [unnamed-chunk-1]
+5/12                  
+6/12 [unnamed-chunk-2]
+7/12                  
+8/12 [unnamed-chunk-3]
+9/12                  
+10/12 [unnamed-chunk-4]
+11/12                  
+12/12 [unnamed-chunk-5]
+/opt/homebrew/bin/pandoc +RTS -K512m -RTS pipeline_quickstart.knit.md --to html4 --from markdown+autolink_bare_uris+tex_math_single_backslash --output /Users/dakdemir/Library/CloudStorage/OneDrive-NMDP/Year2025/Github/ml4time2event/vignettes/pipeline_quickstart.html --lua-filter /Users/dakdemir/Library/Caches/org.R-project.R/R/renv/cache/v5/macos/R-4.4/aarch64-apple-darwin20/rmarkdown/2.30/efe19db0fde0fff13cea7eec6f695021/rmarkdown/rmarkdown/lua/pagebreak.lua --lua-filter /Users/dakdemir/Library/Caches/org.R-project.R/R/renv/cache/v5/macos/R-4.4/aarch64-apple-darwin20/rmarkdown/2.30/efe19db0fde0fff13cea7eec6f695021/rmarkdown/rmarkdown/lua/latex-div.lua --lua-filter /Users/dakdemir/Library/Caches/org.R-project.R/R/renv/cache/v5/macos/R-4.4/aarch64-apple-darwin20/rmarkdown/2.30/efe19db0fde0fff13cea7eec6f695021/rmarkdown/rmarkdown/lua/table-classes.lua --embed-resources --standalone --section-divs --template /Users/dakdemir/Library/Caches/org.R-project.R/R/renv/cache/v5/macos/R-4.4/aarch64-apple-darwin20/rmarkdown/2.30/efe19db0fde0fff13cea7eec6f695021/rmarkdown/rmd/h/default.html --highlight-style pygments --css /Users/dakdemir/Library/Caches/org.R-project.R/R/renv/cache/v5/macos/R-4.4/aarch64-apple-darwin20/rmarkdown/2.30/efe19db0fde0fff13cea7eec6f695021/rmarkdown/rmarkdown/templates/html_vignette/resources/vignette.css --mathjax --variable 'mathjax-url=https://mathjax.rstudio.com/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML' --include-in-header /var/folders/8n/1l40cygn069cwys_v97vljmr0000gp/T//RtmpSBbX2I/rmarkdown-str826e70dbce4c.html 
+1/27                  
+2/27 [setup]          
+3/27                  
+4/27 [libraries]      
+5/27                  
+6/27 [surv-pipeline]  
+7/27                  
+8/27 [surv-shap]      
+9/27                  
+10/27 [surv-importance]
+11/27                  
+12/27 [surv-beeswarm]  
+13/27                  
+14/27 [surv-dependence]
+15/27                  
+16/27 [surv-waterfall] 
+17/27                  
+18/27 [cr-pipeline]    
+19/27                  
+20/27 [cr-shap]        
+21/27                  
+22/27 [cr-importance]  
+23/27                  
+24/27 [cr-dependence]  
+25/27                  
+26/27 [cr-waterfall]   
+27/27                  
+/opt/homebrew/bin/pandoc +RTS -K512m -RTS shap_explainability.knit.md --to html4 --from markdown+autolink_bare_uris+tex_math_single_backslash --output /Users/dakdemir/Library/CloudStorage/OneDrive-NMDP/Year2025/Github/ml4time2event/vignettes/shap_explainability.html --lua-filter /Users/dakdemir/Library/Caches/org.R-project.R/R/renv/cache/v5/macos/R-4.4/aarch64-apple-darwin20/rmarkdown/2.30/efe19db0fde0fff13cea7eec6f695021/rmarkdown/rmarkdown/lua/pagebreak.lua --lua-filter /Users/dakdemir/Library/Caches/org.R-project.R/R/renv/cache/v5/macos/R-4.4/aarch64-apple-darwin20/rmarkdown/2.30/efe19db0fde0fff13cea7eec6f695021/rmarkdown/rmarkdown/lua/latex-div.lua --lua-filter /Users/dakdemir/Library/Caches/org.R-project.R/R/renv/cache/v5/macos/R-4.4/aarch64-apple-darwin20/rmarkdown/2.30/efe19db0fde0fff13cea7eec6f695021/rmarkdown/rmarkdown/lua/table-classes.lua --embed-resources --standalone --variable bs3=TRUE --section-divs --table-of-contents --toc-depth 3 --variable toc_float=1 --variable toc_selectors=h1,h2,h3 --variable toc_collapsed=1 --variable toc_smooth_scroll=1 --variable toc_print=1 --template /Users/dakdemir/Library/Caches/org.R-project.R/R/renv/cache/v5/macos/R-4.4/aarch64-apple-darwin20/rmarkdown/2.30/efe19db0fde0fff13cea7eec6f695021/rmarkdown/rmd/h/default.html --no-highlight --variable highlightjs=1 --variable theme=bootstrap --mathjax --variable 'mathjax-url=https://mathjax.rstudio.com/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML' --include-in-header /var/folders/8n/1l40cygn069cwys_v97vljmr0000gp/T//RtmpSBbX2I/rmarkdown-str826e7db08de5.html --variable code_folding=show --variable code_menu=1
+---
+Standard error:
+--- re-building 'comprehensive_competing_risks_analysis.Rmd' using rmarkdown
+
+
+processing file: comprehensive_competing_risks_analysis.Rmd
+output file: comprehensive_competing_risks_analysis.knit.md
+
+Warning: The vignette title specified in \VignetteIndexEntry{} is different from the title in the YAML metadata. The former is "Comprehensive Competing Risks Analysis", and the latter is "Comprehensive Competing-Risks Analysis with ml4time2event". If that is intentional, you may set options(rmarkdown.html_vignette.check_title = FALSE) to suppress this check.
+
+Output created: comprehensive_competing_risks_analysis.html
+--- finished re-building 'comprehensive_competing_risks_analysis.Rmd'
+
+--- re-building 'comprehensive_survival_analysis.Rmd' using rmarkdown
+
+
+processing file: comprehensive_survival_analysis.Rmd
+output file: comprehensive_survival_analysis.knit.md
+
+Warning: The vignette title specified in \VignetteIndexEntry{} is different from the title in the YAML metadata. The former is "Comprehensive Survival Analysis", and the latter is "Comprehensive Survival Analysis with ml4time2event". If that is intentional, you may set options(rmarkdown.html_vignette.check_title = FALSE) to suppress this check.
+
+Output created: comprehensive_survival_analysis.html
+--- finished re-building 'comprehensive_survival_analysis.Rmd'
+
+--- re-building 'pipeline_quickstart.Rmd' using rmarkdown
+
+
+processing file: pipeline_quickstart.Rmd
+output file: pipeline_quickstart.knit.md
+
+
+Output created: pipeline_quickstart.html
+--- finished re-building 'pipeline_quickstart.Rmd'
+
+--- re-building 'shap_explainability.Rmd' using rmarkdown
+
+
+processing file: shap_explainability.Rmd
+output file: shap_explainability.knit.md
+
+pandoc: /Users/dakdemir/Library/CloudStorage/OneDrive-NMDP/Year2025/Github/ml4time2event/vignettes/shap_explainability_files/figure-html/surv-importance-1.png: withBinaryFile: does not exist (No such file or directory)
+Error: processing vignette 'shap_explainability.Rmd' failed with diagnostics:
+pandoc document conversion failed with error 1
+--- failed re-building 'shap_explainability.Rmd'
+
+SUMMARY: processing the following file failed:
+  'shap_explainability.Rmd'
+
+Warning message:
+In tools::buildVignettes(...) :
+  Files named as vignettes but with no recognized vignette engine:
+   'vignettes/quickstart.Rmd'
+(Is a VignetteBuilder field missing?)
+---
+Backtrace:
+1. devtools::build_vignettes()
+2. callr::r(function(...) tools::buildVignettes(...), args = list(dir = pkg...
+3. callr:::get_result(output = out, options)
+4. callr:::throw(callr_remote_error(remerr, output), parent = fix_msg(remerr[[3]]))
+---
+Subprocess backtrace:
+1. tools::buildVignettes(...)
+2. base::stop(msg, domain = NA, call. = FALSE)
+3. | base::.handleSimpleError(function (e) ...
+4. global h(simpleError(msg, call))
+Execution halted

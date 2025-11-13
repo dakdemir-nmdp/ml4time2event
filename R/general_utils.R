@@ -1,9 +1,3 @@
-#' @title VariableProfile
-#' @description Creates a profile of variables in a dataset, summarizing factors and numeric ranges.
-#' @param data data frame
-#' @param expvars character vector of variable names to profile
-#' @return a list named by expvars, containing tables for factors/characters or min/max for numerics.
-#' @export
 VariableProfile<-function(data, expvars){
   varprofile<-vector(mode="list", length=length(expvars))
   names(varprofile)<-expvars
@@ -26,15 +20,6 @@ VariableProfile<-function(data, expvars){
   varprofile
 }
 
-#' @title format_model_name
-#' @description Convert internal model names to human-readable display names
-#' @param model_names Character vector of internal model names (e.g., "CPH_Model", "glmnet_Model")
-#' @param model_type Character string: "survival" or "competing_risks" (default: "survival")
-#' @return Character vector of formatted display names
-#' @export
-#' @examples
-#' format_model_name(c("CPH_Model", "glmnet_Model", "Ensemble"))
-#' format_model_name("FG_Model", model_type = "competing_risks")
 format_model_name <- function(model_names, model_type = "survival") {
 
   # Define mapping for survival models
@@ -95,14 +80,6 @@ format_model_name <- function(model_names, model_type = "survival") {
 }
 
 
-#' @title listrules
-#' @description Extract rules from a partykit tree object.
-#' (Adapted from partykit:::.list.rules.party)
-#' @param x A party object representing a tree.
-#' @param i Node ID(s) to extract rules for (default: terminal nodes).
-#' @return A character vector or list of character vectors representing the rules.
-#' @importFrom partykit nodeids data_party id_node kids_node split_node varid_split index_split breaks_split right_split node_party
-#' @noRd
 listrules <- function(x, i = NULL) {
   # Get terminal node IDs if not specified
   if (is.null(i)) {
@@ -166,4 +143,7 @@ listrules <- function(x, i = NULL) {
     # Fallback if internal function is not available
     return(paste("Rule for node", node_id))
   })
+}
+`%||%` <- function(x, y) {
+  if (!is.null(x)) x else y
 }

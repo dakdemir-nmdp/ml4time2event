@@ -1,0 +1,98 @@
+---
+title: "Pipeline Quickstart"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Pipeline Quickstart}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+
+library(ml4time2event)
+library(dplyr)
+library(recipes)
+library(rsample)
+```
+
+## Survival pipelines
+
+```{r}
+lung <- get_lung_survival_data() |> 
+  mutate(status = if_else(status == 2, 1L, status))
+
+surv_pipe <- ml4t2e_pipeline(
+  outcome = list(type = "survival", time = "time", event = "status"),
+  models = c("cox", "gbm"),
+  ensemble = "auto",
+  recipe = recipe(~ ., data = lung) |>
+    step_impute_median(all_numeric_predictors()),
+  resampling = vfold_cv(lung, v = 3)
+)
+
+surv_pipe$fit(lung)
+surv_pipe$summary()
+```
+
+Predictions are tidy and time-aware:
+
+```{r}
+surv_preds <- surv_pipe$predict(
+  newdata = lung[1:5, ],
+  times = seq(0, 365, length.out = 25),
+  type = "survival",
+  include = "ensemble"
+)
+
+head(surv_preds)
+```
+
+## Competing-risk pipelines
+
+```{r}
+bmt <- get_bmt_competing_risks_data() |>
+  mutate(
+    cause = if_else(status == 0L, NA_integer_, status),
+    status = if_else(status == 0L, 0L, 1L)
+  )
+
+cr_pipe <- ml4t2e_pipeline(
+  outcome = list(
+    type = "competing_risk",
+    time = "ftime",
+    status = "status",
+    cause = "cause"
+  ),
+  models = c("cox", "fine_gray"),
+  ensemble = "auto"
+)
+
+cr_pipe$fit(bmt)
+cr_pipe$summary()
+```
+
+Predictions return cumulative incidence functions in a tidy tibble:
+
+```{r}
+cr_preds <- cr_pipe$predict(
+  newdata = bmt[1:4, ],
+  times = seq(0, 120, length.out = 20),
+  type = "cif",
+  include = "ensemble"
+)
+
+head(cr_preds)
+```
+
+## Persistence
+
+```{r}
+tmp <- tempfile(fileext = ".rds")
+saveRDS(surv_pipe, tmp)
+reloaded <- readRDS(tmp)
+reloaded$summary()
+```

@@ -1,10 +1,4 @@
 # --- Internal Helper Functions for Custom NNet Training ---
-#' @title Initialize Neural Network Weights
-#' @description Initializes weights and biases for a single-hidden-layer network.
-#' @param n_in Number of input features.
-#' @param n_hidden Number of hidden units.
-#' @return A list of weight matrices and bias vectors.
-#' @keywords internal
 initialize_weights <- function(n_in, n_hidden) {
   # Use a common initialization scheme (e.g., random uniform)
   # The nnet package uses a range of [-0.7, 0.7]
@@ -17,12 +11,6 @@ initialize_weights <- function(n_in, n_hidden) {
   list(W1 = W1, b1 = b1, W2 = W2, b2 = b2)
 }
 
-#' @title Forward Pass
-#' @description Computes the output of the neural network.
-#' @param X Input matrix.
-#' @param weights A list of weights and biases.
-#' @return A list containing the final output (log-risk) and hidden layer activations.
-#' @keywords internal
 forward_pass <- function(X, weights) {
   # Sigmoid activation function (as in nnet package)
   sigmoid <- function(z) 1 / (1 + exp(-z))
@@ -36,12 +24,6 @@ forward_pass <- function(X, weights) {
   list(output = Z2, hidden_activations = A1)
 }
 
-#' @title (Helper) Prepare New Data for ShallowNN Models
-#' @description Applies factor level alignment and numeric scaling to new data.
-#' @param modelout Fitted ShallowNN model object.
-#' @param newdata Data frame of new observations.
-#' @return A list containing the prepared data frame and the model matrix.
-#' @keywords internal
 prepare_newdata_for_model <- function(modelout, newdata) {
   prepared <- newdata[, modelout$expvars, drop = FALSE]
 
@@ -71,22 +53,10 @@ prepare_newdata_for_model <- function(modelout, newdata) {
   list(data = prepared, x = x_matrix)
 }
 
-#' @title (Helper) Baseline Hazard Step Function
-#' @description Generates a right-continuous step function for the baseline cumulative hazard.
-#' @param baseline_df Data frame with columns `time` and `cumhaz`.
-#' @return A step function suitable for evaluating cumulative hazard at arbitrary times.
-#' @keywords internal
 baseline_cumhaz_stepfun <- function(baseline_df) {
   stats::stepfun(baseline_df$time, c(0, baseline_df$cumhaz))
 }
 
-#' @title (Helper) Hazard Increment Matrix
-#' @description Creates a matrix of cumulative hazard increments for each observation over a common time grid.
-#' @param step_fun Step function of baseline cumulative hazard.
-#' @param times Vector of evaluation times (including time 0).
-#' @param risk_scores Numeric vector of risk scores exp(eta(x)).
-#' @return A matrix with rows = intervals between times and columns = observations.
-#' @keywords internal
 hazard_increment_matrix <- function(step_fun, times, risk_scores) {
   if (!is.numeric(times) || any(is.na(times))) {
     stop("`times` must be a numeric vector without NA values")
@@ -105,12 +75,6 @@ hazard_increment_matrix <- function(step_fun, times, risk_scores) {
   outer(baseline_increments, risk_scores)
 }
 
-#' @title (Helper) Compute Risk Scores
-#' @description Generates exponentiated linear predictors for a prepared design matrix.
-#' @param modelout Fitted ShallowNN model object.
-#' @param x_matrix Model matrix produced by `prepare_newdata_for_model`.
-#' @return Numeric vector of risk scores exp(η(x)).
-#' @keywords internal
 predict_risk_scores <- function(modelout, x_matrix) {
   log_risk <- forward_pass(x_matrix, modelout$model$weights)$output
   log_risk <- as.vector(log_risk)
@@ -118,13 +82,6 @@ predict_risk_scores <- function(modelout, x_matrix) {
   exp(log_risk)
 }
 
-#' @title Unpack Weights
-#' @description Unpacks a weight vector into weight matrices and bias vectors.
-#' @param w_vec Weight vector.
-#' @param n_in Number of input features.
-#' @param n_hidden Number of hidden units.
-#' @return A list of weight matrices and bias vectors.
-#' @keywords internal
 unpack_weights <- function(w_vec, n_in, n_hidden) {
   W1_end <- n_in * n_hidden
   b1_end <- W1_end + n_hidden
@@ -139,38 +96,10 @@ unpack_weights <- function(w_vec, n_in, n_hidden) {
   )
 }
 
-#' @title CRModel_ShallowNN
 #'
-#' @description Fit a single-hidden-layer neural network model for competing risks outcomes
-#'   using a Fine-Gray style loss.
 #'
-#' @param data data frame with explanatory and outcome variables
-#' @param expvars character vector of names of explanatory variables in data
-#' @param timevar character name of time variable in data
-#' @param eventvar character name of event variable in data (coded 0=censored, 1=cause1, 2=cause2, etc.)
-#' @param event_codes character or numeric vector identifying the event code(s) to
-#'   model. The shallow neural network competing risks implementation currently
-#'   supports a single event code. If NULL (default), the first non-zero event
-#'   code observed in the data is used.
-#' @param size integer, number of units in the hidden layer (default: 5)
-#' @param decay numeric, L2 regularization parameter (default: 0.01)
-#' @param maxit integer, maximum iterations for optimization (default: 1000)
-#' @param verbose logical, print progress messages (default: FALSE)
 #'
-#' @return a list with the following components:
-#'   \item{model}{fitted neural network model (list with weights)}
-#'   \item{times}{unique event times from training data for the event of interest}
-#'   \item{varprof}{variable profile list}
-#'   \item{expvars}{character vector of explanatory variables}
-#'   \item{factor_levels}{list of factor levels for categorical variables}
-#'   \item{event_codes}{character vector of event codes included in the model}
-#'   \item{event_codes_numeric}{numeric vector of event codes included}
-#'   \item{default_event_code}{character scalar for the default event code}
-#'   \item{time_range}{vector with min and max observed event times}
-#'   \item{model_type}{character string "cr_shallownn"}
 #'
-#' @importFrom stats model.matrix as.formula complete.cases
-#' @export
 CRModel_ShallowNN <- function(data, expvars, timevar, eventvar, event_codes = NULL,
                               size = 5, decay = 0.01, maxit = 1000, verbose = FALSE) {
 
@@ -462,42 +391,10 @@ CRModel_ShallowNN <- function(data, expvars, timevar, eventvar, event_codes = NU
   return(result)
 }
 
-#' @title Predict_CRModel_ShallowNN
 #'
-#' @description Get predictions from a fitted shallow neural network competing risks model for
-#'   new data.
 #'
-#' @param modelout the output from 'CRModel_ShallowNN'
-#' @param newdata data frame with new observations for prediction
-#' @param new_times optional numeric vector of time points for prediction.
-#'   If NULL (default), uses the baseline hazard times from training.
-#' @param event_of_interest character or numeric scalar indicating the event code
-#'   for which CIFs should be returned. If NULL (default), uses the event code
-#'   stored in the fitted model. Shallow neural network models can only predict the event they
-#'   were trained on.
-#' @param other_models optional named list of additional fitted
-#'   `CRModel_ShallowNN` objects (one per competing event). When provided,
-#'   the function combines all
-#'   cause-specific hazard models using the Aalen-Johansen estimator to obtain
-#'   cumulative incidence functions. If omitted, only the cause-specific hazard
-#'   and cumulative hazard for the event of interest are returned.
 #'
-#' @return a list containing:
-#'   \\item{CIFs}{predicted cumulative incidence function matrix
-#'     (rows=times, cols=observations). Available only when `other_models`
-#'     are supplied; otherwise `NULL`.}
-#'   \\item{Times}{the times at which predictions are calculated}
-#'   \item{CauseSpecificHazard}{matrix of cause-specific hazard increments
-#'     for the event of interest (rows = intervals, cols = observations)}
-#'   \item{CauseSpecificCumHaz}{matrix of cumulative cause-specific hazards
-#'     at each time point}
-#'   \item{CauseSpecificSurvival}{matrix of survival probabilities derived
-#'     from the cause-specific hazard alone}
-#'   \item{TotalSurvival}{matrix of overall survival probabilities that
-#'     incorporate all supplied cause-specific hazards}
 #'
-#' @importFrom stats model.matrix
-#' @export
 Predict_CRModel_ShallowNN <- function(modelout, newdata, new_times = NULL,
                                       event_of_interest = NULL, other_models = NULL) {
 

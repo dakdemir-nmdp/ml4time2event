@@ -1,8 +1,8 @@
 ---
 title: "Comprehensive Survival Analysis with ml4time2event"
-author: "ml4time2event Team"
+author: "ml4time2event team"
 date: "`r Sys.Date()`"
-output: 
+output:
   rmarkdown::html_vignette:
     toc: true
     toc_depth: 2
@@ -12,141 +12,219 @@ vignette: >
   %\VignetteEncoding{UTF-8}
 ---
 
-# Comprehensive Survival Analysis Pipeline with ml4time2event
-
-This vignette demonstrates an end-to-end survival analysis workflow using the
-**ml4time2event** package. We rely on the prepared NCCTG lung cancer dataset
-distributed with the package, build an ensemble of survival models, evaluate
-performance, and visualise predictions.
-
-```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
 ```
 
-# 1. Setup and Load Libraries
+# Overview
 
-```{r load-libraries}
+The refactored `ml4time2event` package centres on three tidy verbs:
+
+1. create a task with `ml4t2e_task_surv()` or `ml4t2e_task_cr()`
+2. fit engines through `ml4t2e_fit()`
+3. work with tidy tibbles returned from `predict()`, `ml4t2e_evaluate()`, and `autoplot()`.
+
+This vignette walks through an end-to-end survival workflow that showcases the new API. We will:
+
+* explore the built-in lung cancer dataset
+* train a collection of survival engines (with optional ensembling)
+* score a hold-out set and compare metrics
+* visualise survival curves and permutation-based feature importance
+* wrap everything into a reusable pipeline (recipes + resampling)
+
+# 1. Packages and data
+
+```{r libraries}
 library(ml4time2event)
-library(survival)
 library(dplyr)
 library(ggplot2)
 ```
 
-# 2. Load Prepared Dataset
+The NCCTG lung-cancer dataset ships with the package. We convert the event indicator to the 0/1 format expected by the new task constructors.
 
-The dataset `lung_survival_prepared` ships with the package and contains the
-imputed and feature-engineered variables used throughout this vignette.
+```{r data}
+lung_df <- get_lung_survival_data()
 
-```{r load-data}
-lung_data <- ml4time2event::get_lung_survival_data()
+if (is.data.frame(lung_df$status)) {
+  lung_df$status <- lung_df$status[[1]]
+}
 
-glimpse(lung_data)
+status_max <- max(lung_df$status, na.rm = TRUE)
+if (status_max > 1L) {
+  # Fall back to 0/1 coding when the source data uses 1/2 indicators
+  lung_df$status <- ifelse(lung_df$status == status_max, 1L, 0L)
+}
 
-summary(lung_data[c("time", "status", "age", "ph.karno", "wt.loss")])
+lung_df$status <- as.integer(lung_df$status)
+
+glimpse(lung_df)
 ```
 
-# 3. Explore Baseline Characteristics
+For the remainder of the analysis we keep a simple training / validation split.
 
-```{r explore-data}
-# Event distribution
-table(lung_data$status)
+```{r split}
+#set.seed(123)
+train_rows <- sample.int(nrow(lung_df), size = floor(0.7 * nrow(lung_df)))
+lung_train <- lung_df[train_rows, ]
+lung_test  <- lung_df[-train_rows, ]
 
-# Summary statistics
-summary(lung_data[c("time", "status")])
+sprintf("Training rows: %s  |  Validation rows: %s",
+        nrow(lung_train), nrow(lung_test))
 ```
 
-# 4. Variable Profiling with Package Tools
+# 2. Build a survival task
 
-`VariableProfile()` provides quick summaries for candidate predictors.
+Tasks capture the outcome columns, the feature set, and lightweight metadata.
 
-```{r variable-profile}
-candidate_expvars <- c(
-  "age", "sex", "ph.ecog", "ph.karno", "pat.karno",
-  "meal.cal", "wt.loss", "age_group", "performance_good"
-)
-var_profile <- VariableProfile(lung_data, candidate_expvars)
-var_profile
+```{r task}
+feature_cols <- c("age", "sex", "ph.ecog", "ph.karno", "pat.karno",
+                  "meal.cal", "wt.loss")
 
-lung_data$ph.ecog <- as.numeric(lung_data$ph.ecog)
-```
-
-# 5. Data Splitting
-
-```{r split-data}
-split_data <- t2edata_split(lung_data, prop = 0.7)
-train_data <- split_data$Train
-test_data <- split_data$Test
-```
-
-# 6. Survival Model Training
-
-```{r train-models}
-timevar <- "time"
-eventvar <- "status"
-expvars <- c("age", "sex", "ph.ecog", "ph.karno", "meal.cal", "wt.loss")
-
-models <- RunSurvModels(
-  datatrain = train_data,
-  ExpVars = expvars,
-  timevar = timevar,
-  eventvar = eventvar,
-  models = c("glmnet", "coxph", "rulefit", "xgboost", "gam", "gbm", "ExpSurvReg", "bart", "shallownn", "ttah"),
-  ntimes = 50
-)
-
-models
-```
-
-# 7. Predictions
-
-```{r generate-predictions}
-complete_test_data <- test_data[complete.cases(test_data[, expvars]), ]
-prediction_times <- sort(unique(complete_test_data[[timevar]]))
-
-# Generate predictions
-predictions <- PredictSurvModels(
-  models = models,
-  newdata = complete_test_data,
-  new_times = prediction_times,
-  ensemble_method = "average"
+surv_task <- ml4t2e_task_surv(
+  data = lung_train,
+  time = "time",
+  event = "status",
+  features = feature_cols,
+  time_units = "days"
 )
 ```
 
-# 8. Model Evaluation
+# 3. Fit multiple engines (with optional ensemble)
 
-```{r evaluate-models}
-leaderboard <- EvaluateSurvModels(
-  models = models,
-  data = complete_test_data,
-  timevar = timevar,
-  eventvar = eventvar,
-  eval_times = prediction_times,
-  prediction_times = prediction_times,
-  ensemble_method = "average"
+`ml4t2e_fit()` pulls constructor definitions from the internal registry. The `controls` list lets us share hyperparameters (e.g. the common prediction grid).
+
+```{r fit}
+surv_fit <- ml4t2e_fit(
+  task = surv_task,
+  models = c("cox", "random_forest", "gbm", "gam", "xgboost"),
+  ensemble = "auto",
+  controls = list(times = seq(0, 1000, length.out = 75))
 )
 
-leaderboard$display_name <- format_model_name(leaderboard$model, model_type = "survival")
-print(leaderboard[, c("display_name", "integrated_c", "integrated_brier", "rank")])
+surv_fit
 ```
 
-# 9. Visualisation
+Evaluation on the training data is one function call away.
 
-```{r visualization, fig.width=10, fig.height=6}
-plot_survival_curves(
-  predictions = predictions,
-  patients_to_plot = 1:3,
-  highlight_ensemble = TRUE
+```{r train-metrics}
+ml4t2e_evaluate(
+  surv_fit,
+  metrics = c("c_index", "ibs"),
+  include = c("ensemble", "cox", "random_forest", "gbm", "gam", "xgboost")
 )
 ```
 
-# 10. Model Persistence
+# 4. Score a validation set
 
-```{r save-models}
-# Save ensemble
-ensemble_file <- tempfile("lung_cancer_ensemble_", fileext = ".rds")
-SaveEnsemble(models, file = ensemble_file)
 
-# Load ensemble
-loaded_ensemble <- LoadEnsemble(file = ensemble_file)
-print(loaded_ensemble)
+
+```{r validate}
+surv_task_val <- ml4t2e_task_surv(
+  data = lung_test,
+  time = "time",
+  event = "status",
+  features = feature_cols,
+  time_units = "days"
+)
+
+surv_preds_val <- predict(
+  surv_fit,
+  newdata = lung_test,
+  times = seq(0, 1000, length.out = 75),
+  type = "survival",
+  include = c("ensemble", "cox", "random_forest", "gbm", "gam", "xgboost")
+)
+
+ml4t2e_evaluate(
+  surv_preds_val,
+  task = surv_task_val,
+  metrics = c("c_index", "ibs")
+)
 ```
+
+# 5. Visualise survival curves
+
+`autoplot()` works on both fitted objects and tidy prediction tibbles.
+
+```{r autoplot-fit, fig.width=7, fig.height=4}
+autoplot(surv_fit, include = c("ensemble", "cox", "random_forest", "gbm", "gam", "xgboost"))
+```
+
+```{r autoplot-preds, fig.width=7, fig.height=4}
+autoplot(surv_preds_val, include = "ensemble")
+```
+
+# 6. Permutation-based feature importance
+
+Permutation importance is built into the core API for survival fits.
+
+```{r explain, fig.width=7, fig.height=4}
+surv_importance <- ml4t2e_explain(
+  surv_fit,
+  newdata = lung_test,
+  top_n = 6
+)
+
+surv_importance
+
+autoplot(surv_importance)
+```
+
+# 7. Pipelines with recipes and resampling
+
+For workflows that require preprocessing and resampling, wrap everything in a `T2EPipeline`. Recipes are optional, but when supplied they are baked automatically during prediction/evaluation.
+
+```{r pipeline}
+library(recipes)
+library(rsample)
+
+surv_pipeline <- ml4t2e_pipeline(
+  outcome = list(type = "survival", time = "time", event = "status"),
+  models = c("cox", "random_forest", "gbm", "gam", "xgboost"),
+  ensemble = "auto",
+  recipe = recipe(status ~ ., data = lung_train) |>
+    step_impute_median(all_numeric_predictors()) |>
+    step_dummy(all_nominal_predictors()),
+  resampling = vfold_cv(lung_train, v = 3)
+)
+
+surv_pipeline$fit(lung_train)
+surv_pipeline$summary()
+```
+
+Pipelines expose the same prediction and evaluation helpers:
+
+```{r pipeline-eval}
+surv_pipeline$evaluate(
+  newdata = lung_test,
+  metrics = c("c_index", "ibs"),
+  include = "ensemble"
+)
+```
+
+# 8. Persist results
+
+Fits are regular R objects; use `ml4t2e_save()` / `ml4t2e_load()` for the primary API or base R `saveRDS()` for ad-hoc serialization.
+
+```{r persistence}
+tmp_fit <- tempfile(fileext = ".rds")
+ml4t2e_save(surv_fit, tmp_fit)
+reloaded_fit <- ml4t2e_load(tmp_fit)
+
+tmp_pipe <- tempfile(fileext = ".rds")
+saveRDS(surv_pipeline, tmp_pipe)
+reloaded_pipeline <- readRDS(tmp_pipe)
+
+reloaded_fit
+reloaded_pipeline$summary()
+```
+
+# Conclusion
+
+The new object-oriented surface keeps common analyses compact:
+
+1. declare a task,
+2. fit one or more registry-backed engines (optionally with ensembling),
+3. reuse the same tidy outputs across prediction, evaluation, visualisation, and explainability.
+
+The pipeline helpers layer on recipes/resampling without sacrificing the simplicity of the core verbs.

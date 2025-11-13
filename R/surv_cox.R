@@ -1,72 +1,12 @@
-#' @title SurvModel_Cox
 #'
-#' @description Fit a Cox proportional hazards model for survival outcomes with optional variable selection.
 #'
-#' @param data data frame with explanatory and outcome variables
-#' @param expvars character vector of names of explanatory variables in data
-#' @param timevar character name of time variable in data
-#' @param eventvar character name of event variable in data (needs to be 0/1)
-#' @param varsel character string specifying variable selection method:
-#'   "none" (default, no selection),
-#'   "backward" (backward elimination),
-#'   "forward" (forward selection),
-#'   "both" (stepwise selection),
-#'   "penalized" (elastic net penalized Cox via glmnet)
-#' @param penalty character string specifying penalty criterion for stepwise methods: "AIC" (default) or "BIC"
-#' @param alpha numeric value in [0,1] for elastic net mixing parameter when varsel="penalized".
-#'   alpha=1 is lasso, alpha=0 is ridge, alpha=0.5 (default) is elastic net.
-#' @param nfolds integer, number of cross-validation folds for penalized Cox (default: 10)
-#' @param ntimes integer, number of time points to use for prediction grid (default: 50)
-#' @param verbose logical, print progress messages (default: FALSE)
 #'
-#' @return a list with the following components:
-#'   \item{cph_model}{the fitted Cox model object (coxph or cv.glmnet)}
-#'   \item{times}{vector of time points for prediction grid (equally-spaced from 0 to max time)}
-#'   \item{time_range}{vector with min and max observed event times}
-#'   \item{varprof}{variable profile list containing factor levels and numeric ranges}
-#'   \item{model_type}{character string "cox_standard" or "cox_penalized"}
-#'   \item{expvars}{character vector of explanatory variables used}
-#'   \item{timevar}{character name of time variable}
-#'   \item{eventvar}{character name of event variable}
-#'   \item{varsel_method}{character string indicating variable selection method used}
-#'   \item{alpha}{numeric value of elastic net mixing parameter used (if varsel="penalized")}
-#'   \item{nfolds}{integer number of cross-validation folds used (if varsel="penalized")}
 #'
-#' @note Predictions can be made at any time points via interpolation.
-#'   The times vector is used as default when predicting, but can be overridden.
 #'
-#' @importFrom survival coxph Surv survfit
-#' @importFrom stats as.formula model.matrix coef complete.cases
-#' @importFrom glmnet cv.glmnet
-#' @export
 #'
-#' @examples
-#' \dontrun{
-#' # Simulate survival data
-#' set.seed(123)
-#' n <- 200
-#' data <- data.frame(
-#'   time = rexp(n, 0.1),
-#'   event = rbinom(n, 1, 0.7),
-#'   x1 = rnorm(n),
-#'   x2 = rnorm(n),
-#'   x3 = factor(sample(c("A","B","C"), n, replace=TRUE))
-#' )
 #'
-#' # Fit Cox model without variable selection
-#' model1 <- SurvModel_Cox(data, expvars=c("x1","x2","x3"),
-#'                         timevar="time", eventvar="event")
 #'
-#' # Fit Cox model with backward selection (AIC)
-#' model2 <- SurvModel_Cox(data, expvars=c("x1","x2","x3"),
-#'                         timevar="time", eventvar="event",
-#'                         varsel="backward", penalty="AIC")
 #'
-#' # Fit penalized Cox model (elastic net)
-#' model3 <- SurvModel_Cox(data, expvars=c("x1","x2","x3"),
-#'                         timevar="time", eventvar="event",
-#'                         varsel="penalized", alpha=0.5)
-#' }
 SurvModel_Cox <- function(data, expvars, timevar, eventvar,
                           varsel = "none",
                           penalty = "AIC",
@@ -310,42 +250,13 @@ SurvModel_Cox <- function(data, expvars, timevar, eventvar,
   return(result)
 }
 
-#' @title Predict_SurvModel_Cox
 #'
-#' @description Get predictions from a fitted Cox survival model for new data.
 #'
-#' @param modelout the output from 'SurvModel_Cox'
-#' @param newdata data frame with new observations for prediction
-#' @param new_times optional numeric vector of time points for prediction.
-#'   If NULL (default), uses the times generated during model training
-#'   (50 equally-spaced points from 0 to max observed time).
-#'   Can be any positive values - interpolation handles all time points.
 #'
-#' @return a list containing:
-#'   \item{Probs}{predicted survival probability matrix
-#'     (rows=times, cols=observations)}
-#'   \item{Times}{the times at which probabilities are calculated
-#'     (always includes time 0)}
-#'   \item{survfit_obj}{the raw survfit object from prediction
-#'     (for diagnostics)}
 #'
-#' @importFrom survival survfit Surv
-#' @importFrom stats model.matrix
-#' @export
 #'
-#' @examples
-#' \dontrun{
-#' # Fit model
-#' model <- SurvModel_Cox(train_data, expvars = c("x1", "x2"),
-#'                        timevar = "time", eventvar = "event")
 #'
-#' # Predict on test data
-#' preds <- Predict_SurvModel_Cox(model, test_data)
 #'
-#' # Predict at specific times
-#' preds_custom <- Predict_SurvModel_Cox(model, test_data,
-#'                                       new_times = c(30, 60, 90, 180, 365))
-#' }
 Predict_SurvModel_Cox <- function(modelout, newdata, new_times = NULL) {
 
   # ============================================================================

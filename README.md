@@ -27,96 +27,72 @@ Packages install into the project-local `renv/library` directory (configured via
 
 When you change dependencies, run `renv::snapshot()` to update `renv.lock` so teammates get the same versions.
 
-## Pipeline Quickstart
+## Quickstart (3–5 lines)
 
 ```r
 library(ml4time2event)
 library(dplyr)
 
-# Survival pipeline -------------------------------------------------------
-lung_df <- get_lung_survival_data()
+# Survival ---------------------------------------------------------------
+lung <- get_lung_survival_data() %>% mutate(status = if_else(status == 2, 1L, 0L))
+surv_task <- ml4t2e_task_surv(lung, time = "time", event = "status")
+surv_fit  <- ml4t2e_fit(surv_task, models = c("cox", "random_forest"), ensemble = "auto")
+surv_preds <- predict(surv_fit, type = "survival")
+ml4t2e_evaluate(surv_fit)
+autoplot(surv_fit)
 
-# Fit with the new discrete-time head alongside classical learners
-surv_pipeline <- ml4t2e_fit_pipeline(
-  data = lung_df,
-  analysis_type = "survival",
-  timevar = "time",
-  eventvar = "status",
-  models = c("glmnet", "coxph", "ttah"),
-  include_rf = FALSE,
-  prediction_times = seq(0, 1000, length.out = 50)
-)
-
-surv_preds <- predict(
-  surv_pipeline,
-  newdata = lung_df[1:5, ],
-  new_times = seq(0, 730, length.out = 25)
-)
-
-surv_preds$predictions$models_used
-
-# Persist the trained pipeline (optional)
-tmp_path <- tempfile("lung_pipeline_", fileext = ".rds")
-ml4t2e_save_pipeline(surv_pipeline, tmp_path)
-restored_pipeline <- ml4t2e_load_pipeline(tmp_path)
-
-# Competing-risks pipeline -----------------------------------------------
-bmt_df <- get_bmt_competing_risks_data()
-
-cr_pipeline <- ml4t2e_fit_pipeline(
-  data = bmt_df,
-  analysis_type = "competing_risks",
-  timevar = "ftime",
-  eventvar = "status",
-  models = c("FG", "cox", "ttah"),
-  include_rf = FALSE,
-  prediction_times = seq(0, 150, length.out = 40)
-)
-
-cr_preds <- predict(
-  cr_pipeline,
-  newdata = bmt_df[1:4, ],
-  ensemble_method = "average"
-)
-
-cr_preds$predictions$models_used
-
-# SHAP-based explainability -----------------------------------------------
-# Explain predictions using SHAP values
-shap_result <- ml4t2e_calculate_shap(
-  pipeline = surv_pipeline,
-  data = lung_df[1:50, ],
-  time_horizon = 365,  # 1-year expected time lost
-  nsim = 100
-)
-
-# Variable importance plot
-ml4t2e_shap_importance(shap_result)
-
-# Dependence plot showing feature effects
-ml4t2e_shap_dependence(shap_result, feature = "age")
-
-# Explain individual prediction
-ml4t2e_shap_waterfall(shap_result, obs_id = 1)
+# Competing risks --------------------------------------------------------
+bmt <- get_bmt_competing_risks_data() %>%
+  mutate(
+    cause = if_else(status == 0L, NA_integer_, status),
+    status = if_else(status == 0L, 0L, 1L)
+  )
+cr_task <- ml4t2e_task_cr(bmt, time = "ftime", status = "status", cause = "cause")
+cr_fit  <- ml4t2e_fit(cr_task, models = c("cox", "fine_gray"), ensemble = "auto")
+cr_preds <- predict(cr_fit, type = "cif")
+ml4t2e_evaluate(cr_fit)
+autoplot(cr_fit)
 ```
 
-The pipelines combine preprocessing, model fitting, ensemble construction, prediction,
-persistence, and explainability in a single object that can be reloaded and used for production scoring.
+The `ml4t2e_task_*()` constructors standardise raw datasets. `ml4t2e_fit()` drives the registry-backed engines (now returned as tidy `t2e_fit` objects), while `predict()`, `ml4t2e_evaluate()`, and `autoplot()` all work with the same tidy outputs for both survival and competing-risk workflows.
+
+### Pipelines, recipes, and resampling
+
+```r
+library(rsample)
+library(recipes)
+
+pipe <- ml4t2e_pipeline(
+  outcome  = list(type = "survival", time = "time", event = "status"),
+  models   = c("cox", "gbm"),
+  ensemble = "auto",
+  recipe   = recipe(~ ., data = lung) %>%
+    step_impute_median(all_numeric_predictors()),
+  resampling = vfold_cv(lung, v = 3)
+)
+
+pipe$fit(lung)
+pipe$summary()
+pipe_preds <- pipe$predict(lung[1:5, ], times = seq(0, 365, length.out = 25))
+autoplot(pipe_preds)
+```
+
+The pipeline object encapsulates preprocessing (via `recipes`), modelling (`ml4t2e_fit()`), optional resampling, and prediction/evaluation helpers. The fitted pipeline stores the trained model, the prepped recipe, training metrics, and (when requested) cross-validation summaries. Use `$predict()` with new data to bake the recipe and score in one step; `$evaluate()` applies the same processing when you provide hold-out data.
 
 ## Features
 
-- **Pipeline API**: `ml4t2e_fit_pipeline()` creates end-to-end survival or competing-risks workflows with preprocessing, modeling, and persistence.
-- **Survival Models**: Cox, Random Forest, XGBoost, GAM, BART, Shallow NN, GLMNet, GBM, RuleFit
-- **Competing Risks**: Fine-Gray, cause-specific Cox, and ML models for competing risks
-- **Ensemble Methods**: Averaging, weighted averaging, super learner stacking
-- **Metrics**: C-index, Brier score, integrated metrics, expected time lost
-- **Explainability**: SHAP-based variable importance and dependence analysis for interpretable predictions
-- **Comprehensive Testing**: 1900+ passing tests
+- Task constructors `ml4t2e_task_surv()` / `ml4t2e_task_cr()` create tidy `t2e_task` objects with metadata and defaults.
+- Registry-backed engine discovery via `ml4t2e_list_models()` with package requirements and descriptive tags.
+- Unified training and inference: `ml4t2e_fit()` → `predict()` → `ml4t2e_evaluate()` share tidy `t2e_*` outputs for survival and competing-risk paths.
+- Lightweight ensembling: enable `ensemble = "auto"` or `"simple"` for averaged predictions recorded alongside per-model scores.
+- Pipeline API: `ml4t2e_pipeline()` wraps recipes, resampling, fitting, and persistence in a single R6 object.
+- Compatibility helper `ml4t2e_fit_pipeline()` maps the legacy signature onto the new pipeline engine for quick migrations.
+- Explainability helpers: `ml4t2e_explain()` + `autoplot()` produce SHAP-style importance, dependence, and curve diagnostics.
 
 ## Supported Models
 
-- **Survival (RunSurvModels `models` argument)**: `glmnet`, `coxph`, `rulefit`, `xgboost`, `gam`, `gbm`, `ExpSurvReg`, `WeibSurvReg`, `bart`, `shallownn` (plus two Random Forest baselines when `include_rf = TRUE`).
-- **Competing Risks (RunCRModels `models` argument)**: `FG`, `rulefit`, `bart`, `cox`, `xgboost`, `gam`, `survreg` (plus two Random Forest baselines when `include_rf = TRUE`).
+- Survival engines (via `ml4t2e_list_models("survival")`): `cox`, `glmnet`, `random_forest`, `gbm`, `bart`, `gam`, `survreg`, `rulefit`, `shallownn`, `ttah`, `xgboost`.
+- Competing-risk engines (via `ml4t2e_list_models("competing_risk")`): `cox`, `fine_gray`, `cr_random_forest`, `cr_bart`, `cr_gam`, `cr_rulefit`, `cr_survreg`, `cr_shallownn`, `cr_ttah`, `cr_xgboost`.
 
 
 ## Vignettes

@@ -66,12 +66,15 @@
     )
 }
 
-#' Retrieve the prepared lung cancer survival dataset
+#' Prepared lung survival dataset
 #'
-#' @return A data frame containing the prepared NCCTG lung cancer data used in
-#'   the survival vignette.
-#' @examples
-#' lung_df <- get_lung_survival_data()
+#' Returns the preprocessed NCCTG lung cancer survival dataset used throughout
+#' the vignettes. When the package is installed the precomputed object
+#' `lung_survival_prepared` is loaded; otherwise a local CSV under `inst/extdata`
+#' is processed on the fly.
+#'
+#' @return A tibble with survival outcomes, engineered predictors, and no
+#'   missing values.
 #' @export
 get_lung_survival_data <- function() {
   data_env <- new.env(parent = emptyenv())
@@ -91,12 +94,14 @@ get_lung_survival_data <- function() {
   .prepare_lung_survival_dataset()
 }
 
-#' Retrieve the prepared bone marrow transplant competing-risks dataset
+#' Prepared bone marrow transplant competing-risks dataset
 #'
-#' @return A data frame containing the prepared BMT competing-risks data used in
-#'   the competing-risks vignette.
-#' @examples
-#' bmt_df <- get_bmt_competing_risks_data()
+#' Loads the BMT competing-risks example used in vignettes. If the packaged data
+#' object is not available the helper rebuilds it from the CSV stored in
+#' `inst/extdata`.
+#'
+#' @return A tibble containing outcome columns (`ftime`, `status`) along with
+#'   categorical predictors used in the examples.
 #' @export
 get_bmt_competing_risks_data <- function() {
   data_env <- new.env(parent = emptyenv())

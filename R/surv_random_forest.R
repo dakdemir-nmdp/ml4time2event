@@ -1,31 +1,13 @@
-#' @title SurvModel_RF
 #'
-#' @description Fit a RF model for survival outcomes using randomForestSRC.
-#' Includes tuning of nodesize and mtry.
 #'
-#' @param data data frame with explanatory and outcome variables
-#' @param expvars character vector of names of explanatory variables in data
-#' @param timevar character name of time variable in data
-#' @param eventvar character name of event variable in data (needs to be 0/1)
-#' @param ntree integer value, number of trees to grow (default: 300)
-#' @param samplesize integer value, sample size for each grown tree (default: 500)
-#' @param nsplit integer value, maximum number of splits for each tree (default: 5)
-#' @param trace logical, trace tuning process or not (default: TRUE)
-#' @param splitrule character, split rule for trees (default: "bs.gradient")
-#' @param nodesize_try numeric vector, nodesize values to try during tuning (default: c(1, 5, 10, 15))
-#' @param ... additional parameters passed to randomForestSRC functions
 #'
-#' @return a list of four items: model: fitted randomForestSRC model object,
-#'  times: unique event times from the training data,
-#'  varprof: profile of explanatory variables,
-#'  expvars: the explanatory variables used.
 #'
-#' @importFrom randomForestSRC tune rfsrc predict.rfsrc
-#' @importFrom stats as.formula complete.cases
-#' @importFrom survival Surv
-#' @export
-SurvModel_RF<-function(data, expvars, timevar, eventvar, ntree=300, samplesize=500, nsplit=5, trace=FALSE, 
-                       splitrule="bs.gradient", nodesize_try=c(1, 5, 10, 15), importance="permute", ...){
+SurvModel_RF<-function(data, expvars, timevar, eventvar, ntree=300, samplesize=500, nsplit=5, trace=FALSE,
+                       verbose = NULL, splitrule="bs.gradient", nodesize_try=c(5, 10, 15), importance="permute", ...){
+  # Map verbose to trace for backward compatibility and consistency
+  if (!is.null(verbose)) {
+    trace <- verbose
+  }
   # Assuming VariableProfile is loaded/available
   varprof<-VariableProfile(data, expvars) # Placeholder
 
@@ -49,17 +31,38 @@ SurvModel_RF<-function(data, expvars, timevar, eventvar, ntree=300, samplesize=5
   samplesize <- min(ceiling(0.7 * nrow(data)), samplesize)
 
   # Tune hyperparameters (nodesize, mtry) with user-provided parameters
-  o <- randomForestSRC::tune(formRF, data = data[,c(timevar, eventvar, expvars), drop=FALSE],
-                             splitrule = splitrule, samptype = "swor", sampsize = samplesize,
-                             trace = trace, nsplit = nsplit, stepFactor = 1.5,
-                             mtryStart = 2, # Start tuning mtry from 2
-                             nodesizeTry = nodesize_try, # Use user-provided nodesize values
-                             ntreeTry = ntree, # Use fixed ntree for tuning speed
-                             ...)
+  # Wrap in tryCatch to handle tuning failures gracefully
+  tune_result <- tryCatch({
+    randomForestSRC::tune(formRF, data = data[,c(timevar, eventvar, expvars), drop=FALSE],
+                          splitrule = splitrule, samptype = "swor", sampsize = samplesize,
+                          trace = trace, nsplit = nsplit, stepFactor = 1.5,
+                          mtryStart = 2, # Start tuning mtry from 2
+                          nodesizeTry = nodesize_try, # Use user-provided nodesize values
+                          ntreeTry = ntree, # Use fixed ntree for tuning speed
+                          ...)
+  }, error = function(e) {
+    warning("Tuning failed with error: ", e$message, ". Using default parameters.")
+    NULL
+  })
 
-  # Fit final model with optimal parameters
-  nodesize_opt <- if (!is.null(names(o$optimal)) && "nodesize" %in% names(o$optimal)) o$optimal[["nodesize"]] else o$optimal[[1]]
-  mtry_opt <- if (!is.null(names(o$optimal)) && "mtry" %in% names(o$optimal)) o$optimal[["mtry"]] else o$optimal[[2]]
+  # Fit final model with optimal parameters (or defaults if tuning failed)
+  if (!is.null(tune_result)) {
+    nodesize_opt <- if (!is.null(names(tune_result$optimal)) && "nodesize" %in% names(tune_result$optimal)) {
+      tune_result$optimal[["nodesize"]]
+    } else {
+      tune_result$optimal[[1]]
+    }
+    mtry_opt <- if (!is.null(names(tune_result$optimal)) && "mtry" %in% names(tune_result$optimal)) {
+      tune_result$optimal[["mtry"]]
+    } else {
+      tune_result$optimal[[2]]
+    }
+  } else {
+    # Use reasonable defaults when tuning fails
+    nodesize_opt <- 15  # Conservative default
+    mtry_opt <- max(1, floor(sqrt(length(expvars))))  # Standard RF default
+    message("Using default parameters: nodesize=", nodesize_opt, ", mtry=", mtry_opt)
+  }
 
   # Ensure importance is properly calculated with specific importance settings
   hd.obj <- randomForestSRC::rfsrc(formRF, data = data[,c(timevar, eventvar, expvars), drop=FALSE],
@@ -102,20 +105,10 @@ SurvModel_RF<-function(data, expvars, timevar, eventvar, ntree=300, samplesize=5
   return(result)
 }
 
-#' @title Predict_SurvModel_RF
 #'
-#' @description Get predictions from a RF survival model for a test dataset.
 #'
-#' @param modelout the output from 'SurvModel_RF' (a list containing 'model', 'times', 'varprof', 'expvars')
-#' @param newdata the data for which the predictions are to be calculated
-#' @param new_times optional vector of new time points for interpolation. If NULL, uses model's native time points.
 #'
-#' @return a list containing the following items:
-#'  Probs: predicted Survival probability matrix (rows=times, cols=observations),
-#'  Times: The times at which the probabilities are predicted.
 #'
-#' @importFrom randomForestSRC predict.rfsrc
-#' @export
 Predict_SurvModel_RF <- function(modelout, newdata, new_times = NULL) {
   # ============================================================================
   # Input Validation

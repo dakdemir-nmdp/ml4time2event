@@ -3,52 +3,12 @@ utils::globalVariables(c("MAE", "Concordance", "Model", "generate_survival_data"
                         "run_survival_models", "predict_survival_models", 
                         "evaluate_calibration", "evaluate_accuracy"))
 
-#' @title run_survival_simulation
 #'
-#' @description Run a complete simulation study for survival models with multiple replicates.
-#' Generates simulated data, trains models, makes predictions, and evaluates performance.
 #'
-#' @param n_replicates Number of simulation replicates
-#' @param n_train Sample size for training data
-#' @param n_test Sample size for test data
-#' @param p Number of predictors
-#' @param data_params List of parameters for data generation (passed to generate_survival_data)
-#' @param models_to_run Character vector of model names to run (NULL for all)
-#' @param model_params List of model-specific parameters
-#' @param eval_times Time points for evaluation
-#' @param seeds Optional vector of random seeds (one per replicate)
-#' @param generate_plots Logical, whether to generate and save plots (default TRUE)
-#' @param generate_report Logical, whether to generate and save a summary report (default TRUE)
 #'
-#' @return A list containing aggregated results across all replicates:
-#'   \item{calibration_results}{Calibration metrics aggregated across replicates}
-#'   \item{accuracy_results}{Accuracy metrics aggregated across replicates}
-#'   \item{replicate_results}{Individual results from each replicate (if save_intermediate=TRUE)}
-#'   \item{simulation_params}{Parameters used for the simulation}
-#'   \item{summary}{Overall summary statistics}
 #'
-#' @export
 #'
-#' @examples
-#' \dontrun{
-#' # Run simulation with 10 replicates
-#' sim_results <- run_survival_simulation(
-#'   n_replicates = 10,
-#'   n_train = 500,
-#'   n_test = 200,
-#'   p = 5,
-#'   data_params = list(
-#'     baseline_hazard_type = "weibull",
-#'     baseline_params = list(shape = 1.5, scale = 2),
-#'     linear_effects = c(0.5, -0.3, 0.2, -0.1, 0.4),
-#'     censoring_rate = 0.3
-#'   ),
-#'   models_to_run = c("Cox", "gbm", "xgboost"),
-#'   eval_times = seq(0.1, 3, by = 0.2)
-#' )
-#' }
 #'
-#' @noRd
 run_survival_simulation <- function(n_replicates = 10,
                                     n_train = 1000,
                                     n_test = 500,
@@ -248,17 +208,10 @@ run_survival_simulation <- function(n_replicates = 10,
 }
 
 
-#' @title aggregate_simulation_results
 #'
-#' @description Aggregate calibration and accuracy results across simulation replicates
 #'
-#' @param all_calibration List of calibration results from each replicate
-#' @param all_accuracy List of accuracy results from each replicate
-#' @param n_replicates Total number of replicates
 #'
-#' @return List with aggregated calibration and accuracy results
 #'
-#' @noRd
 aggregate_simulation_results <- function(all_calibration, all_accuracy, n_replicates) {
 
   # Get successful replicates - more robust check
@@ -364,15 +317,10 @@ aggregate_simulation_results <- function(all_calibration, all_accuracy, n_replic
 }
 
 
-#' @title create_simulation_summary
 #'
-#' @description Create a summary of simulation results
 #'
-#' @param aggregated_results Output from aggregate_simulation_results
 #'
-#' @return List with summary statistics
 #'
-#' @noRd
 create_simulation_summary <- function(aggregated_results) {
 
   model_names <- names(aggregated_results$calibration)
@@ -421,19 +369,10 @@ create_simulation_summary <- function(aggregated_results) {
 }
 
 
-#' @title generate_simulation_plots
 #'
-#' @description Generate and save plots from simulation results
 #'
-#' @param results Output from run_survival_simulation
-#' @param results_dir Directory to save plots
-#' @param verbose Logical, whether to print progress
 #'
-#' @importFrom ggplot2 ggplot aes geom_point geom_text labs theme_minimal theme element_text ggsave
-#' @importFrom stats reorder median
-#' @importFrom utils modifyList
 #'
-#' @noRd
 generate_simulation_plots <- function(results, results_dir, verbose = TRUE) {
 
   # Create plots subdirectory
@@ -529,15 +468,9 @@ generate_simulation_plots <- function(results, results_dir, verbose = TRUE) {
 }
 
 
-#' @title generate_simulation_report
 #'
-#' @description Generate a summary report from simulation results
 #'
-#' @param results Output from run_survival_simulation
-#' @param results_dir Directory to save report
-#' @param verbose Logical, whether to print progress
 #'
-#' @noRd
 generate_simulation_report <- function(results, results_dir, verbose = TRUE) {
 
   if (verbose) cat("Generating simulation report...\n")

@@ -2,15 +2,6 @@
 # Survival Target Construction for Super Learner
 # ==============================================================================
 
-#' @title Build Observed Survival Matrix
-#' @description Construct observed survival probability matrix from training data
-#' @param data Training data containing time and event variables
-#' @param timevar Name of time variable
-#' @param eventvar Name of event variable (0/1)
-#' @param eval_times Times at which to evaluate survival probabilities
-#' @return Matrix of observed survival probabilities (rows=times, cols=observations)
-#' @importFrom survival Surv survfit
-#' @export
 buildObservedSurvivalMatrix <- function(data, timevar, eventvar, eval_times) {
   if (missing(data) || !is.data.frame(data)) {
     stop("'data' must be a data frame")
@@ -95,16 +86,6 @@ buildObservedSurvivalMatrix <- function(data, timevar, eventvar, eval_times) {
   obs_surv
 }
 
-#' @title Build Observed CIF Matrix
-#' @description Construct observed cumulative incidence matrix from competing risks data
-#' @param data Training data containing time and event variables
-#' @param timevar Name of time variable
-#' @param eventvar Name of event variable (0, 1, 2, ...)
-#' @param cause_of_interest Cause of interest (1, 2, etc.)
-#' @param eval_times Times at which to evaluate CIF probabilities
-#' @return Matrix of observed CIF probabilities (rows=times, cols=observations)
-#' @importFrom survival Surv
-#' @export
 buildObservedCIFMatrix <- function(data, timevar, eventvar, cause_of_interest, eval_times) {
   if (missing(data) || !is.data.frame(data)) {
     stop("'data' must be a data frame")

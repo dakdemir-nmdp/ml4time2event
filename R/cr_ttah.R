@@ -1,32 +1,9 @@
-#' @title CRModel_TTAH
 #'
-#' @description Fit a lightweight competing risks model using the time-varying
-#'   additive hazard (TTAH) blueprint. The implementation constructs discrete-time
-#'   multi-class hazards with shared feature encoders and low-rank interactions,
-#'   optimised via multinomial logistic regression for a CPU-first workflow.
 #'
-#' @param data data.frame containing predictors and outcome columns
-#' @param expvars character vector of predictor column names
-#' @param timevar character name of observed time-to-event column
-#' @param eventvar character name of event indicator (0=censored, integers for causes)
-#' @param event_codes optional vector of event codes to model; defaults to all observed
-#'   non-zero codes
-#' @param time_grid optional numeric vector of discrete time points; if `NULL`, a grid
-#'   is constructed from observed times using quantiles
-#' @param n_time integer, target number of time points when `time_grid` not supplied
-#' @param spline_knots integer, degrees of freedom for numeric spline bases
-#' @param latent_dim integer, number of latent interaction factors
-#' @param time_basis_df integer, degrees of freedom for the B-spline time basis
-#' @param lambda numeric, weight-decay penalty for the multinomial fit
-#' @param maxit integer, maximum iterations passed to `nnet::multinom`
-#' @param engine character, one of `c("auto", "base")`
-#' @param verbose logical; if `TRUE`, prints training diagnostics from `multinom`
 #'
-#' @return list with class `ml4t2e_cr_ttah` containing the fitted model and metadata
-#' @export
 CRModel_TTAH <- function(data, expvars, timevar, eventvar,
                          event_codes = NULL,
-                         time_grid = NULL, n_time = 40,
+                         time_grid = NULL, n_time = 50,
                          spline_knots = 5, latent_dim = 6,
                          time_basis_df = 4, lambda = 1e-3, maxit = 200,
                          engine = c("auto", "base"),
@@ -168,26 +145,9 @@ CRModel_TTAH <- function(data, expvars, timevar, eventvar,
   result
 }
 
-#' @title Predict_CRModel_TTAH
 #'
-#' @description Generate cause-specific hazard and cumulative incidence predictions
-#'   from a fitted TTAH competing risks model.
 #'
-#' @param modelout fitted model returned by `CRModel_TTAH`
-#' @param newdata data frame with predictor columns matching training predictors
-#' @param new_times optional numeric vector of times for interpolation
-#' @param event_of_interest optional event code identifying which CIF to return;
-#'   defaults to the first modelled event code
 #'
-#' @return list containing
-#'   \item{CauseSpecificHazard}{matrix of discrete hazards for the event of interest}
-#'   \item{CauseSpecificCIF}{matrix of cumulative incidence for the event of interest}
-#'   \item{TotalSurvival}{matrix of overall survival probabilities}
-#'   \item{StayProbability}{matrix of per-interval stay probabilities}
-#'   \item{AllCauseHazard}{three-dimensional array of hazards for all causes}
-#'   \item{AllCauseCIF}{three-dimensional array of cumulative incidence values}
-#'   \item{Times}{vector of times corresponding to predictions}
-#' @export
 Predict_CRModel_TTAH <- function(modelout, newdata, new_times = NULL, event_of_interest = NULL) {
   if (missing(modelout) || !inherits(modelout, "ml4t2e_cr_ttah")) {
     stop("modelout must be an object returned by CRModel_TTAH.")

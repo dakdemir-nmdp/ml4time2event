@@ -2,7 +2,7 @@
 % Please edit documentation in R/shap_plotting.R
 \name{ml4t2e_shap_importance}
 \alias{ml4t2e_shap_importance}
-\title{SHAP Variable Importance Plot}
+\title{Plot SHAP feature importance}
 \usage{
 ml4t2e_shap_importance(
   shap_result,
@@ -11,39 +11,16 @@ ml4t2e_shap_importance(
 )
 }
 \arguments{
-\item{shap_result}{An object of class "ml4t2e_shap" from [ml4t2e_calculate_shap()].}
+\item{shap_result}{Object returned by `ml4t2e_calculate_shap()`.}
 
-\item{max_features}{Maximum number of features to display. If NULL, shows all features.
-Features are ranked by mean absolute SHAP value.}
+\item{max_features}{Optional integer limiting the number of features shown.}
 
-\item{plot_type}{Type of plot: "beeswarm" for scatter plot showing distribution,
-or "bar" for simple bar chart. Default is "beeswarm".}
+\item{plot_type}{One of `"beeswarm"` or `"bar"` indicating the plot style.}
 }
 \value{
-A ggplot2 object showing variable importance.
+A `ggplot` object.
 }
 \description{
-Creates a variable importance plot showing which features
-contribute most to predictions based on SHAP values.
-}
-\details{
-The importance plot shows features ranked by their average impact on predictions.
-In a beeswarm plot, each point represents one observation, colored by the
-feature value (red = high, blue = low). The horizontal position shows the
-SHAP value (contribution to prediction).
-
-In a bar plot, features are shown with their mean absolute SHAP value.
-}
-\examples{
-\dontrun{
-# Calculate SHAP values
-shap_result <- ml4t2e_calculate_shap(pipeline, data, time_horizon = 365)
-
-# Create importance plot
-ml4t2e_shap_importance(shap_result)
-
-# Show top 10 features only
-ml4t2e_shap_importance(shap_result, max_features = 10)
-}
-
+Visualises the magnitude and distribution of SHAP values for the supplied
+`ml4t2e_shap` result using either a beeswarm or bar chart.
 }

@@ -1,0 +1,186 @@
+---
+title: "Comprehensive Competing Risks Analysis of aGVHD"
+author: "ml4time2event team"
+date: "`r Sys.Date()`"
+output:
+  rmarkdown::html_vignette:
+    toc: true
+    toc_depth: 2
+vignette: >
+  %\VignetteIndexEntry{Comprehensive Competing Risks Analysis of aGVHD}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
+```
+
+# Overview
+
+This vignette illustrates the competing-risks workflow on the aGVHD dataset: build a task, fit registered engines, obtain tidy predictions/metrics, and visualize with standard verbs.
+
+# 1. Packages and data
+
+First, we load the necessary libraries and the dataset. We will use a sample of the data to speed up the analysis.
+
+```{r load-data}
+library(ml4time2event)
+library(dplyr)
+library(ggplot2)
+library(recipes)
+library(data.table) # Add the `data.table` library to ensure `fread` is available
+
+# Load the data
+full_data <- fread(file.path("..", "data", "agvhd24_individual_hla.csv"))
+
+# Take a sample for this vignette to run faster
+set.seed(123)
+sample_indices <- sample(nrow(full_data), size = nrow(full_data))
+data_raw <- full_data[sample_indices, ]
+
+## Choose event of interest (1 = aGVHD 2-4, 2 = death)
+event_of_interest <- 1L
+
+# We'll create binary `status` and `cause` columns after splitting so we can
+# ensure the training split contains the chosen event. If not, we'll pick an
+# available non-zero event automatically.
+```
+
+Create a simple hold-out split for validation.
+
+```{r split}
+set.seed(123)
+# remove rows of data with missing in target variables
+data_raw <- data_raw |>
+  filter(!is.na(agvhd_2_4_time), !is.na(agvhd_2_4_event))
+
+# convert comorbidity_score to numeric
+data_raw <- data_raw |>
+  mutate(comorbidity_score = as.numeric(comorbidity_score))
+
+# Convert multi-class status into binary status and a separate cause column, matching the comprehensive vignette
+# The key is: status becomes binary (0=censored, 1=any event), cause captures the original event type
+# Important: rows with NA in agvhd_2_4_event should have NA in both status and cause
+data <- data_raw |>
+  filter(!is.na(agvhd_2_4_event)) |>
+  mutate(
+    cause = if_else(agvhd_2_4_event == 0L, NA_integer_, as.integer(agvhd_2_4_event)),
+    status = if_else(agvhd_2_4_event == 0L, 0L, 1L)
+  )
+
+# Now split the transformed data
+train_rows <- sample.int(nrow(data), size = floor(0.7 * nrow(data)))
+data_train <- data[train_rows, ]
+data_test  <- data[-train_rows, ]
+
+# Impute missing values in predictors using recipes
+# Exclude outcome columns from imputation
+exclude_cols <- c("agvhd_2_4_time", "agvhd_2_4_event", "status", "cause")
+predictor_cols <- setdiff(colnames(data_train), exclude_cols)
+
+# Create recipe for imputation
+impute_recipe <- recipe(~ ., data = data_train) |>
+  update_role(all_of(exclude_cols), new_role = "outcome") |>
+  step_impute_median(all_numeric_predictors()) |>
+  step_impute_mode(all_nominal_predictors())
+
+# Fit recipe on training data
+impute_recipe_prep <- prep(impute_recipe, training = data_train)
+
+# Apply to both training and test data
+data_train <- bake(impute_recipe_prep, new_data = data_train)
+data_test <- bake(impute_recipe_prep, new_data = data_test)
+
+sprintf("Training rows: %s  |  Validation rows: %s",
+        nrow(data_train), nrow(data_test))
+table(data_train$status, data_train$cause)
+table(data_train$status, data_train$agvhd_2_4_event)
+
+```
+
+# 2. Build a competing-risk task
+
+```{r task-definition}
+# Create the competing risks task
+t2e_task <- ml4t2e_task_cr(
+  data = data_train,
+  time = "agvhd_2_4_time",
+  status = "status",
+  cause = "cause",
+  features = setdiff(colnames(data_train), c("agvhd_2_4_time", "agvhd_2_4_event", "status", "cause"))
+)
+
+print(t2e_task)
+```
+
+# 3. Fit registered engines (with ensembling)
+
+The registry exposes a consistent set of engine identifiers; you can list them via `ml4t2e_list_models("competing_risk")`.
+
+```{r fit-models, message=FALSE, warning=FALSE}
+# List available models and fit them
+ml4t2e_list_models("competing_risk")
+
+# Fit models and create an ensemble (match comprehensive vignette)
+cr_fit <- ml4t2e_fit(
+  task = t2e_task,
+  models = c("cox", "fine_gray", "cr_xgboost"),
+  ensemble = "auto",
+  controls = list(times = seq(0, max(data_train$agvhd_2_4_time, na.rm = TRUE), length.out = 60))
+)
+
+cr_fit
+```
+
+Training metrics are again a single function call away.
+
+```{r train-metrics}
+ml4t2e_evaluate(
+  cr_fit,
+  metrics = c("c_index", "ibs"),
+  include = c("ensemble", "cox", "fine_gray", "cr_xgboost")
+)
+```
+
+# 4. Score a hold-out set
+
+```{r score}
+# Create task for test data
+t2e_task_test <- ml4t2e_task_cr(
+  data = data_test,
+  time = "agvhd_2_4_time",
+  status = "status",
+  cause = "cause",
+  features = setdiff(colnames(data_test), c("agvhd_2_4_time", "agvhd_2_4_event", "status", "cause"))
+)
+
+# Get predictions on test set
+cr_preds_val <- predict(
+  cr_fit,
+  newdata = data_test,
+  times = seq(0, max(data_test$agvhd_2_4_time, na.rm = TRUE), length.out = 60),
+  type = "cif",
+  include = c("ensemble","cox", "fine_gray", "cr_xgboost")
+)
+
+ml4t2e_evaluate(
+  cr_preds_val,
+  task = t2e_task_test,
+  metrics = c("c_index", "ibs")
+)
+```
+
+# 5. Visualise cumulative incidence curves
+
+`autoplot()` aggregates model-specific CIFs across individuals and separates them by cause.
+
+```{r autoplot-fit, fig.width=7, fig.height=4}
+autoplot(cr_fit, include = c("ensemble","cox", "fine_gray", "cr_xgboost"))
+```
+
+```{r autoplot-preds, fig.width=7, fig.height=4}
+autoplot(cr_preds_val, include = "ensemble")
+```
+
+# Variable Importance

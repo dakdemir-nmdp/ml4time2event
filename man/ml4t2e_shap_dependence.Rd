@@ -2,44 +2,22 @@
 % Please edit documentation in R/shap_plotting.R
 \name{ml4t2e_shap_dependence}
 \alias{ml4t2e_shap_dependence}
-\title{SHAP Dependence Plot}
+\title{Plot SHAP dependence for a feature}
 \usage{
 ml4t2e_shap_dependence(shap_result, feature, color_by = NULL)
 }
 \arguments{
-\item{shap_result}{An object of class "ml4t2e_shap" from [ml4t2e_calculate_shap()].}
+\item{shap_result}{Object returned by `ml4t2e_calculate_shap()`.}
 
-\item{feature}{Name of the feature to plot. Must be one of the features
-in the SHAP result.}
+\item{feature}{Feature name whose SHAP dependence should be visualised.}
 
-\item{color_by}{Optional name of another feature to use for coloring points.
-If NULL (default), automatically selects the feature with highest interaction
-with the main feature.}
+\item{color_by}{Optional second feature used to colour the points.}
 }
 \value{
-A ggplot2 object showing the dependence plot.
+A `ggplot` object.
 }
 \description{
-Creates a dependence plot showing how a specific feature
-affects predictions across different feature values.
-}
-\details{
-A dependence plot shows the relationship between a feature's value and its
-impact on predictions (SHAP value). Points are colored by another feature
-to reveal interactions.
-
-The x-axis shows the feature value, the y-axis shows the SHAP value
-(contribution to prediction). The color reveals interactions with other features.
-}
-\examples{
-\dontrun{
-shap_result <- ml4t2e_calculate_shap(pipeline, data, time_horizon = 365)
-
-# Dependence plot for age
-ml4t2e_shap_dependence(shap_result, feature = "age")
-
-# Specify interaction feature
-ml4t2e_shap_dependence(shap_result, feature = "age", color_by = "sex")
-}
-
+Creates a scatter plot that relates SHAP values for a single feature to its
+observed values, optionally colouring points by the strongest interacting
+feature.
 }

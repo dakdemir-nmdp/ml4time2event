@@ -1,78 +1,68 @@
 knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
 
 library(ml4time2event)
-library(survival)
 library(dplyr)
-library(ggplot2)
 
-if (!requireNamespace("cmprsk", quietly = TRUE)) {
-  stop("Install the 'cmprsk' package to run this vignette.")
-}
-library(cmprsk)
+bmt <- get_bmt_competing_risks_data() |>
+  mutate(
+    cause = if_else(status == 0L, NA_integer_, status),
+    status = if_else(status == 0L, 0L, 1L)
+  )
 
-bmt_data <- ml4time2event::get_bmt_competing_risks_data()
+set.seed(2025)
+train_rows <- sample.int(nrow(bmt), size = floor(0.7 * nrow(bmt)))
+bmt_train <- bmt[train_rows, ]
+bmt_test  <- bmt[-train_rows, ]
 
-glimpse(bmt_data)
+feature_cols <- c("sex", "d", "phase", "age", "source")
 
-summary(bmt_data[c("ftime", "status", "age")])
-
-# Event counts: 0=censored, 1=relapse, 2=treatment-related mortality
-table(bmt_data$status)
-
-candidate_expvars <- c("sex", "d", "phase", "age", "source")
-var_profile <- VariableProfile(bmt_data, candidate_expvars)
-var_profile$Summary
-
-set.seed(123)
-split_data <- t2edata_split(bmt_data, prop = 0.7)
-train_data <- split_data$Train
-test_data <- split_data$Test
-
-timevar <- "ftime"
-eventvar <- "status"
-expvars <- c("sex", "d", "phase", "age", "source")
-primary_event_code <- 1L
-
-models <- RunCRModels(
-  datatrain = train_data,
-  ExpVars = expvars,
-  timevar = timevar,
-  eventvar = eventvar,
-  models = c("cox", "FG", "xgboost", "gam", "bart", "rulefit", "survreg", "ttah")
+cr_task <- ml4t2e_task_cr(
+  data = bmt_train,
+  time = "ftime",
+  status = "status",
+  cause = "cause",
+  features = feature_cols,
+  time_units = "years"
 )
 
-models
-
-predictions <- PredictCRModels(
-  models = models,
-  newdata = test_data,
-  new_times = seq(0, max(test_data$ftime), length.out = 50),
-  ensemble_method = "average"
+cr_fit <- ml4t2e_fit(
+  task = cr_task,
+  models = c("cox", "fine_gray", "cr_random_forest"),
+  ensemble = "auto",
+  controls = list(times = seq(0, 120, length.out = 50))
 )
 
-leaderboard <- EvaluateCRModels(
-  models = models,
-  data = test_data,
-  timevar = timevar,
-  eventvar = eventvar,
-  eval_times = seq(0, max(test_data[[timevar]]), length.out = 50),
-  ensemble_method = "average",
-  cause = primary_event_code
+ml4t2e_evaluate(
+  cr_fit,
+  metrics = c("c_index", "ibs"),
+  include = c("ensemble", "cox", "fine_gray", "cr_random_forest")
 )
 
-leaderboard$display_name <- format_model_name(leaderboard$model, model_type = "competing_risks")
-print(leaderboard[, c("display_name", "integrated_c", "integrated_brier", "rank")])
-
-plot_cif_curves(
-  predictions = predictions,
-  patients_to_plot = 1:3,
-  highlight_ensemble = TRUE
+cr_task_val <- ml4t2e_task_cr(
+  data = bmt_test,
+  time = "ftime",
+  status = "status",
+  cause = "cause",
+  features = feature_cols,
+  time_units = "years"
 )
 
-# Save ensemble
-ensemble_file <- tempfile("cr_ensemble_model_", fileext = ".rds")
-SaveEnsemble(models, file = ensemble_file)
+cr_preds <- predict(
+  cr_fit,
+  newdata = bmt_test,
+  times = seq(0, 120, length.out = 50),
+  type = "cif",
+  include = c("ensemble", "cox", "fine_gray", "cr_random_forest")
+)
 
-# Load ensemble
-loaded_ensemble <- LoadEnsemble(file = ensemble_file)
-print(loaded_ensemble)
+ml4t2e_evaluate(
+  cr_preds,
+  task = cr_task_val,
+  metrics = c("c_index", "ibs")
+)
+
+autoplot(cr_fit, include = c("ensemble", "cox"))
+
+tmp_fit <- tempfile(fileext = ".rds")
+ml4t2e_save(cr_fit, tmp_fit)
+ml4t2e_load(tmp_fit)

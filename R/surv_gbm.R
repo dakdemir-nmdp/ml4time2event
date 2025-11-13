@@ -1,26 +1,7 @@
-#' @title SurvModel_gbm
 #'
-#' @description Fit a gbm model for survival outcomes using gbm package.
 #'
-#' @param data data frame with explanatory and outcome variables
-#' @param expvars character vector of names of explanatory variables in data
-#' @param timevar character name of time variable in data
-#' @param eventvar character name of event variable in data (needs to be 0/1)
-#' @param ntree number of trees to grow
-#' @param max.depth maximum depth for the trees
-#' @param bag.fraction fraction of data to sample in each bagging iteration
-#' @param train.fraction fraction for training data (used internally by gbm for CV/OOB error)
-#' @param learninrate learning rate (shrinkage) for the boosting algorithm
 #'
-#' @return a list of four items: model: fitted gbm model object,
-#'  times: unique event times from the training data,
-#'  varprof: profile of explanatory variables,
-#'  expvars: the explanatory variables used.
 #'
-#' @importFrom gbm gbm gbm.perf basehaz.gbm
-#' @importFrom survival Surv
-#' @importFrom stats complete.cases
-#' @export
 SurvModel_gbm<-function(data,expvars, timevar, eventvar, ntree=200, max.depth=3, bag.fraction=.3, train.fraction=.3, learninrate=.01){
   if (missing(data)) stop("argument \"data\" is missing")
   if (missing(expvars)) stop("argument \"expvars\" is missing")
@@ -45,14 +26,25 @@ SurvModel_gbm<-function(data,expvars, timevar, eventvar, ntree=200, max.depth=3,
   formula_gbm <- as.formula(paste("Surv(", timevar, ",", eventvar, ") ~", paste(expvars, collapse = "+")))
 
   # Determine cv.folds based on dataset size
-  # For small datasets, disable CV to avoid subsample size issues
+  # For small datasets, disable CV and use all trees
   n_obs <- nrow(data)
-  cv_folds <- 0  # Always disable CV for small datasets to avoid issues
-  
-  # Adjust parameters for small datasets
-  if (n_obs < 50) {
-    bag.fraction <- max(0.8, bag.fraction)  # Use more data per tree
-    train.fraction <- 1.0  # Use all data for training
+  cv_folds <- 0  # Disable CV for all cases in this simplified version
+
+  # Calculate safe parameters to satisfy GBM constraint:
+  # nTrain * bag.fraction > 2 * n.minobsinnode + 1
+  # Start with conservative defaults
+  safe_minobsinnode <- 1
+  safe_bag_fraction <- 1.0
+  safe_train_fraction <- 1.0
+
+  # For larger datasets, we can use more aggressive parameters
+  if (n_obs >= 100) {
+    # Calculate max safe n.minobsinnode given bag.fraction
+    # We want: n_obs * bag.fraction > 2 * n.minobsinnode + 1
+    # Solve for n.minobsinnode: n.minobsinnode < (n_obs * bag.fraction - 1) / 2
+    safe_bag_fraction <- min(bag.fraction, 0.8)
+    max_safe_minobs <- floor((n_obs * safe_bag_fraction - 1) / 2)
+    safe_minobsinnode <- max(1, min(5, max_safe_minobs))
   }
 
   # Fit gbm model with error handling
@@ -64,19 +56,20 @@ SurvModel_gbm<-function(data,expvars, timevar, eventvar, ntree=200, max.depth=3,
              n.trees = ntree,
              shrinkage = learninrate,
              interaction.depth = max.depth,
-             bag.fraction = bag.fraction,
-             train.fraction = train.fraction,
+             bag.fraction = safe_bag_fraction,
+             train.fraction = safe_train_fraction,
              cv.folds = cv_folds,
-             n.minobsinnode = max(2, min(5, floor(n_obs/10))), # Adaptive min obs per node
+             n.minobsinnode = safe_minobsinnode,
              keep.data = TRUE,
              verbose = FALSE))
   }, error = function(e) {
-    # If still fails, try with very conservative parameters
+    # If still fails, try with minimal parameters
+    warning("GBM failed with error: ", e$message, ". Trying minimal parameters...")
     suppressMessages(gbm::gbm(formula = formula_gbm,
              data = gbm_data,
              distribution = "coxph",
              n.trees = min(50, ntree),
-             shrinkage = 0.001,
+             shrinkage = 0.01,
              interaction.depth = 1,
              bag.fraction = 1.0,
              train.fraction = 1.0,
@@ -86,8 +79,22 @@ SurvModel_gbm<-function(data,expvars, timevar, eventvar, ntree=200, max.depth=3,
              verbose = FALSE))
   })
 
-  # Find best iteration based on OOB performance (since CV is disabled)
-  best.iter <- gbm::gbm.perf(gbmmodel, method = "OOB", plot.it = FALSE)
+  # For small datasets, just use all trees to avoid OOB/CV issues
+  if (n_obs < 200) {  # Use all trees for datasets smaller than 200
+    best.iter <- gbmmodel$n.trees
+  } else {
+    # Find best iteration using available method
+    best.iter <- tryCatch({
+      if (gbmmodel$cv.folds > 0) {
+        gbm::gbm.perf(gbmmodel, method = "cv", plot.it = FALSE)
+      } else {
+        gbm::gbm.perf(gbmmodel, method = "OOB", plot.it = FALSE)
+      }
+    }, error = function(e) {
+      # Fallback: use all trees
+      gbmmodel$n.trees
+    })
+  }
 
   # Get unique event times from training data
   time.interest <- sort(unique(data[[timevar]][data[[eventvar]]==1]))
@@ -111,18 +118,10 @@ SurvModel_gbm<-function(data,expvars, timevar, eventvar, ntree=200, max.depth=3,
 
 
 
-#' @title Predict_SurvModel_gbm
 #'
-#' @description Get predictions from a gbm survival model for a test dataset.
 #'
-#' @param modelout the output from 'SurvModel_gbm' (a list containing 'model', 'times', 'varprof', 'expvars')
-#' @param newdata the data for which the predictions are to be calculated
 #'
-#' @return a list containing the following items:
-#' Probs: predicted survival probability matrix (rows=times, cols=observations),
-#' Times: the unique times for which the probabilities are calculated (including 0).
 #'
-#' @export
 Predict_SurvModel_gbm <- function(modelout, newdata, new_times = NULL) {
   # ============================================================================
   # Input Validation

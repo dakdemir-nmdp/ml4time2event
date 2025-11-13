@@ -1,12 +1,3 @@
-#' @title score2proba
-#' @description internal function: from linear score to survival probabilities using Cox PH baseline.
-#' @param datasurv data frame with 'time' and 'event' columns.
-#' @param score numeric vector of linear predictor scores.
-#' @param conf.int confidence level for survival curve.
-#' @param which.est which estimate to return ("point", "lower", "upper").
-#' @return a list containing the Cox model ('model') and survfit object ('sf').
-#' @importFrom survival coxph Surv survfit coxph.control
-#' @noRd
 score2proba <-
   function(datasurv, score, conf.int=0.95, which.est=c("point", "lower", "upper")) {
     which.est <- match.arg(which.est)
@@ -24,25 +15,10 @@ score2proba <-
   }
 
 
-#' @title SurvModel_GAM
 #'
-#' @description Fit a GAM model for survival outcomes using Cox PH family.
 #'
-#' @param data data frame with explanatory and outcome variables
-#' @param expvars character vector of names of explanatory variables in data
-#' @param timevar character name of time variable in data
-#' @param eventvar character name of event variable in data (needs to be 0/1)
-#' @param shrinkTreshold integer value, minimum number of
-#' factor levels for factor variables to be considered for shrinkage ('re' basis).
 #'
-#' @return a list of four items: model: fitted GAM model object from mgcv::gam,
-#'  times: unique event times from the training data,
-#'  varprof: profile of explanatory variables,
-#'  expvars: the explanatory variables used.
 #'
-#' @importFrom mgcv gam cox.ph s
-#' @importFrom stats as.formula predict
-#' @export
 SurvModel_GAM <-
   function(data,
            expvars,
@@ -146,20 +122,10 @@ SurvModel_GAM <-
     return(result)
   }
 
-#' @title Predict_SurvModel_GAM
 #'
-#' @description Get predictions from a GAM survival model for a test dataset.
 #'
-#' @param modelout the output from 'SurvModel_GAM' (a list containing 'model', 'times', 'varprof', 'expvars')
-#' @param newdata the data for which the predictions are to be calculated
 #'
-#' @return a list containing the following items:
-#'  Probs: predicted Survival probability matrix (rows=times, cols=observations),
-#'  Times: The times at which the probabilities are predicted.
 #'
-#' @importFrom stats predict
-#' @importFrom survival survfit
-#' @export
 Predict_SurvModel_GAM <- function(modelout, newdata, new_times = NULL) {
   if (missing(modelout)) stop("argument \"modelout\" is missing")
   if (missing(newdata)) stop("argument \"newdata\" is missing")

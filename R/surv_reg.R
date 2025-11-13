@@ -1,19 +1,6 @@
-#' @title SurvModel_SurvReg
 #'
-#' @description Fit parametric survival models using survival::survreg with forward selection.
-#' @param data data frame with explanatory and outcome variables
-#' @param expvars character vector of names of explanatory variables in data
-#' @param timevar character name of time variable in data
-#' @param eventvar character name of event variable in data (needs to be 0/1)
-#' @param dist distribution for the parametric model, one of "weibull", "exponential", "gaussian", "logistic","lognormal" or "loglogistic".
 #'
-#' @return a list of three items: survregOut: the final fitted survreg model object after forward selection,
-#'  times: unique event times from the training data,
-#'  varprof: profile of explanatory variables.
 #'
-#' @importFrom survival survreg Surv
-#' @importFrom stats AIC as.formula predict quantile terms
-#' @export
 SurvModel_SurvReg <- function(data, expvars, timevar, eventvar, dist = "exponential") {
   # Assuming VariableProfile and survivalProbsInterpolator are loaded/available
   varprof <- VariableProfile(data, expvars) # Placeholder
@@ -114,19 +101,9 @@ SurvModel_SurvReg <- function(data, expvars, timevar, eventvar, dist = "exponent
 }
 
 
-#' @title Predict_SurvModel_SurvReg
 #'
-#' @description Make predictions using a fitted parametric survival model.
-#' @param modelout the output from 'SurvModel_SurvReg'
-#' @param newdata the data for which the predictions are to be calculated
-#' @param times optional vector of times for prediction. If NULL, uses times from modelout.
 #'
-#' @return a list containing the following objects:
-#' Probs: predicted survival probability matrix (rows=times, cols=observations),
-#' Times: the times at which the probabilities are calculated (including 0).
 #'
-#' @importFrom stats predict
-#' @export
 Predict_SurvModel_SurvReg <- function(modelout, newdata, new_times = NULL) {
   cat("Predict_SurvModel_SurvReg called with", nrow(newdata), "rows\n")
   # Select only the variables used in the final model

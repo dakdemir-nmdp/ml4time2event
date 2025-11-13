@@ -2,48 +2,23 @@
 % Please edit documentation in R/shap_plotting.R
 \name{ml4t2e_shap_waterfall}
 \alias{ml4t2e_shap_waterfall}
-\title{SHAP Waterfall Plot for Individual Prediction}
+\title{Plot a SHAP waterfall for a single observation}
 \usage{
 ml4t2e_shap_waterfall(shap_result, obs_id, max_features = NULL)
 }
 \arguments{
-\item{shap_result}{An object of class "ml4t2e_shap" from [ml4t2e_calculate_shap()].}
+\item{shap_result}{Object returned by `ml4t2e_calculate_shap()`.}
 
-\item{obs_id}{Integer index of the observation to explain (row number in the
-original data).}
+\item{obs_id}{Row index of the observation to plot.}
 
-\item{max_features}{Maximum number of features to display. If NULL, shows all.
-Features are ranked by absolute SHAP value.}
+\item{max_features}{Optional integer limiting the number of feature bars to
+display; remaining contributions are grouped as "Other".}
 }
 \value{
-A ggplot2 object showing the waterfall plot.
+A `ggplot` object.
 }
 \description{
-Creates a waterfall plot explaining an individual prediction
-by showing how each feature contributes.
-}
-\details{
-A waterfall plot shows how the prediction for a single observation builds up
-from the baseline (average prediction) by adding the contribution of each feature.
-
-The plot shows:
-\itemize{
-  \item Baseline: The average prediction across all observations
-  \item Feature contributions: How each feature pushes the prediction higher or lower
-  \item Final prediction: The actual prediction for this observation
-}
-
-Formula: Prediction = Baseline + sum(SHAP values)
-}
-\examples{
-\dontrun{
-shap_result <- ml4t2e_calculate_shap(pipeline, data, time_horizon = 365)
-
-# Explain first observation
-ml4t2e_shap_waterfall(shap_result, obs_id = 1)
-
-# Show top 10 features only
-ml4t2e_shap_waterfall(shap_result, obs_id = 5, max_features = 10)
-}
-
+Displays how individual feature contributions accumulate from the baseline
+prediction to the final expected-time-lost estimate for a selected
+observation.
 }

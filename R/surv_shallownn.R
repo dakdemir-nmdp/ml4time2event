@@ -1,10 +1,4 @@
 # --- Internal Helper Functions for Custom NNet Training ---
-#' @title Initialize Neural Network Weights
-#' @description Initializes weights and biases for a single-hidden-layer network.
-#' @param n_in Number of input features.
-#' @param n_hidden Number of hidden units.
-#' @return A list of weight matrices and bias vectors.
-#' @keywords internal
 initialize_weights <- function(n_in, n_hidden) {
   # Use a common initialization scheme (e.g., random uniform)
   # The nnet package uses a range of [-0.7, 0.7]
@@ -17,12 +11,6 @@ initialize_weights <- function(n_in, n_hidden) {
   list(W1 = W1, b1 = b1, W2 = W2, b2 = b2)
 }
 
-#' @title Forward Pass
-#' @description Computes the output of the neural network.
-#' @param X Input matrix.
-#' @param weights A list of weights and biases.
-#' @return A list containing the final output (log-risk) and hidden layer activations.
-#' @keywords internal
 forward_pass <- function(X, weights) {
   # Sigmoid activation function (as in nnet package)
   sigmoid <- function(z) 1 / (1 + exp(-z))
@@ -36,13 +24,6 @@ forward_pass <- function(X, weights) {
   list(output = Z2, hidden_activations = A1)
 }
 
-#' @title Unpack Weights
-#' @description Unpacks a weight vector into weight matrices and bias vectors.
-#' @param w_vec Weight vector.
-#' @param n_in Number of input features.
-#' @param n_hidden Number of hidden units.
-#' @return A list of weight matrices and bias vectors.
-#' @keywords internal
 unpack_weights <- function(w_vec, n_in, n_hidden) {
   W1_end <- n_in * n_hidden
   b1_end <- W1_end + n_hidden
@@ -57,28 +38,10 @@ unpack_weights <- function(w_vec, n_in, n_hidden) {
   )
 }
 
-#' @title SurvModel_ShallowNN
 #'
-#' @description Fit a single-hidden-layer neural network for survival outcomes using a custom implementation with Cox loss.
 #'
-#' @param data data frame with explanatory and outcome variables
-#' @param expvars character vector of names of explanatory variables in data
-#' @param timevar character name of time variable in data
-#' @param eventvar character name of event variable in data (needs to be 0/1)
-#' @param size integer, number of units in the hidden layer (default: 5)
-#' @param decay numeric, L2 regularization parameter (default: 0.01)
-#' @param maxit integer, maximum iterations for optimization (default: 1000)
-#' @param verbose logical, print progress messages (default: FALSE)
 #'
-#' @return a list with the following components:
-#'   \item{model}{fitted neural network model (list with weights)}
-#'   \item{times}{unique event times from training data}
-#'   \item{varprof}{variable profile list}
-#'   \item{expvars}{character vector of explanatory variables}
-#'   \item{factor_levels}{list of factor levels for categorical variables}
 #'
-#' @importFrom stats model.matrix as.formula complete.cases
-#' @export
 SurvModel_ShallowNN <- function(data, expvars, timevar, eventvar,
                                 size = 5, decay = 0.01, maxit = 1000, verbose = FALSE) {
 
@@ -278,29 +241,17 @@ SurvModel_ShallowNN <- function(data, expvars, timevar, eventvar,
   return(result)
 }
 
-#' @title Predict_SurvModel_ShallowNN
 #'
-#' @description Get predictions from a fitted shallow neural network survival model for new data.
 #'
-#' @param modelout the output from 'SurvModel_ShallowNN'
-#' @param newdata data frame with new observations for prediction
-#' @param new_times optional numeric vector of time points for prediction.
-#'   If NULL (default), uses the baseline hazard times from training.
 #'
-#' @return a list containing:
-#'   \item{Probs}{predicted survival probability matrix
-#'     (rows=times, cols=observations)}
-#'   \item{Times}{the times at which probabilities are calculated}
 #'
-#' @importFrom stats model.matrix
-#' @export
 Predict_SurvModel_ShallowNN <- function(modelout, newdata, new_times = NULL) {
 
   # ============================================================================
   # Input Validation
   # ============================================================================
   if (missing(modelout)) {
-  if (missing(modelout)) stop("argument \"modelout\" is missing")
+    stop("argument \"modelout\" is missing")
   }
   if (missing(newdata)) {
     stop("argument \"newdata\" is missing")

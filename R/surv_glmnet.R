@@ -1,26 +1,7 @@
-#' @title SurvModel_glmnet
 #'
-#' @description Fit a penalized Cox model for survival outcomes using glmnet.
 #'
-#' @param data data frame with explanatory and outcome variables
-#' @param expvars character vector of names of explanatory variables in data
-#' @param timevar character name of time variable in data
-#' @param eventvar character name of event variable in data (needs to be 0/1)
-#' @param alpha elastic net mixing parameter (1=lasso, 0=ridge)
-#' @param maxit maximum number of iterations for glmnet
-#' @param nfolds number of folds for cross-validation in cv.glmnet
 #'
-#' @return a list containing the following objects:
-#' model: cv.glmnet fit object,
-#' times: unique event times from the training data,
-#' varprof: profile of explanatory variables,
-#' expvars: character vector of explanatory variables used,
-#' factor_levels: list containing factor levels for consistent prediction.
 #'
-#' @importFrom glmnet cv.glmnet
-#' @importFrom survival Surv survfit
-#' @importFrom stats model.matrix
-#' @export
 SurvModel_glmnet <- function(data,
                              expvars,
                              timevar,
@@ -88,20 +69,10 @@ SurvModel_glmnet <- function(data,
   return(result)
 }
 
-#' @title Predict_SurvModel_glmnet
 #'
-#' @description Get predictions from a glmnet survival model for a test dataset.
 #'
-#' @param modelout the output from 'SurvModel_glmnet'
-#' @param newdata the data for which the predictions are to be calculated
 #'
-#' @return a list containing the following items:
-#' Probs: predicted survival probability matrix (rows=times, cols=observations),
-#' Times: the unique times for which the probabilities are calculated (including 0).
 #'
-#' @importFrom survival survfit
-#' @importFrom stats model.matrix
-#' @export
 Predict_SurvModel_glmnet <- function(modelout, newdata, new_times = NULL) {
 
   if (missing(modelout)) stop("argument \"modelout\" is missing")

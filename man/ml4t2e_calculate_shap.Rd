@@ -2,7 +2,7 @@
 % Please edit documentation in R/shap_analysis.R
 \name{ml4t2e_calculate_shap}
 \alias{ml4t2e_calculate_shap}
-\title{Calculate SHAP Values for ml4time2event Pipeline}
+\title{Calculate SHAP values for ml4time2event pipelines}
 \usage{
 ml4t2e_calculate_shap(
   pipeline,
@@ -14,71 +14,27 @@ ml4t2e_calculate_shap(
 )
 }
 \arguments{
-\item{pipeline}{A fitted ml4t2e_pipeline object from [ml4t2e_fit_pipeline()].}
+\item{pipeline}{A fitted pipeline produced by `ml4t2e_fit_pipeline()`.}
 
-\item{data}{Data frame containing observations to explain. Should contain
-the same variables used to train the pipeline (raw data, before preprocessing).}
+\item{data}{Data frame of observations to explain.}
 
-\item{time_horizon}{Numeric value specifying the time horizon for expected
-time lost calculation.}
+\item{time_horizon}{Single positive numeric time horizon used for expected
+time lost calculations.}
 
-\item{background}{Optional data frame to use as background/reference for
-SHAP calculation. If NULL (default), uses a random sample from `data`.}
+\item{background}{Optional background data frame; defaults to a sample from
+`data`.}
 
-\item{nsim}{Number of Monte Carlo simulations for SHAP calculation.
-Higher values give more accurate estimates but take longer. Default is 100.}
+\item{nsim}{Number of Monte Carlo simulations passed to `fastshap::explain()`
+when available.}
 
-\item{...}{Additional arguments passed to the SHAP calculation function.}
+\item{...}{Additional arguments forwarded to the underlying SHAP engine.}
 }
 \value{
-A list of class "ml4t2e_shap" containing:
-\describe{
-  \item{shap_values}{Matrix of SHAP values (rows = observations, cols = features)}
-  \item{baseline}{Baseline prediction (expected value over background data)}
-  \item{predictions}{Actual predictions for each observation}
-  \item{feature_values}{Original feature values for each observation}
-  \item{feature_names}{Names of features}
-  \item{time_horizon}{Time horizon used for expected time lost}
-  \item{analysis_type}{Type of analysis ("survival" or "competing_risks")}
-}
+An object of class `ml4t2e_shap` containing SHAP values, baseline
+  prediction, raw predictions, and feature values.
 }
 \description{
-Calculates SHAP (SHapley Additive exPlanations) values for
-a fitted ml4time2event pipeline. SHAP values explain individual predictions
-by showing the contribution of each feature.
-}
-\details{
-This function uses Kernel SHAP (or fast SHAP if available) to calculate
-feature contributions. SHAP values satisfy:
-\deqn{prediction = baseline + sum(SHAP values)}
-
-The calculation works on raw (unprocessed) features, so SHAP values
-directly reflect the contribution of original variables.
-}
-\examples{
-\dontrun{
-library(ml4time2event)
-
-# Fit pipeline
-lung_df <- get_lung_survival_data()
-pipeline <- ml4t2e_fit_pipeline(
-  data = lung_df,
-  analysis_type = "survival",
-  timevar = "time",
-  eventvar = "status",
-  models = c("coxph", "glmnet")
-)
-
-# Calculate SHAP values
-shap_result <- ml4t2e_calculate_shap(
-  pipeline = pipeline,
-  data = lung_df[1:50, ],
-  time_horizon = 365,
-  nsim = 100
-)
-
-# Examine results
-print(shap_result)
-}
-
+Generates expected-time-lost SHAP values for a fitted `ml4time2event`
+pipeline by wrapping the tidy survival predictions in a prediction function
+suitable for `fastshap` or `kernelshap`.
 }
