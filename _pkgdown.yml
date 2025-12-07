@@ -10,7 +10,6 @@ reference:
     contents:
       - ml4t2e_task_surv
       - ml4t2e_task_cr
-      - ml4t2e_task_from_df
 
   - title: "Core: Pipelines"
     desc: >

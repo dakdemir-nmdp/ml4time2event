@@ -40,3 +40,9 @@ design/
 data/agvhd24_individual_hla.csv
 /Meta/*.log
 vignettes_output/
+
+# Ignore AGVHD analysis
+vignettes/agvhd_analysis.Rmd
+doc/agvhd_analysis.Rmd
+doc/agvhd_analysis.R
+doc/agvhd_analysis.html

@@ -7,27 +7,32 @@
 #' @return numeric value representing the integrated score.
 #' @importFrom pracma trapz
 #' @noRd
-Integrator<-function(times, scores, minmax=c(1,35), scale=FALSE){
+Integrator <- function(times, scores, minmax = c(1, 35), scale = FALSE) {
   # Ensure times and scores have the same length
   if (length(times) != length(scores)) {
     stop("Length of 'times' and 'scores' must be equal.")
   }
   # Ensure minmax is valid
   if (length(minmax) != 2 || minmax[1] >= minmax[2]) {
-      stop("'minmax' must be a numeric vector of length 2 with minmax[1] < minmax[2].")
+    stop("'minmax' must be a numeric vector of length 2 with minmax[1] < minmax[2].")
   }
 
   # Create a mask for times within the specified range
-  mask<-(times>=minmax[1]) & (times<=minmax[2])
+  mask <- (times >= minmax[1]) & (times <= minmax[2])
 
   # Filter times and scores based on the mask
-  timesn<-times[mask]
-  scoressn<-scores[mask]
+  timesn <- times[mask]
+  scoressn <- scores[mask]
 
   # Handle cases where no points fall within the range
   if (length(timesn) < 2) {
-      warning("Less than 2 points found within the specified minmax range. Returning 0.")
+    if (minmax[1] == minmax[2]) {
       return(0)
+    } # Zero width interval
+    # If range is outside strict bounds of times, but valid integration requested,
+    # we might want linear interpolation, but for now returning 0 is safe fallback
+    # to avoid failing.
+    return(0)
   }
 
   # Sort points by time to ensure correct integration order
@@ -36,19 +41,19 @@ Integrator<-function(times, scores, minmax=c(1,35), scale=FALSE){
   scoressn <- scoressn[order_idx]
 
   # Calculate the area under the curve using the trapezoidal rule
-  AUCsuperlearnMean = pracma::trapz(timesn, scoressn)
+  AUCsuperlearnMean <- pracma::trapz(timesn, scoressn)
 
   # Scale the result if requested
-  if (scale){
-      interval_length <- minmax[2] - minmax[1]
-      if (interval_length > 0) {
-          AUCsuperlearnMean <- AUCsuperlearnMean / interval_length
-      } else {
-          warning("Integration interval length is zero or negative. Cannot scale.")
-          # Return unscaled AUC or 0 depending on desired behavior
-          # return(AUCsuperlearnMean)
-          return(0) # Return 0 if interval is invalid for scaling
-      }
+  if (scale) {
+    interval_length <- minmax[2] - minmax[1]
+    if (interval_length > 0) {
+      AUCsuperlearnMean <- AUCsuperlearnMean / interval_length
+    } else {
+      warning("Integration interval length is zero or negative. Cannot scale.")
+      # Return unscaled AUC or 0 depending on desired behavior
+      # return(AUCsuperlearnMean)
+      return(0) # Return 0 if interval is invalid for scaling
+    }
   }
   AUCsuperlearnMean
 }
@@ -78,11 +83,11 @@ calculate_expected_time_lost <- function(times, event_probs, upper_limit = NULL,
   if (is.vector(event_probs) && length(times) != length(event_probs)) {
     stop("'times' and 'event_probs' must have equal length")
   }
-  
+
   if (is.null(upper_limit)) {
     upper_limit <- max(times, na.rm = TRUE)
   }
-  
+
   if (!is.numeric(upper_limit) || length(upper_limit) != 1 || upper_limit <= lower_limit) {
     stop("'upper_limit' must be a single numeric value greater than 'lower_limit'")
   }
