@@ -2,7 +2,7 @@
 % Please edit documentation in R/cr_metrics.R
 \name{integratedConcordanceCR}
 \alias{integratedConcordanceCR}
-\title{integratedConcordanceCR}
+\title{Integrated Concordance Index for Competing Risks}
 \usage{
 integratedConcordanceCR(
   SurvObj,
@@ -14,19 +14,29 @@ integratedConcordanceCR(
 )
 }
 \arguments{
-\item{SurvObj}{survival object (Surv(time, status))}
+\item{SurvObj}{Surv object with competing risks}
 
-\item{Predictions}{matrix of predicted CIFs (rows=times, cols=observations) for the cause of interest}
+\item{Predictions}{Matrix of predicted CIFs}
 
-\item{eval_times}{vector of evaluation time points}
+\item{eval_times}{Vector of time points at which to evaluate}
 
-\item{cause}{cause of interest (1 or 2)}
+\item{cause}{Integer cause of interest}
 
-\item{TestMat}{test dataset (optional, used if formula needs predictors)}
+\item{TestMat}{Optional test matrix}
+
+\item{pred_times}{Numeric vector of time grid from predictions}
 }
 \value{
-integrated concordance index (scalar)
+Scalar integrated C-index value
 }
 \description{
-Calculate integrated concordance index for competing risk predictions over time range
+Averages time-dependent concordance across evaluation times.
+Provides a single summary measure of discrimination over follow-up.
 }
+\details{
+**Interpretation**:
+- Mean of C-index values across time points
+- Range: 0.5 (random) to 1.0 (perfect)
+- Accounts for competing events in all comparisons
+}
+\keyword{internal}

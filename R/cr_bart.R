@@ -1,40 +1,7 @@
-#' @title CRModel_BART
 #'
-#' @description Fit a BART model for competing risks outcomes using BART::crisk.bart.
 #'
-#' @param data data frame with explanatory and outcome variables
-#' @param expvars character vector of names of explanatory variables in data
-#' @param timevar character name of time variable in data
-#' @param eventvar character name of event variable in data (coded 0,1,2 where 0=censored, 1=event of interest, 2=competing event)
-#' @param event_codes character or numeric vector identifying the event code(s) to
-#'   model. BART competing risks currently supports a single event code. If NULL
-#'   (default), the first non-zero event code observed in the data is used.
-#' @param K parameter 'K' for BART (number of time points for discrete approximation, default: 10)
-#' @param ntree number of trees in BART model (default: 100)
-#' @param ndpost number of posterior draws to save (default: 1000)
-#' @param nskip number of MCMC iterations to discard as burn-in (default: 100)
-#' @param keepevery interval at which to keep posterior draws (default: 10)
-#' @param verbose logical, print progress messages (default: FALSE)
 #'
-#' @return a list with the following components:
-#'   \item{bart_model}{the fitted BART model object from BART::crisk.bart}
-#'   \item{times}{vector of unique event times in the training data}
-#'   \item{varprof}{variable profile list containing factor levels and numeric ranges}
-#'   \item{model_type}{character string "cr_bart"}
-#'   \item{expvars}{character vector of explanatory variables used}
-#'   \item{timevar}{character name of time variable}
-#'   \item{eventvar}{character name of event variable}
-#'   \item{event_codes}{character vector of event codes included in the model}
-#'   \item{event_codes_numeric}{numeric vector of event codes included}
-#'   \item{default_event_code}{character scalar for the default event code}
-#'   \item{time_range}{vector with min and max observed event times}
-#'   \item{x_train}{design matrix for the training data}
-#'   \item{times_train}{time variable values from training data}
-#'   \item{delta_train}{event variable values from training data}
 #'
-#' @importFrom BART crisk.bart
-#' @importFrom stats model.matrix
-#' @export
 CRModel_BART <- function(data, expvars, timevar, eventvar, event_codes = NULL,
                         K = 10, ntree = 100, ndpost = 1000, nskip = 100,
                         keepevery = 10, verbose = FALSE) {
@@ -192,29 +159,10 @@ CRModel_BART <- function(data, expvars, timevar, eventvar, event_codes = NULL,
 }
 
 
-#' @title Predict_CRModel_BART
 #'
-#' @description Get predictions from a CR BART model for a test dataset.
 #'
-#' @param modelout the output from 'CRModel_BART' (a list containing model and metadata)
-#' @param newdata data frame with new observations for prediction
-#' @param new_times optional numeric vector of time points for prediction.
-#'   If NULL (default), uses the model's native time points.
-#'   Can be any positive values - interpolation handles all time points.
-#' @param event_of_interest character or numeric scalar indicating the event code
-#'   for which CIFs should be returned. If NULL (default), uses the event code
-#'   stored in the fitted model. BART models can only predict the event they were
-#'   trained on.
 #'
-#' @return a list containing:
-#'   \item{CIFs}{predicted cumulative incidence function matrix
-#'     (rows=times, cols=observations)}
-#'   \item{Times}{the times at which CIFs are calculated
-#'     (always includes time 0)}
 #'
-#' @importFrom BART crisk.pre.bart bartModelMatrix
-#' @importFrom stats model.matrix
-#' @export
 Predict_CRModel_BART <- function(modelout, newdata, new_times = NULL, event_of_interest = NULL) {
 
   # ============================================================================

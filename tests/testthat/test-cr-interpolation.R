@@ -1,10 +1,10 @@
 library(testthat)
-library(here)
+# library(here) # Removed
 # library(data.table) # Removed
 library(stats) # For approxfun
 
 # Assuming the functions are available in the environment
-source(here("R/cr_interpolation.R"))
+# source(here("R/cr_interpolation.R")) # Removed - functions should be available in package environment
 
 context("Testing cr_interpolation functions")
 

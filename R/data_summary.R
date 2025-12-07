@@ -1,15 +1,5 @@
-#' @title pairwiserelationshipsDataSummmary
 #'
-#' @description Calculate pairwise non-linear correlations among variables using the
-#' bias-corrected distance correlation (bcdcor) from the 'energy' package.
-#' Note: This can be computationally intensive for large datasets or many variables.
 #'
-#' @param data Data frame with variables to correlate. Factors/characters are converted to dummy variables.
-#' @return A symmetric matrix of pairwise distance correlations.
-#' @importFrom energy bcdcor
-#' @importFrom stats model.matrix
-#' @importFrom pbapply pblapply
-#' @export
 pairwiserelationshipsDataSummmary <- function(data) {
   if (!requireNamespace("energy", quietly = TRUE)) stop("Package 'energy' needed.")
   if (!requireNamespace("pbapply", quietly = TRUE)) stop("Package 'pbapply' needed for progress bar.")
@@ -69,14 +59,8 @@ pairwiserelationshipsDataSummmary <- function(data) {
 
 
 
-#' @title gethighcorvarsDataSummmary
 #'
-#' @description Identify pairs of variables from a correlation matrix with correlation exceeding a threshold.
 #'
-#' @param pmat A symmetric correlation matrix (e.g., output from `pairwiserelationshipsDataSummmary` or standard cor()).
-#' @param corcutoff Numeric correlation cutoff threshold (default: 0.8).
-#' @return A matrix with three columns: Var1, Var2, Correlation for pairs exceeding the cutoff. Returns NULL if no pairs found.
-#' @export
 gethighcorvarsDataSummmary <- function(pmat, corcutoff = .8) {
   if (!is.matrix(pmat) || !isSymmetric(pmat)) stop("'pmat' must be a symmetric matrix.")
   if (!is.numeric(corcutoff) || corcutoff < -1 || corcutoff > 1) stop("'corcutoff' must be between -1 and 1.")
@@ -99,20 +83,9 @@ gethighcorvarsDataSummmary <- function(pmat, corcutoff = .8) {
 }
 
 
-#' OneAgainstRestCorDataSummmary
 #'
-#' @title OneAgainstRestCorDataSummmary
 #'
-#' @description Calculate the distance correlation of each variable against all other variables combined.
-#' Note: This can be computationally intensive.
 #'
-#' @param data Data frame. Factors/characters are converted to dummy variables.
-#' @return A named numeric vector where names are the original variable names (or derived numeric feature names)
-#'   and values are the distance correlations of each against the rest.
-#' @importFrom energy bcdcor
-#' @importFrom stats model.matrix
-#' @importFrom pbapply pbsapply
-#' @export
 OneAgainstRestCorDataSummmary <- function(data) {
   if (!requireNamespace("energy", quietly = TRUE)) stop("Package 'energy' needed.")
    if (!requireNamespace("pbapply", quietly = TRUE)) stop("Package 'pbapply' needed for progress bar.")
@@ -151,25 +124,8 @@ OneAgainstRestCorDataSummmary <- function(data) {
 
 
 
-#' @title SummaryTableDataSummmary
 #'
-#' @description Create a summary table for selected variables using the 'gtsummary' package.
 #'
-#' @param data Data frame.
-#' @param UseVars Character vector of variable names to include in the summary.
-#' @return A gtsummary table object.
-#' @examples
-#' \dontrun{
-#' if (requireNamespace("gtsummary", quietly = TRUE)) {
-#'   my_summary <- SummaryTableDataSummmary(iris, UseVars = c("Sepal.Length", "Species"))
-#'   print(my_summary)
-#' }
-#' }
-#' @importFrom gtsummary tbl_summary modify_header bold_labels italicize_labels
-#' @importFrom methods is
-#' @importFrom magrittr %>%
-#' @importFrom dplyr select all_of
-#' @export
 SummaryTableDataSummmary <- function(data, UseVars) {
     if (!requireNamespace("gtsummary", quietly = TRUE)) {
         stop("Package 'gtsummary' needed for this function. Please install it.", call. = FALSE)

@@ -1,12 +1,13 @@
 library(testthat)
-library(here) # Using here() for robust path construction
+library(ml4time2event)
+# library(here) # Removed - Using here() for robust path construction
 
 # Source the data_io functions
-source(here("R/data_io.R"))
+# source(here("R/data_io.R")) # Removed - functions should be available in package environment
 
-# Define paths to fixture files relative to the project root
-fixture_data_path <- here("tests", "fixtures", "test_data.csv")
-non_existent_path <- here("tests", "fixtures", "non_existent_file.csv")
+# Define paths to fixture files - fixtures are at ../fixtures (relative to testthat directory)
+fixture_data_path <- file.path("..", "fixtures", "test_data.csv")
+non_existent_path <- file.path("..", "fixtures", "non_existent_file.csv")
 
 context("Testing data_io functions")
 

@@ -303,7 +303,7 @@ test_that("Predict_CRModel_SurvReg reflects covariate-driven risk differences", 
       )
     } else {
       data.frame(
-        time = c(rep(5, 40), rep(18, 10), rep(35, 10)),
+        time = c(rep(5, 40), rep(10, 10), rep(35, 10)),
         event = c(rep(1, 40), rep(2, 10), rep(0, 10)),
         risk = 1
       )

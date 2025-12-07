@@ -1,40 +1,7 @@
-#' @title CRModel_xgboost
 #'
-#' @description Fit an XGBoost model for competing risks outcomes using cause-specific modeling.
 #'
-#' @param data data frame with explanatory and outcome variables
-#' @param expvars character vector of names of explanatory variables in data
-#' @param timevar character name of time variable in data
-#' @param eventvar character name of event variable in data (coded 0=censored, 1=cause1, 2=cause2, etc.)
-#' @param event_codes character or numeric vector identifying the event codes to
-#'   model. XGBoost competing risks supports modeling multiple causes
-#'   simultaneously. If NULL (default), all non-zero event codes observed in the
-#'   data are used. The first entry defines the default event of interest.
-#' @param eta learning rate (default: 0.01)
-#' @param max_depth maximum depth of trees (default: 5)
-#' @param nrounds number of boosting rounds (default: 100)
-#' @param ntimes integer, number of time points to use for prediction grid (default: 50)
-#' @param verbose logical, print progress messages (default: FALSE)
-#' @param ... additional parameters passed to xgboost
 #'
-#' @return a list with the following components:
-#'   \item{xgb_model}{the fitted cause-specific XGBoost model object}
-#'   \item{xgb_models_all_causes}{list of cause-specific XGBoost models}
-#'   \item{event_codes}{character vector of event codes included in the model}
-#'   \item{event_codes_numeric}{numeric vector of event codes included}
-#'   \item{default_event_code}{character scalar for the default event code}
-#'   \item{times}{vector of unique event times for the default event of interest}
-#'   \item{varprof}{variable profile list containing factor levels and numeric ranges}
-#'   \item{model_type}{character string "cr_xgboost"}
-#'   \item{expvars}{character vector of explanatory variables used}
-#'   \item{timevar}{character name of time variable}
-#'   \item{eventvar}{character name of event variable}
-#'   \item{time_range}{vector with min and max observed event times}
-#'   \item{feature_names}{character vector of feature names used in XGBoost}
 #'
-#' @importFrom xgboost xgb.DMatrix xgb.train
-#' @importFrom stats model.matrix complete.cases
-#' @export
 CRModel_xgboost <- function(data, expvars, timevar, eventvar, event_codes = NULL,
                            eta = 0.01, max_depth = 5, nrounds = 100,
                            ntimes = 50, verbose = FALSE, ...) {
@@ -218,11 +185,14 @@ CRModel_xgboost <- function(data, expvars, timevar, eventvar, event_codes = NULL
       which.est = "point"
     )
 
-    # Store baseline model in the XGBoost model object
-    xgb_model_cause$baseline_model <- baseline_info$model
-    xgb_model_cause$baseline_sf <- baseline_info$sf
+    # Store baseline model in a wrapper list
+    xgb_wrapper <- list(
+      model = xgb_model_cause,
+      baseline_model = baseline_info$model,
+      baseline_sf = baseline_info$sf
+    )
 
-    xgb_models_all_causes[[cause_char]] <- xgb_model_cause
+    xgb_models_all_causes[[cause_char]] <- xgb_wrapper
   }
 
   # The main model for the event of interest
@@ -257,26 +227,10 @@ CRModel_xgboost <- function(data, expvars, timevar, eventvar, event_codes = NULL
   return(result)
 }
 
-#' @title Predict_CRModel_xgboost
 #'
-#' @description Get predictions from a fitted cause-specific XGBoost competing risks model for new data.
 #'
-#' @param modelout the output from 'CRModel_xgboost'
-#' @param newdata data frame with new observations for prediction
-#' @param new_times optional numeric vector of time points for prediction.
-#'   If NULL (default), uses the times from the training data.
-#'   Can be any positive values - interpolation handles all time points.
-#' @param event_of_interest character or numeric scalar indicating the event code
-#'   for which CIFs should be returned. If NULL (default), the model's default
-#'   event code (the first entry in `event_codes`) is used.
 #'
-#' @return a list containing:
-#'   \item{CIFs}{predicted cumulative incidence function matrix
-#'     (rows=times, cols=observations)}
-#'   \item{Times}{the times at which CIFs are calculated}
 #'
-#' @importFrom stats approx model.matrix
-#' @export
 Predict_CRModel_xgboost <- function(modelout, newdata, new_times = NULL, event_of_interest = NULL) {
 
   # ============================================================================
@@ -368,12 +322,14 @@ Predict_CRModel_xgboost <- function(modelout, newdata, new_times = NULL, event_o
 
   for (i in seq_len(n_causes)) {
     cause_char <- modelout$event_codes[i]
-    cause_model <- modelout$xgb_models_all_causes[[cause_char]]
+    cause_wrapper <- modelout$xgb_models_all_causes[[cause_char]]
 
-    if (is.null(cause_model)) {
+    if (is.null(cause_wrapper)) {
       missing_cause_idx <- c(missing_cause_idx, i)
       next
     }
+    
+    cause_model <- cause_wrapper$model
 
     linear_preds <- tryCatch(
       predict(cause_model, X_new),
@@ -384,7 +340,7 @@ Predict_CRModel_xgboost <- function(modelout, newdata, new_times = NULL, event_o
     )
 
     sf_baseline <- tryCatch(
-      survival::survfit(cause_model$baseline_model,
+      survival::survfit(cause_wrapper$baseline_model,
                         newdata = data.frame("score" = 0)),
       error = function(e) NULL
     )
@@ -453,7 +409,13 @@ Predict_CRModel_xgboost <- function(modelout, newdata, new_times = NULL, event_o
       }
 
       if (t == 1) {
-        cif_vals[t] <- current_increment
+        # At time 0, CIF should be 0
+        if (abs(base_times[t]) < .Machine$double.eps) {
+          cif_vals[t] <- 0
+        } else {
+          # First time point is not 0, use Aalen-Johansen formula
+          cif_vals[t] <- 1.0 * current_increment
+        }
       } else {
         prev_cif <- cif_vals[t - 1]
         prev_surv <- overall_survival[t - 1, j]

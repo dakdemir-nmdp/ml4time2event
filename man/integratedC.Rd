@@ -2,24 +2,32 @@
 % Please edit documentation in R/surv_metrics.R
 \name{integratedC}
 \alias{integratedC}
-\title{integratedC}
+\title{Integrated Concordance Index}
 \usage{
 integratedC(predsurv, pred_times, obstimes, obsevents, TestMat = NULL)
 }
 \arguments{
-\item{predsurv}{Predicted survival probability matrix (rows=times, cols=observations)}
+\item{predsurv}{Matrix of predicted survival probabilities}
 
-\item{pred_times}{The times for which the survival probabilities are predicted}
+\item{pred_times}{Numeric vector of time points}
 
-\item{obstimes}{Observed times vector}
+\item{obstimes}{Observed times}
 
-\item{obsevents}{Observed event indicator vector (0=censored, 1=event)}
+\item{obsevents}{Binary event indicator}
 
-\item{TestMat}{Optional test dataset}
+\item{TestMat}{Optional test matrix (currently unused)}
 }
 \value{
-Integrated concordance index (scalar)
+Scalar integrated C-index value
 }
 \description{
-Calculate integrated concordance index over time range
+Averages time-dependent C-index values over the time grid.
+Provides a summary measure of discrimination across follow-up.
 }
+\details{
+**Interpretation**:
+- Average of all C-index values at supplied time points
+- Single summary value (unlike time-dependent C-index)
+- Range: 0.5 to 1.0
+}
+\keyword{internal}

@@ -2,7 +2,7 @@ library(survival)
 library(testthat)
 
 # Load the package to make all CR model functions available
-devtools::load_all()
+# devtools::load_all() # Removed - not needed in test_check environment
 
 # Helper function to check for non-monotonicity in a CIF matrix
 # A valid CIF must be non-decreasing.

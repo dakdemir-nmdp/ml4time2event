@@ -1,5 +1,5 @@
 library(testthat)
-library(here)
+# library(here) # Removed
 # library(data.table) # Removed
 library(survival) # For Surv object
 library(xgboost)  # Required for xgboost
@@ -46,7 +46,7 @@ test_that("SurvModel_xgboost runs and returns expected structure", {
   # Check output structure
   expect_type(model_xgb, "list")
   expect_named(model_xgb, c("model", "times", "varprof", "expvars", "timevar", "eventvar"))
-  expect_s3_class(model_xgb$model, "xgb.Booster")
+  expect_s3_class(model_xgb$model, "xgb.Booster.surv")
   expect_type(model_xgb$times, "double")
   expect_type(model_xgb$varprof, "list")
   expect_type(model_xgb$expvars, "character")
@@ -61,7 +61,7 @@ test_that("SurvModel_xgboost handles different parameters", {
     timevar = time_var,
     eventvar = event_var
   )
-  expect_s3_class(model_xgb$model, "xgb.Booster")
+  expect_s3_class(model_xgb$model, "xgb.Booster.surv")
 })
 
 test_that("SurvModel_xgboost requires correct inputs", {

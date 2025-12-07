@@ -2,7 +2,7 @@
 % Please edit documentation in R/cr_metrics.R
 \name{timedepConcordanceCR}
 \alias{timedepConcordanceCR}
-\title{timedepConcordanceCR}
+\title{Time-Dependent Concordance Index for Competing Risks}
 \usage{
 timedepConcordanceCR(
   SurvObj,
@@ -14,21 +14,39 @@ timedepConcordanceCR(
 )
 }
 \arguments{
-\item{SurvObj}{survival object (Surv(time, status))}
+\item{SurvObj}{Surv object with structure: `Surv(time, status=cause)`}
 
-\item{Predictions}{matrix of predicted CIFs (rows=times, cols=observations) for the cause of interest}
+\item{Predictions}{Matrix of predicted CIFs (rows = times, cols = observations)}
 
-\item{time}{evaluation time point}
+\item{time}{Scalar evaluation time}
 
-\item{cause}{cause of interest (1 or 2)}
+\item{cause}{Integer cause of interest (default: 1)}
 
-\item{TestMat}{test dataset (optional, used if formula needs predictors)}
+\item{TestMat}{Optional test matrix (currently unused)}
 
-\item{pred_times}{optional numeric vector of times corresponding to columns in `Predictions`}
+\item{pred_times}{Numeric vector of time grid from predictions}
 }
 \value{
-concordance index value
+Scalar C-index value at specified time, or NA if no pairs comparable
 }
 \description{
-Get time dependent concordance for competing risk outcomes (only event 1)
+Computes cause-specific concordance index for competing risks data.
+Measures how well predicted cumulative incidence functions rank pairs
+of observations where one had the competing event of interest.
 }
+\details{
+**Formula**:
+For cause \eqn{j} at time \eqn{t}:
+\eqn{C_j(t) = \frac{\sum_{i,j} I(t_i < t_j) \cdot I(\hat{CIF}_{j,i}(t) > \hat{CIF}_{j,j}(t)) \cdot I(\delta_j = j)}{\sum_{i,j} I(t_i < t_j) \cdot I(\delta_j = j)}}
+
+**Interpretation**:
+- Range: 0.5 (random) to 1.0 (perfect)
+- Computed only among pairs where the event of interest occurred
+- Competing events exclude observations from risk set
+}
+\references{
+Fine, J. P., & Gray, R. J. (1999). "A proportional hazards model for the
+subdistribution of a competing risk." *Journal of the American Statistical Association*,
+94(446), 496–509.
+}
+\keyword{internal}

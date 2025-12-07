@@ -2,7 +2,7 @@
 % Please edit documentation in R/cr_metrics.R
 \name{BrierScoreCR}
 \alias{BrierScoreCR}
-\title{BrierScoreCR}
+\title{Brier Score for Competing Risks Predictions}
 \usage{
 BrierScoreCR(
   SurvObj,
@@ -15,24 +15,37 @@ BrierScoreCR(
 )
 }
 \arguments{
-\item{SurvObj}{survival object (Surv(time, status))}
+\item{SurvObj}{Surv object with competing risks structure}
 
-\item{Predictions}{matrix of predicted CIFs (rows=times, cols=observations) for the cause of interest}
+\item{Predictions}{Matrix of predicted CIFs}
 
-\item{eval_times}{evaluation time point(s). If a vector, returns a vector of scores.
-For backward compatibility, also accepts 'time' as a deprecated alias.}
+\item{eval_times}{Scalar or vector of evaluation time(s)}
 
-\item{cause}{cause of interest (1 or 2)}
+\item{cause}{Integer cause of interest (default: 1)}
 
-\item{TestMat}{test dataset (optional, used if formula needs predictors)}
+\item{TestMat}{Optional test matrix (currently unused)}
 
-\item{pred_times}{optional numeric vector of times corresponding to rows in `Predictions`}
+\item{pred_times}{Numeric vector of time grid from predictions}
 
-\item{time}{deprecated, use eval_times instead}
+\item{time}{Deprecated parameter for backward compatibility; use `eval_times`}
 }
 \value{
-Brier score value(s). If eval_times is a vector, returns a vector; if scalar, returns a scalar.
+Numeric Brier score at specified time(s)
 }
 \description{
-Calculate Brier score for competing risk predictions at evaluation time(s)
+Computes mean squared error between predicted cumulative incidence functions
+and observed event status for a specified cause. Accounts for competing events.
 }
+\details{
+**Formula**:
+\eqn{BS_j(t) = E[(CIF_j(t|X) - Y_j(t))^2]}
+
+where \eqn{CIF_j(t|X)} is predicted CIF for cause \eqn{j} and \eqn{Y_j(t)}
+is binary indicator of cause \eqn{j} occurring by time \eqn{t}.
+
+**Interpretation**:
+- Range: 0 (perfect) to 1 (worst)
+- Combines calibration and discrimination
+- Computed only for observations at risk (event of interest or censored/competing)
+}
+\keyword{internal}

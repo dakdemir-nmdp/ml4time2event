@@ -10,7 +10,7 @@
     Predictions <- as.matrix(Predictions)
   } else if (is.vector(Predictions)) {
     if (length(Predictions) != n_obs) {
-      stop(sprintf(
+      rlang::abort(sprintf(
         "%s vector must have length equal to the number of observations (%d).",
         context, n_obs
       ))
@@ -21,7 +21,7 @@
   }
 
   if (!is.matrix(Predictions)) {
-    stop(sprintf("%s must be coercible to a matrix.", context))
+    rlang::abort(sprintf("%s must be coercible to a matrix.", context))
   }
 
   mat <- Predictions
@@ -29,7 +29,7 @@
   if (ncol(mat) == n_obs) {
     # Already time-by-observation
   } else {
-    stop(sprintf(
+    rlang::abort(sprintf(
       "%s must have rows=times and columns=observations. Got %dx%d, expected nrow=%d (times), ncol=%d (observations).",
       context, nrow(mat), ncol(mat), length(pred_times) %||% nrow(mat), n_obs
     ))
@@ -54,7 +54,7 @@
     }
   }
   if (is.null(times)) {
-    stop(sprintf(
+    rlang::abort(sprintf(
       "Unable to determine the time grid for %s. Provide 'pred_times' or supply numeric rownames/'Times' attribute.",
       tolower(context)
     ))
@@ -62,11 +62,11 @@
 
   times <- suppressWarnings(as.numeric(times))
   if (any(is.na(times))) {
-    stop(sprintf("'pred_times' must be numeric for %s.", tolower(context)))
+    rlang::abort(sprintf("'pred_times' must be numeric for %s.", tolower(context)))
   }
 
   if (length(times) != nrow(mat)) {
-    stop(sprintf(
+    rlang::abort(sprintf(
       "'pred_times' must have length %d to match the number of rows in %s (rows represent time points).",
       nrow(mat), tolower(context)
     ))
@@ -80,7 +80,7 @@
                                       eval_time,
                                       context = "Predictions") {
   if (is.null(pred_times) || length(pred_times) != nrow(pred_matrix)) {
-    stop(sprintf(
+    rlang::abort(sprintf(
       "Prediction times for %s must be provided and match the number of matrix rows.",
       tolower(context)
     ))
@@ -94,31 +94,50 @@
   )
 }
 
-#' @title timedepConcordanceCR
+#' Time-Dependent Concordance Index for Competing Risks
 #'
-#' @description Get time dependent concordance for competing risk outcomes (only event 1)
-#' @param SurvObj survival object (Surv(time, status))
-#' @param Predictions matrix of predicted CIFs (rows=times, cols=observations) for the cause of interest
-#' @param time evaluation time point
-#' @param cause cause of interest (1 or 2)
-#' @param TestMat test dataset (optional, used if formula needs predictors)
-#' @param pred_times optional numeric vector of times corresponding to columns in `Predictions`
+#' Computes cause-specific concordance index for competing risks data.
+#' Measures how well predicted cumulative incidence functions rank pairs
+#' of observations where one had the competing event of interest.
 #'
-#' @return concordance index value
-#' @export
+#' **Formula**:
+#' For cause \eqn{j} at time \eqn{t}:
+#' \eqn{C_j(t) = \frac{\sum_{i,j} I(t_i < t_j) \cdot I(\hat{CIF}_{j,i}(t) > \hat{CIF}_{j,j}(t)) \cdot I(\delta_j = j)}{\sum_{i,j} I(t_i < t_j) \cdot I(\delta_j = j)}}
+#'
+#' **Interpretation**:
+#' - Range: 0.5 (random) to 1.0 (perfect)
+#' - Computed only among pairs where the event of interest occurred
+#' - Competing events exclude observations from risk set
+#'
+#' @param SurvObj Surv object with structure: `Surv(time, status=cause)`
+#' @param Predictions Matrix of predicted CIFs (rows = times, cols = observations)
+#' @param time Scalar evaluation time
+#' @param cause Integer cause of interest (default: 1)
+#' @param TestMat Optional test matrix (currently unused)
+#' @param pred_times Numeric vector of time grid from predictions
+#'
+#' @return Scalar C-index value at specified time, or NA if no pairs comparable
+#'
+#' @references
+#' Fine, J. P., & Gray, R. J. (1999). "A proportional hazards model for the
+#' subdistribution of a competing risk." *Journal of the American Statistical Association*,
+#' 94(446), 496–509.
+#'
+#' @keywords internal
+#'
 timedepConcordanceCR<-function(SurvObj, Predictions, time, cause=1, TestMat=NULL, pred_times = NULL){
   # Input validation
   if (!inherits(SurvObj, "Surv")) {
-    stop("'SurvObj' must be a Surv object")
+    rlang::abort("'SurvObj' must be a Surv object")
   }
   if (!is.numeric(time) || length(time) != 1) {
-    stop("'time' must be a single numeric value")
+    rlang::abort("'time' must be a single numeric value")
   }
   if (missing(cause)) {
-    stop("argument 'cause' is missing, with no default")
+    rlang::abort("argument 'cause' is missing, with no default")
   }
-  if (!is.numeric(cause) || length(cause) != 1 || !(cause %in% c(1, 2))) {
-    stop("'cause' must be 1 or 2")
+  if (!is.numeric(cause) || length(cause) != 1) {
+    rlang::abort("'cause' must be a single numeric value")
   }
 
   # Extract time and event from Surv object
@@ -174,20 +193,34 @@ timedepConcordanceCR<-function(SurvObj, Predictions, time, cause=1, TestMat=NULL
 }
 
 
-#' @title BrierScoreCR
+#' Brier Score for Competing Risks Predictions
 #'
-#' @description Calculate Brier score for competing risk predictions at evaluation time(s)
-#' @param SurvObj survival object (Surv(time, status))
-#' @param Predictions matrix of predicted CIFs (rows=times, cols=observations) for the cause of interest
-#' @param eval_times evaluation time point(s). If a vector, returns a vector of scores.
-#'   For backward compatibility, also accepts 'time' as a deprecated alias.
-#' @param cause cause of interest (1 or 2)
-#' @param TestMat test dataset (optional, used if formula needs predictors)
-#' @param pred_times optional numeric vector of times corresponding to rows in `Predictions`
-#' @param time deprecated, use eval_times instead
+#' Computes mean squared error between predicted cumulative incidence functions
+#' and observed event status for a specified cause. Accounts for competing events.
 #'
-#' @return Brier score value(s). If eval_times is a vector, returns a vector; if scalar, returns a scalar.
-#' @export
+#' **Formula**:
+#' \eqn{BS_j(t) = E[(CIF_j(t|X) - Y_j(t))^2]}
+#'
+#' where \eqn{CIF_j(t|X)} is predicted CIF for cause \eqn{j} and \eqn{Y_j(t)}
+#' is binary indicator of cause \eqn{j} occurring by time \eqn{t}.
+#'
+#' **Interpretation**:
+#' - Range: 0 (perfect) to 1 (worst)
+#' - Combines calibration and discrimination
+#' - Computed only for observations at risk (event of interest or censored/competing)
+#'
+#' @param SurvObj Surv object with competing risks structure
+#' @param Predictions Matrix of predicted CIFs
+#' @param eval_times Scalar or vector of evaluation time(s)
+#' @param cause Integer cause of interest (default: 1)
+#' @param TestMat Optional test matrix (currently unused)
+#' @param pred_times Numeric vector of time grid from predictions
+#' @param time Deprecated parameter for backward compatibility; use `eval_times`
+#'
+#' @return Numeric Brier score at specified time(s)
+#'
+#' @keywords internal
+#'
 BrierScoreCR <- function(SurvObj, Predictions, eval_times = NULL, cause = 1, TestMat = NULL, pred_times = NULL, time = NULL) {
   
   # Handle backward compatibility: support both 'time' and 'eval_times'
@@ -198,18 +231,18 @@ BrierScoreCR <- function(SurvObj, Predictions, eval_times = NULL, cause = 1, Tes
   }
   
   if (is.null(eval_times)) {
-    stop("'eval_times' must be specified (or 'time' for backward compatibility)")
+    rlang::abort("'eval_times' must be specified (or 'time' for backward compatibility)")
   }
   
   # Input validation
   if (!inherits(SurvObj, "Surv")) {
-    stop("'SurvObj' must be a Surv object")
+    rlang::abort("'SurvObj' must be a Surv object")
   }
   if (!is.numeric(eval_times)) {
-    stop("'eval_times' must be numeric")
+    rlang::abort("'eval_times' must be numeric")
   }
-  if (!is.numeric(cause) || length(cause) != 1 || !(cause %in% c(1, 2))) {
-    stop("'cause' must be 1 or 2")
+  if (!is.numeric(cause) || length(cause) != 1) {
+    rlang::abort("'cause' must be a single numeric value")
   }
 
   # Extract time and event from Surv object
@@ -236,8 +269,13 @@ BrierScoreCR <- function(SurvObj, Predictions, eval_times = NULL, cause = 1, Tes
       )
       pred_at_time <- pred_row$pred
 
+      # Only include observations at risk at time t
+      # At risk if: time > t (still at risk) OR (time <= t AND event == cause) (event of interest occurred)
+      # Note: Those with competing events before t are not in the risk set
+      at_risk <- (obstimes > t) | (obstimes <= t & obsevents == cause & !is.na(obsevents))
       event_indicator <- as.numeric(obsevents == cause & obstimes <= t & !is.na(obsevents))
-      valid_idx <- !is.na(pred_at_time)
+      valid_idx <- at_risk & !is.na(pred_at_time)
+      
       if (!any(valid_idx)) {
         return(NA_real_)
       }
@@ -263,8 +301,13 @@ BrierScoreCR <- function(SurvObj, Predictions, eval_times = NULL, cause = 1, Tes
   )
   pred_at_time <- pred_row$pred
 
+  # Only include observations at risk at time t
+  # At risk if: time > t (still at risk) OR (time <= t AND event == cause) (event of interest occurred)
+  # Note: Those with competing events before t are not in the risk set
+  at_risk <- (obstimes > time) | (obstimes <= time & obsevents == cause & !is.na(obsevents))
   event_indicator <- as.numeric(obsevents == cause & obstimes <= time & !is.na(obsevents))
-  valid_idx <- !is.na(pred_at_time)
+  valid_idx <- at_risk & !is.na(pred_at_time)
+  
   if (!any(valid_idx)) {
     return(NA_real_)
   }
@@ -273,24 +316,34 @@ BrierScoreCR <- function(SurvObj, Predictions, eval_times = NULL, cause = 1, Tes
 }
 
 
-#' @title integratedConcordanceCR
+#' Integrated Concordance Index for Competing Risks
 #'
-#' @description Calculate integrated concordance index for competing risk predictions over time range
-#' @param SurvObj survival object (Surv(time, status))
-#' @param Predictions matrix of predicted CIFs (rows=times, cols=observations) for the cause of interest
-#' @param eval_times vector of evaluation time points
-#' @param cause cause of interest (1 or 2)
-#' @param TestMat test dataset (optional, used if formula needs predictors)
+#' Averages time-dependent concordance across evaluation times.
+#' Provides a single summary measure of discrimination over follow-up.
 #'
-#' @return integrated concordance index (scalar)
-#' @export
+#' **Interpretation**:
+#' - Mean of C-index values across time points
+#' - Range: 0.5 (random) to 1.0 (perfect)
+#' - Accounts for competing events in all comparisons
+#'
+#' @param SurvObj Surv object with competing risks
+#' @param Predictions Matrix of predicted CIFs
+#' @param eval_times Vector of time points at which to evaluate
+#' @param cause Integer cause of interest
+#' @param TestMat Optional test matrix
+#' @param pred_times Numeric vector of time grid from predictions
+#'
+#' @return Scalar integrated C-index value
+#'
+#' @keywords internal
+#'
 integratedConcordanceCR <- function(SurvObj, Predictions, eval_times = NULL, cause = 1, TestMat = NULL, pred_times = NULL) {
   # Input validation
   if (!inherits(SurvObj, "Surv")) {
-    stop("'SurvObj' must be a Surv object")
+    rlang::abort("'SurvObj' must be a Surv object")
   }
-  if (!is.numeric(cause) || length(cause) != 1 || !(cause %in% c(1, 2))) {
-    stop("'cause' must be 1 or 2")
+  if (!is.numeric(cause) || length(cause) != 1) {
+    rlang::abort("'cause' must be a single numeric value")
   }
 
   # Extract time and event from Surv object
@@ -338,24 +391,32 @@ integratedConcordanceCR <- function(SurvObj, Predictions, eval_times = NULL, cau
 }
 
 
-#' @title integratedBrierCR
+#' Integrated Brier Score for Competing Risks
 #'
-#' @description Calculate integrated Brier score for competing risk predictions over time range
-#' @param SurvObj survival object (Surv(time, status))
-#' @param Predictions matrix of predicted CIFs (rows=times, cols=observations) for the cause of interest
-#' @param eval_times vector of evaluation time points
-#' @param cause cause of interest (1 or 2)
-#' @param TestMat test dataset (optional, used if formula needs predictors)
+#' Integrates cause-specific Brier scores over time using trapezoidal rule.
+#' Provides a single summary measure of calibration and discrimination.
 #'
-#' @return integrated Brier score (scalar)
-#' @export
+#' **Formula**:
+#' \eqn{IBS_j = \frac{1}{t_{max} - t_{min}} \int_0^{t_{max}} BS_j(t) dt}
+#'
+#' @param SurvObj Surv object with competing risks
+#' @param Predictions Matrix of predicted CIFs
+#' @param eval_times Vector of evaluation times. If NULL, uses time grid from predictions.
+#' @param cause Integer cause of interest
+#' @param TestMat Optional test matrix
+#' @param pred_times Numeric vector of time grid from predictions
+#'
+#' @return Scalar integrated Brier score
+#'
+#' @keywords internal
+#'
 integratedBrierCR <- function(SurvObj, Predictions, eval_times = NULL, cause = 1, TestMat = NULL, pred_times = NULL) {
   # Input validation
   if (!inherits(SurvObj, "Surv")) {
-    stop("'SurvObj' must be a Surv object")
+    rlang::abort("'SurvObj' must be a Surv object")
   }
-  if (!is.numeric(cause) || length(cause) != 1 || !(cause %in% c(1, 2))) {
-    stop("'cause' must be 1 or 2")
+  if (!is.numeric(cause) || length(cause) != 1) {
+    rlang::abort("'cause' must be a single numeric value")
   }
 
   # Extract time and event from Surv object
@@ -376,11 +437,12 @@ integratedBrierCR <- function(SurvObj, Predictions, eval_times = NULL, cause = 1
   }
 
   # Calculate Brier score at each time point
+  # Use the non-deprecated 'eval_times' argument to avoid warnings
   brier_values <- sapply(eval_times, function(t) {
     BrierScoreCR(
       SurvObj = SurvObj,
       Predictions = pred_matrix,
-      time = t,
+      eval_times = t,
       cause = cause,
       TestMat = TestMat,
       pred_times = pred_times
@@ -409,57 +471,38 @@ integratedBrierCR <- function(SurvObj, Predictions, eval_times = NULL, cause = 1
 }
 
 
-#' @title restrictedMeanTimeLostCR
 #'
-#' @description Calculate Restricted Mean Time Lost (RMTL) for competing risk predictions
-#' @param Predictions matrix of predicted CIFs (rows=times, cols=observations) for the cause of interest
-#' @param times vector of time points corresponding to rows of Predictions
-#' @param UL upper limit of integration
-#' @param LL lower limit of integration (default: 0)
 #'
-#' @return vector of RMTL values for each observation
-#' @export
 restrictedMeanTimeLostCR <- function(Predictions, times, UL, LL = 0) {
   # Input validation
   if (!is.matrix(Predictions)) {
-    stop("'Predictions' must be a matrix")
+    rlang::abort("'Predictions' must be a matrix")
   }
   if (!is.numeric(times)) {
-    stop("'times' must be numeric")
+    rlang::abort("'times' must be numeric")
   }
   if (length(times) != nrow(Predictions)) {
-    stop("'times' must match the number of rows in Predictions (rows represent time points)")
+    rlang::abort("'times' must match the number of rows in Predictions (rows represent time points)")
   }
   if (!is.numeric(UL) || length(UL) != 1 || UL <= LL) {
-    stop("'UL' must be a single numeric value greater than 'LL'")
+    rlang::abort("'UL' must be a single numeric value greater than 'LL'")
   }
   if (!is.numeric(LL) || length(LL) != 1 || LL < 0) {
-    stop("'LL' must be a single non-negative numeric value")
+    rlang::abort("'LL' must be a single non-negative numeric value")
   }
 
   # Ensure times are sorted
   if (!all(diff(times) >= 0)) {
-    stop("'times' must be sorted in ascending order")
+    rlang::abort("'times' must be sorted in ascending order")
   }
 
-  # Integrate CIF for each observation using trapezoidal rule
-  time_lost_vector <- apply(Predictions, 2, function(cif_curve) {
-    # Find indices within [LL, UL]
-    valid_idx <- times >= LL & times <= UL
-    if (sum(valid_idx) < 2) {
-      return(NA)  # Need at least 2 points for integration
-    }
-
-    times_valid <- times[valid_idx]
-    cif_valid <- cif_curve[valid_idx]
-
-    # Trapezoidal integration
-    time_diffs <- diff(times_valid)
-    avg_cif <- (cif_valid[-1] + cif_valid[-length(cif_valid)]) / 2
-    integral <- sum(time_diffs * avg_cif)
-
-    return(integral)
-  })
+  # Calculate ETL using unified function
+  time_lost_vector <- calculate_expected_time_lost(
+    times = times,
+    event_probs = Predictions,
+    upper_limit = UL,
+    lower_limit = LL
+  )
 
   return(time_lost_vector)
 }

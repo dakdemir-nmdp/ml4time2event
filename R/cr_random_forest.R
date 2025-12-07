@@ -1,41 +1,14 @@
-#' @title CRModel_RF
 #'
-#' @description Fit a random forest model for competing risks outcomes using randomForestSRC.
-#' Includes tuning of nodesize and mtry parameters.
 #'
-#' @param data data frame with explanatory and outcome variables
-#' @param expvars character vector of names of explanatory variables in data
-#' @param timevar character name of time variable in data
-#' @param eventvar character name of event variable in data (coded 0=censored, 1=cause1, 2=cause2, ...)
-#' @param event_codes character vector identifying the event code(s) to model.
-#'   Random forest competing risks currently supports a single event code. If
-#'   NULL (default), the first non-zero event code observed in the data is used.
-#' @param ntree integer value, number of trees to grow (default: 300)
-#' @param samplesize integer value, sample size for each grown tree (default: 500)
-#' @param nsplit integer value, maximum number of splits for each tree (default: 5)
-#' @param trace logical, trace tuning process or not (default: TRUE)
-#' @param splitrule character, split rule for trees (default: "logrankCR")
-#' @param nodesize_try numeric vector, nodesize values to try during tuning (default: c(1, 5, 10, 15))
-#' @param ... additional parameters passed to randomForestSRC functions
 #'
-#' @return a list with the following components:
-#'   \item{rf_model}{the fitted randomForestSRC model object}
-#'   \item{times}{vector of unique event times in the training data}
-#'   \item{varprof}{variable profile list containing factor levels and numeric ranges}
-#'   \item{model_type}{character string "cr_rf"}
-#'   \item{expvars}{character vector of explanatory variables used}
-#'   \item{timevar}{character name of time variable}
-#'   \item{eventvar}{character name of event variable}
-#'   \item{failcode}{the event code for the outcome of interest}
-#'   \item{time_range}{vector with min and max observed event times}
 #'
-#' @importFrom randomForestSRC tune rfsrc
-#' @importFrom stats as.formula
-#' @importFrom survival Surv
-#' @export
 CRModel_RF <- function(data, expvars, timevar, eventvar, event_codes = NULL,
                       ntree = 300, samplesize = 500, nsplit = 5, trace = FALSE,
-                      splitrule = "logrankCR", nodesize_try = c(1, 5, 10, 15), ...) {
+                      verbose = NULL, splitrule = "logrankCR", nodesize_try = c(5, 10, 15), ...) {
+  # Map verbose to trace for backward compatibility and consistency
+  if (!is.null(verbose)) {
+    trace <- verbose
+  }
 
   # ============================================================================
   # Input Validation
@@ -109,19 +82,40 @@ CRModel_RF <- function(data, expvars, timevar, eventvar, event_codes = NULL,
   # Model Fitting with Tuning
   # ============================================================================
   # Tune hyperparameters (nodesize, mtry) with user-provided parameters
-  o <- randomForestSRC::tune(formRF, data = data[, c(timevar, eventvar, expvars), drop = FALSE],
-                             splitrule = splitrule, samptype = "swor", sampsize = samplesize,
-                             trace = trace, nsplit = nsplit, stepFactor = 1.5,
-                             mtryStart = 2, # Start tuning mtry from 2
-                             nodesizeTry = nodesize_try, # Use user-provided nodesize values
-                             ntreeTry = ntree, # Use fixed ntree for tuning speed
-                             cause = c(event_code_numeric,
-                                        setdiff(unique(data[[eventvar]][data[[eventvar]] != 0]), event_code_numeric)),
-                             ...)
+  # Wrap in tryCatch to handle tuning failures gracefully
+  tune_result <- tryCatch({
+    randomForestSRC::tune(formRF, data = data[, c(timevar, eventvar, expvars), drop = FALSE],
+                          splitrule = splitrule, samptype = "swor", sampsize = samplesize,
+                          trace = trace, nsplit = nsplit, stepFactor = 1.5,
+                          mtryStart = 2, # Start tuning mtry from 2
+                          nodesizeTry = nodesize_try, # Use user-provided nodesize values
+                          ntreeTry = ntree, # Use fixed ntree for tuning speed
+                          cause = c(event_code_numeric,
+                                     setdiff(unique(data[[eventvar]][data[[eventvar]] != 0]), event_code_numeric)),
+                          ...)
+  }, error = function(e) {
+    warning("Tuning failed with error: ", e$message, ". Using default parameters.")
+    NULL
+  })
 
-  # Fit final model with optimal parameters
-  nodesize_opt <- if (!is.null(names(o$optimal)) && "nodesize" %in% names(o$optimal)) o$optimal[["nodesize"]] else o$optimal[[1]]
-  mtry_opt <- if (!is.null(names(o$optimal)) && "mtry" %in% names(o$optimal)) o$optimal[["mtry"]] else o$optimal[[2]]
+  # Fit final model with optimal parameters (or defaults if tuning failed)
+  if (!is.null(tune_result)) {
+    nodesize_opt <- if (!is.null(names(tune_result$optimal)) && "nodesize" %in% names(tune_result$optimal)) {
+      tune_result$optimal[["nodesize"]]
+    } else {
+      tune_result$optimal[[1]]
+    }
+    mtry_opt <- if (!is.null(names(tune_result$optimal)) && "mtry" %in% names(tune_result$optimal)) {
+      tune_result$optimal[["mtry"]]
+    } else {
+      tune_result$optimal[[2]]
+    }
+  } else {
+    # Use reasonable defaults when tuning fails
+    nodesize_opt <- 15  # Conservative default
+    mtry_opt <- max(1, floor(sqrt(length(expvars))))  # Standard RF default
+    message("Using default parameters: nodesize=", nodesize_opt, ", mtry=", mtry_opt)
+  }
 
   rf_model <- randomForestSRC::rfsrc(formRF, data = data[, c(timevar, eventvar, expvars), drop = FALSE],
                                      nodesize = nodesize_opt, ntree = ntree, mtry = mtry_opt,
@@ -161,27 +155,10 @@ CRModel_RF <- function(data, expvars, timevar, eventvar, event_codes = NULL,
 
 
 
-#' @title Predict_CRModel_RF
 #'
-#' @description Get predictions from a CR random forest model for a test dataset.
 #'
-#' @param modelout the output from 'CRModel_RF' (a list containing model and metadata)
-#' @param newdata data frame with new observations for prediction
-#' @param new_times optional numeric vector of time points for prediction.
-#'   If NULL (default), uses the model's native time points.
-#'   Can be any positive values - interpolation handles all time points.
-#' @param event_of_interest character or numeric scalar indicating the event code
-#'   for which CIFs should be returned. If NULL (default), uses the event code
-#'   stored in the fitted model.
 #'
-#' @return a list containing:
-#'   \item{CIFs}{predicted cumulative incidence function matrix
-#'     (rows=times, cols=observations)}
-#'   \item{Times}{the times at which CIFs are calculated
-#'     (always includes time 0)}
 #'
-#' @importFrom randomForestSRC predict.rfsrc
-#' @export
 Predict_CRModel_RF <- function(modelout, newdata, new_times = NULL, event_of_interest = NULL) {
 
   # ============================================================================

@@ -1,14 +1,5 @@
-#' @title ZeroOneScalerData
 #'
-#' @description Scale numeric variables in a data frame to the range [0, 1].
-#' Records the min and max values used for scaling.
 #'
-#' @param data Data frame with numeric columns to scale.
-#' @return A list containing:
-#'   - data: The data frame with numeric columns scaled.
-#'   - minxvec: A named numeric vector of the minimum values used for scaling each column.
-#'   - maxxvec: A named numeric vector of the maximum values used for scaling each column.
-#' @export
 ZeroOneScalerData<-function(data){
   if (!is.data.frame(data)) stop("'data' must be a data frame.")
   datanew <- data
@@ -51,16 +42,8 @@ ZeroOneScalerData<-function(data){
 
 
 
-#' @title ZeroOneScalerApplierData
 #'
-#' @description Apply a pre-calculated 0-1 scaling to numeric variables in a new data frame.
-#' Uses minimum and maximum values provided (e.g., from a training set).
 #'
-#' @param data Data frame with numeric columns to scale.
-#' @param mins A named numeric vector of minimum values (names must match columns in 'data').
-#' @param maxs A named numeric vector of maximum values (names must match columns in 'data').
-#' @return A data frame with numeric columns scaled according to the provided mins and maxs.
-#' @export
 ZeroOneScalerApplierData<-function(data, mins, maxs){
   if (!is.data.frame(data)) stop("'data' must be a data frame.")
   if (is.null(names(mins)) || is.null(names(maxs))) stop("'mins' and 'maxs' must be named vectors.")
@@ -101,15 +84,8 @@ ZeroOneScalerApplierData<-function(data, mins, maxs){
   return(datanew)
 }
 
-#' @title UndoZeroOneScalerApplierData
 #'
-#' @description Reverse a 0-1 scaling transformation on numeric variables using the original min/max values.
 #'
-#' @param data Data frame with scaled numeric columns (values expected between 0 and 1).
-#' @param mins A named numeric vector of the original minimum values used for scaling.
-#' @param maxs A named numeric vector of the original maximum values used for scaling.
-#' @return A data frame with numeric columns un-scaled back to their original range.
-#' @export
 UndoZeroOneScalerApplierData<-function(data, mins, maxs){
   if (!is.data.frame(data)) stop("'data' must be a data frame.")
   if (is.null(names(mins)) || is.null(names(maxs))) stop("'mins' and 'maxs' must be named vectors.")
@@ -151,18 +127,8 @@ UndoZeroOneScalerApplierData<-function(data, mins, maxs){
 
 
 
-#' NumVarstCatsData
-#' @title NumVarstCatsData
 #'
-#' @description Convert numeric variables to categorical (factor) variables based on quantiles or specified cuts.
 #'
-#' @param data Data frame containing numeric variables to categorize.
-#' @param numgroups Integer. If specified, numeric variables (with enough unique values) are cut into this many quantile groups.
-#' @param cuts Numeric vector. If specified, numeric variables are cut using these specific values as breaks. `numgroups` is ignored if `cuts` is provided.
-#' @param min_unique_vals Integer. Minimum number of unique non-NA values a numeric variable must have to be categorized (default: 5).
-#' @return Data frame with specified numeric variables converted to factors.
-#' @importFrom stats quantile
-#' @export
 NumVarstCatsData<-function(data, numgroups=NULL, cuts=NULL, min_unique_vals = 5){
   if (!is.data.frame(data)) stop("'data' must be a data frame.")
   if (is.null(numgroups) && is.null(cuts)) stop("Must provide either 'numgroups' or 'cuts'.")

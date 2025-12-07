@@ -2,7 +2,7 @@
 % Please edit documentation in R/surv_metrics.R
 \name{integratedBrier}
 \alias{integratedBrier}
-\title{integratedBrier}
+\title{Integrated Brier Score (IBS)}
 \usage{
 integratedBrier(
   predsurv,
@@ -14,21 +14,39 @@ integratedBrier(
 )
 }
 \arguments{
-\item{predsurv}{Predicted survival probability matrix (rows=times, cols=observations)}
+\item{predsurv}{Matrix of predicted survival probabilities}
 
-\item{pred_times}{The times for which the survival probabilities are predicted}
+\item{pred_times}{Numeric vector of time points}
 
-\item{obstimes}{Observed times vector}
+\item{obstimes}{Observed times}
 
-\item{obsevents}{Observed event indicator vector (0=censored, 1=event)}
+\item{obsevents}{Binary event indicator}
 
-\item{eval_times}{Optional vector of evaluation times for integration}
+\item{eval_times}{Optional evaluation times. If NULL, uses `pred_times`.}
 
-\item{TestMat}{Optional test dataset}
+\item{TestMat}{Optional test matrix (currently unused)}
 }
 \value{
-Integrated Brier score (scalar)
+Scalar integrated Brier score value
 }
 \description{
-Calculate integrated Brier score over time range
+Integrates Brier scores over the time range using trapezoidal rule.
+Provides a single summary measure of prediction error across all time points.
 }
+\details{
+**Formula**:
+\eqn{IBS = \frac{1}{t_{max} - t_{min}} \int_0^{t_{max}} BS(t) dt}
+
+Computed numerically via trapezoidal rule over the time grid.
+
+**Interpretation**:
+- Range: 0 (perfect) to 1 (worst)
+- Combines calibration across entire follow-up
+- Weights later times equally (unlike summary C-index)
+}
+\references{
+Mogensen, U. B., Ishwaran, H., & Gerds, T. A. (2012).
+"Evaluating random forests for survival analysis using prediction error curves."
+*Journal of Statistical Software*, 50(11), 1–23.
+}
+\keyword{internal}

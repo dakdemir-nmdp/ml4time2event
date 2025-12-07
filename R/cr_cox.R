@@ -1,62 +1,13 @@
-#' @title CRModel_Cox
-#'
-#' @description Fit a cause-specific Cox model for competing risks outcomes with optional variable selection.
-#'
-#' @param data data frame with explanatory and outcome variables
-#' @param expvars character vector of names of explanatory variables in data
-#' @param timevar character name of time variable in data
-#' @param eventvar character name of event variable in data (coded 0=censored, 1=cause1, 2=cause2, etc.)
-#' @param event_codes character vector of event codes for which to fit models.
-#'   If NULL (default), fits a model for each event type found in the data.
-#'   Codes are stored as character strings for downstream consistency.
-#' @param varsel character string specifying variable selection method:
-#'   "none" (default, no selection),
-#'   "backward" (backward elimination),
-#'   "forward" (forward selection),
-#'   "both" (stepwise selection),
-#'   "penalized" (elastic net penalized Cox via glmnet)
-#' @param penalty character string specifying penalty criterion for stepwise methods: "AIC" (default) or "BIC"
-#' @param alpha numeric value in [0,1] for elastic net mixing parameter when varsel="penalized".
-#'   alpha=1 is lasso, alpha=0 is ridge, alpha=0.5 (default) is elastic net.
-#' @param nfolds integer, number of cross-validation folds for penalized Cox (default: 10)
-#' @param ntimes integer, number of time points to use for prediction grid (default: 50)
-#' @param verbose logical, print progress messages (default: FALSE)
-#'
-#' @return a list with the following components:
-#'   \item{cph_models_all_causes}{named list of fitted cause-specific Cox model objects for each event code}
-#'   \item{times}{vector of unique event times in the training data}
-#'   \item{varprof}{variable profile list containing factor levels and numeric ranges}
-#'   \item{model_type}{character string "cr_cox"}
-#'   \item{expvars}{character vector of explanatory variables used}
-#'   \item{timevar}{character name of time variable}
-#'   \item{eventvar}{character name of event variable}
-#'   \item{event_codes}{vector of event codes for which models were fitted}
-#'   \item{varsel_method}{character string indicating variable selection method used}
-#'   \item{time_range}{vector with min and max observed event times}
-#'   \item{alpha}{numeric value of elastic net mixing parameter used (if varsel="penalized")}
-#'   \item{nfolds}{integer number of cross-validation folds used (if varsel="penalized")}
-#'
 #' @importFrom survival coxph Surv
-#' @importFrom stats as.formula complete.cases terms model.matrix coef
-#' @importFrom glmnet cv.glmnet
-#' @export
+NULL
+
 #'
-#' @examples
-#' \dontrun{
-#' # Fit cause-specific Cox model without variable selection
-#' model1 <- CRModel_Cox(data, expvars = c("x1", "x2"),
-#'                      timevar = "time", eventvar = "event")
 #'
-#' # Fit with backward selection (AIC)
-#' model2 <- CRModel_Cox(data, expvars = c("x1", "x2", "x3"),
-#'                      timevar = "time", eventvar = "event",
-#'                      varsel = "backward", penalty = "AIC")
 #'
-#' # Fit with forward selection (BIC)
-#' model3 <- CRModel_Cox(data, expvars = c("x1", "x2", "x3"),
-#'                      timevar = "time", eventvar = "event",
-#'                      varsel = "forward", penalty = "BIC")
-#' }
+#'
+#'
+#'
+#'
 CRModel_Cox <- function(data, expvars, timevar, eventvar, event_codes = NULL,
                        varsel = "none", penalty = "AIC",
                        alpha = 0.5, nfolds = 10,
@@ -287,39 +238,13 @@ CRModel_Cox <- function(data, expvars, timevar, eventvar, event_codes = NULL,
   return(output)
 }
 
-#' @title Predict_CRModel_Cox
 #'
-#' @description Get predictions from a fitted cause-specific Cox competing risks model for new data.
 #'
-#' @param modelout the output from 'CRModel_Cox'
-#' @param newdata data frame with new observations for prediction
-#' @param new_times optional numeric vector of time points for prediction.
-#'   If NULL (default), uses the times generated during model training.
-#'   Can be any positive values - interpolation handles all time points.
-#' @param event_of_interest integer, the code for the event of interest for CIF prediction.
-#'   If NULL (default), uses the failcode from the model training.
 #'
-#' @return a list containing:
-#'   \item{CIFs}{predicted cumulative incidence function matrix
-#'     (rows=times, cols=observations)}
-#'   \item{Times}{the times at which CIFs are calculated}
 #'
-#' @importFrom survival survfit
-#' @export
 #'
-#' @examples
-#' \dontrun{
-#' # Fit model
-#' model <- CRModel_Cox(data, expvars = c("x1", "x2"),
-#'                     timevar = "time", eventvar = "event")
 #'
-#' # Predict on test data
-#' preds <- Predict_CRModel_Cox(model, test_data)
 #'
-#' # Predict at specific times
-#' preds_custom <- Predict_CRModel_Cox(model, test_data,
-#'                                    new_times = c(30, 60, 90, 180, 365))
-#' }
 Predict_CRModel_Cox <- function(modelout, newdata, new_times = NULL, event_of_interest = NULL) {
 
   # ============================================================================

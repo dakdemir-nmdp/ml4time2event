@@ -1,12 +1,3 @@
-#' @title score2proba
-#' @description internal function: from linear score to survival probabilities using Cox PH baseline.
-#' @param datasurv data frame with 'time' and 'event' columns.
-#' @param score numeric vector of linear predictor scores.
-#' @param conf.int confidence level for survival curve.
-#' @param which.est which estimate to return ("point", "lower", "upper").
-#' @return a list containing the Cox model ('model') and survfit object ('sf').
-#' @importFrom survival coxph Surv survfit coxph.control
-#' @noRd
 score2proba <-
   function(datasurv, score, conf.int=0.95, which.est=c("point", "lower", "upper")) {
     which.est <- match.arg(which.est)
@@ -23,42 +14,10 @@ score2proba <-
     return(list(model=predm,sf=sf))
   }
 
-#' @title CRModel_GAM
 #'
-#' @description Fit a GAM model for competing risks outcomes using cause-specific modeling.
 #'
-#' @param data data frame with explanatory and outcome variables
-#' @param expvars character vector of names of explanatory variables in data
-#' @param timevar character name of time variable in data
-#' @param eventvar character name of event variable in data (coded 0=censored, 1=cause1, 2=cause2, etc.)
-#' @param event_codes character or numeric vector identifying the event code(s) to
-#'   model. GAM competing risks can fit multiple causes simultaneously. If NULL
-#'   (default), all non-zero event codes observed in the data are used. The first
-#'   entry defines the default event of interest.
-#' @param shrinkTreshold integer value, minimum number of factor levels for factor variables to be considered for shrinkage ('re' basis).
-#' @param ntimes integer, number of time points to use for prediction grid (default: 50)
-#' @param verbose logical, print progress messages (default: FALSE)
-#' @param event_of_interest optional character or numeric scalar indicating a specific event code
-#'   that should be prioritized as the primary event of interest. If provided, this
-#'   event code must be one of the codes specified in 'event_codes'.
 #'
-#' @return a list with the following components:
-#'   \item{gam_model}{the fitted cause-specific GAM model object from mgcv::gam}
-#'   \item{times}{vector of unique event times in the training data for the event of interest}
-#'   \item{varprof}{variable profile list containing factor levels and numeric ranges}
-#'   \item{model_type}{character string "cr_gam"}
-#'   \item{expvars}{character vector of explanatory variables used}
-#'   \item{timevar}{character name of time variable}
-#'   \item{eventvar}{character name of event variable}
-#'   \item{event_codes}{character vector of event codes included in the model}
-#'   \item{event_codes_numeric}{numeric vector of event codes included}
-#'   \item{default_event_code}{character scalar for the default event code}
-#'   \\item{default_event_code_numeric}{numeric scalar for the default event code}
-#'   \item{time_range}{vector with min and max observed event times}
 #'
-#' @importFrom mgcv gam cox.ph s
-#' @importFrom stats as.formula predict complete.cases
-#' @export
 CRModel_GAM <- function(data, expvars, timevar, eventvar, event_codes = NULL,
                         shrinkTreshold = 10, ntimes = 50, verbose = FALSE, event_of_interest = NULL) {
 
@@ -318,25 +277,10 @@ CRModel_GAM <- function(data, expvars, timevar, eventvar, event_codes = NULL,
   return(result)
 }
 
-#' @title Predict_CRModel_GAM
 #'
-#' @description Get predictions from a fitted cause-specific GAM competing risks model for new data.
 #'
-#' @param modelout the output from 'CRModel_GAM'
-#' @param newdata data frame with new observations for prediction
-#' @param new_times optional numeric vector of time points for prediction.
-#'   If NULL (default), uses the times from the training data.
-#'   Can be any positive values - interpolation handles all time points.
-#' @param event_of_interest character or numeric scalar indicating which event code
-#'   to predict. If NULL (default), uses the event code stored during training.
 #'
-#' @return a list containing:
-#'   \item{CIFs}{predicted cumulative incidence function matrix
-#'     (rows=times, cols=observations)}
-#'   \item{Times}{the times at which CIFs are calculated}
 #'
-#' @importFrom stats predict
-#' @export
 Predict_CRModel_GAM <- function(modelout, newdata, new_times = NULL, event_of_interest = NULL) {
 
   # ============================================================================
@@ -568,9 +512,14 @@ Predict_CRModel_GAM <- function(modelout, newdata, new_times = NULL, event_of_in
     for (j in seq_len(n_obs)) {
       for (t in seq_len(n_times)) {
         if (t == 1) {
-          # For first time point, CIF = hazard increment
-          target_hazard_increment <- target_cum_hazards[t, j] 
-          cif_matrix[t, j] <- 1.0 * target_hazard_increment
+          # At time 0, CIF should be 0
+          if (abs(surv_times[t]) < .Machine$double.eps) {
+            cif_matrix[t, j] <- 0
+          } else {
+            # First time point is not 0, use Aalen-Johansen formula
+            target_hazard_increment <- target_cum_hazards[t, j] 
+            cif_matrix[t, j] <- 1.0 * target_hazard_increment
+          }
         } else {
           # CIF(t) = CIF(t-1) + S(t-1) * Δλ_j(t)
           target_hazard_increment <- target_cum_hazards[t, j] - target_cum_hazards[t-1, j]

@@ -1,9 +1,9 @@
 library(testthat)
-library(here)
+# library(here) # Removed
 # library(data.table) # Removed
 
 # Assuming the functions are available in the environment
-source(here("R/data_transform.R"))
+# source(here("R/data_transform.R")) # Removed - functions should be available in package environment
 
 context("Testing data_transform functions")
 

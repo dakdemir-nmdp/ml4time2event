@@ -1,47 +1,10 @@
-#' @title CRModel_rulefit
 #'
-#' @description Fit a rulefit model for competing risks outcomes using RuleFit algorithm
 #'
-#' @param data data frame with explanatory and outcome variables
-#' @param expvars character vector of names of explanatory variables in data
-#' @param timevar character name of time variable in data
-#' @param eventvar character name of event variable in data (coded 0,1,2 where 0=censored, 1=event of interest, 2=competing event)
-#' @param event_codes character or numeric vector identifying the event code to
-#'   model. RuleFit currently supports a single event code. If NULL (default),
-#'   the first non-zero event code observed in the data is used.
-#' @param ntree number of trees to fit to extract rules (default: 300)
-#' @param nsample number of samples for each tree (default: 300)
-#' @param keepvars these variables will be used in each bagging iteration
-#' @param cuttimes these cut times are used for calculating pseudo observation
-#' @param alpha numeric, the elastic net mixing parameter for glmnet (default: 0.5)
-#' @param maxit integer, maximum number of iterations for glmnet (default: 2000)
-#' @param ... additional parameters passed to glmnet::cv.glmnet
 #'
-#' @return a list with the following components:
-#'   \item{rulefit_model}{the fitted RuleFit model object}
-#'   \item{times}{vector of unique event times in the training data}
-#'   \item{varprof}{variable profile list containing factor levels and numeric ranges}
-#'   \item{model_type}{character string "cr_rulefit"}
-#'   \item{expvars}{character vector of explanatory variables used}
-#'   \item{timevar}{character name of time variable}
-#'   \item{eventvar}{character name of event variable}
-#'   \item{event_codes}{character vector of event codes included in the model}
-#'   \item{event_codes_numeric}{numeric vector of event codes included}
-#'   \item{default_event_code}{character scalar for the default event code}
-#'   \item{default_event_code_numeric}{numeric scalar for the default event code}
-#'   \item{time_range}{vector with min and max observed event times}
-#'   \item{ctreelist}{list of fitted tree models}
-#'   \item{ruleslist}{list of extracted rules from trees}
 #'
-#' @importFrom rpart rpart rpart.control
-#' @importFrom partykit as.party
-#' @importFrom pseudo pseudoci
-#' @importFrom stats as.formula model.matrix quantile rpois runif sd
-#' @importFrom survival Surv
-#' @export
 CRModel_rulefit <- function(data, expvars, timevar, eventvar, event_codes = NULL,
                            ntree = 300, nsample = 300, keepvars = NULL,
-                           cuttimes = NULL, alpha = 0.5, maxit = 2000, ...) {
+                           cuttimes = NULL, alpha = 0.5, maxit = 2000, verbose = FALSE, ...) {
 
   # ============================================================================
   # Input Validation
@@ -255,28 +218,10 @@ CRModel_rulefit <- function(data, expvars, timevar, eventvar, event_codes = NULL
 }
 
 
-#' @title Predict_CRModel_rulefit
 #'
-#' @description Get predictions from a CR RuleFit model for a test dataset.
 #'
-#' @param modelout the output from 'CRModel_rulefit' (a list containing model and metadata)
-#' @param newdata data frame with new observations for prediction
-#' @param new_times optional numeric vector of time points for prediction.
-#'   If NULL (default), uses the model's native time points.
-#'   Can be any positive values - interpolation handles all time points.
-#' @param event_of_interest character or numeric scalar indicating the event code
-#'   to predict. RuleFit models currently support only the event code used during
-#'   training.
 #'
-#' @return a list containing:
-#'   \item{CIFs}{predicted cumulative incidence function matrix
-#'     (rows=times, cols=observations)}
-#'   \item{Times}{the times at which CIFs are calculated
-#'     (always includes time 0)}
 #'
-#' @importFrom partykit as.party
-#' @importFrom stats model.matrix
-#' @export
 Predict_CRModel_rulefit <- function(modelout, newdata, new_times = NULL, event_of_interest = NULL) {
 
   # ============================================================================

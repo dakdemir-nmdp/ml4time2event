@@ -1,11 +1,6 @@
 
-#' @title RemoveMonoVarsData
 #'
-#' @description Remove variables (columns) from a data frame that have only one unique non-NA value.
 #'
-#' @param data Data frame.
-#' @return Data frame with single-value columns removed.
-#' @export
 RemoveMonoVarsData <- function(data) {
   if (!is.data.frame(data)) stop("'data' must be a data frame.")
 
@@ -27,13 +22,8 @@ RemoveMonoVarsData <- function(data) {
   return(data[, cols_to_keep, drop = FALSE])
 }
 
-#' @title RemoveAllNAVars
 #'
-#' @description Remove variables (columns) from a data frame that consist entirely of NA values.
 #'
-#' @param data Data frame.
-#' @return Data frame with all-NA columns removed.
-#' @export
 RemoveAllNAVars <- function(data) {
   if (!is.data.frame(data)) stop("'data' must be a data frame.")
   
@@ -54,15 +44,8 @@ RemoveAllNAVars <- function(data) {
 
 
 
-#' RemoveMissinVarsData
-#' @title RemoveMissinVarsData
 #'
-#' @description Remove variables (columns) with a proportion of missing values exceeding a threshold.
 #'
-#' @param data Data frame.
-#' @param maxprop Numeric threshold (0-1) for the maximum allowed proportion of NA values (default: 0.2).
-#' @return Data frame with high-missingness columns removed.
-#' @export
 RemoveMissinVarsData <- function(data, maxprop = .2) {
   if (!is.data.frame(data)) stop("'data' must be a data frame.")
   if (!is.numeric(maxprop) || maxprop < 0 || maxprop > 1) stop("'maxprop' must be between 0 and 1.")
@@ -77,14 +60,8 @@ RemoveMissinVarsData <- function(data, maxprop = .2) {
   return(data[, cols_to_keep, drop = FALSE])
 }
 
-#' @title RemoveMissinRecordsData
 #'
-#' @description Remove records (rows) with a proportion of missing values exceeding a threshold.
 #'
-#' @param data Data frame.
-#' @param maxprop Numeric threshold (0-1) for the maximum allowed proportion of NA values per row (default: 0.2).
-#' @return Data frame with high-missingness rows removed.
-#' @export
 RemoveMissinRecordsData <- function(data, maxprop = .2) {
   if (!is.data.frame(data)) stop("'data' must be a data frame.")
   if (!is.numeric(maxprop) || maxprop < 0 || maxprop > 1) stop("'maxprop' must be between 0 and 1.")
@@ -101,13 +78,8 @@ RemoveMissinRecordsData <- function(data, maxprop = .2) {
 
 
 
-#' @title getcharcolsData
 #'
-#' @description Utility function to get the names of character columns in a data frame.
 #'
-#' @param data Data frame.
-#' @return Character vector with names of character columns.
-#' @export
 getcharcolsData <- function(data) {
   if (!is.data.frame(data)) stop("'data' must be a data frame.")
   
@@ -124,26 +96,8 @@ getcharcolsData <- function(data) {
 }
 
 
-#' @title ImputeMissinRecordsData
 #'
-#' @description Impute missing values in a data frame using missRanger.
-#' Excludes specified columns (e.g., character IDs, outcome variables) from the imputation process.
 #'
-#' @param data Data frame to be imputed.
-#' @param dontuse Character vector of column names to exclude from imputation (neither used for prediction nor imputed).
-#' @param ... Additional arguments passed to `missRanger::missRanger`.
-#' @return Data frame with missing values imputed (excluding 'dontuse' columns).
-#' @seealso [missRanger::missRanger()]
-#' @examples
-#' \dontrun{
-#' if (requireNamespace("missRanger", quietly = TRUE)) {
-#'   iris_na <- iris
-#'   iris_na[1:3, 1] <- NA
-#'   iris_imputed <- ImputeMissinRecordsData(iris_na, dontuse = "Species")
-#' }
-#' }
-#' @importFrom missRanger missRanger
-#' @export
 ImputeMissinRecordsData <- function(data, dontuse = NULL, ...) {
   if (!requireNamespace("missRanger", quietly = TRUE)) {
     stop("Package 'missRanger' needed for this function. Please install it.", call. = FALSE)
@@ -205,14 +159,8 @@ ImputeMissinRecordsData <- function(data, dontuse = NULL, ...) {
 
 
 
-#' @title RemoveRareCategoriesData
 #'
-#' @description Replace rare categories in factor variables with NA.
 #'
-#' @param data Data frame.
-#' @param minfreq Numeric threshold (0-1). Categories with a frequency below this proportion will be set to NA (default: 0.01).
-#' @return Data frame with rare factor levels replaced by NA and unused levels dropped.
-#' @export
 RemoveRareCategoriesData <- function(data, minfreq = .01) {
   if (!is.data.frame(data)) stop("'data' must be a data frame.")
   if (!is.numeric(minfreq) || minfreq < 0 || minfreq > 1) stop("'minfreq' must be between 0 and 1.")
@@ -240,14 +188,8 @@ RemoveRareCategoriesData <- function(data, minfreq = .01) {
 }
 
 
-#' @title RemoveRareBinaryVarsData
 #'
-#' @description For binary variables (numeric 0/1, logical, or 2-level factors), replace the rarer category with NA if its frequency is below a threshold.
 #'
-#' @param data Data frame.
-#' @param minfreq Numeric threshold (0-1). The rarer category is set to NA if its frequency is below this (default: 0.01).
-#' @return Data frame with rare binary categories replaced by NA.
-#' @export
 RemoveRareBinaryVarsData <- function(data, minfreq = .01) {
    if (!is.data.frame(data)) stop("'data' must be a data frame.")
    if (!is.numeric(minfreq) || minfreq < 0 || minfreq > 1) stop("'minfreq' must be between 0 and 1.")
@@ -287,15 +229,8 @@ RemoveRareBinaryVarsData <- function(data, minfreq = .01) {
 }
 
 
-#' @title CollapseRareCategoriestoOtherData
 #'
-#' @description Collapse rare categories in factor or character variables into a new level called "Other".
-#' Only applies to variables with more than 3 unique levels initially.
 #'
-#' @param data Data frame.
-#' @param minfreq Numeric threshold (0-1). Categories with frequency below this proportion are collapsed (default: 0.01).
-#' @return Data frame with rare categories collapsed into "Other".
-#' @export
 CollapseRareCategoriestoOtherData <- function(data, minfreq = .01) {
   if (!is.data.frame(data)) stop("'data' must be a data frame.")
   if (!is.numeric(minfreq) || minfreq < 0 || minfreq > 1) stop("'minfreq' must be between 0 and 1.")
@@ -325,13 +260,8 @@ CollapseRareCategoriestoOtherData <- function(data, minfreq = .01) {
 
 
 
-#' @title droplevelsoffactorsData
 #'
-#' @description Drop unused factor levels from all factor columns in a data frame.
 #'
-#' @param data Data frame.
-#' @return Data frame with unused factor levels dropped.
-#' @export
 droplevelsoffactorsData <- function(data) {
   if (!is.data.frame(data)) stop("'data' must be a data frame.")
   data_out <- data
@@ -343,15 +273,8 @@ droplevelsoffactorsData <- function(data) {
   return(data_out)
 }
 
-#' @title findvarsnamesthatrepeatData
 #'
-#' @description Find variable names where one name is a substring of another (potential redundancy).
-#' This is a simple substring check, not checking for semantic similarity.
 #'
-#' @param data Data frame.
-#' @return A named character vector where names are the shorter variable names and
-#'   values are comma-separated lists of longer variable names containing the shorter name.
-#' @export
 findvarsnamesthatrepeatData <- function(data) {
   if (!is.data.frame(data)) stop("'data' must be a data frame.")
   col_names <- colnames(data)
@@ -395,21 +318,9 @@ findvarsnamesthatrepeatData <- function(data) {
 }
 
 
-#' ReplaceOutlierNumValsData
 #'
-#' @title ReplaceOutlierNumValsData
 #'
-#' @description Replace outlier values in numeric columns using the IQR method.
-#' Outliers are defined as values below Q1 - multIQR * IQR or above Q3 + multIQR * IQR.
-#' Replacement is done by capping at these lower and upper bounds.
-#' Only applies to numeric columns with at least `minnumgroup` unique non-NA values.
 #'
-#' @param data Data frame.
-#' @param multIQR Multiplier for the Interquartile Range (IQR) to define outlier bounds (default: 1.5).
-#' @param minnumgroup Minimum number of unique non-NA values required for a numeric column to be processed (default: 10).
-#' @return Data frame with outliers in numeric columns capped.
-#' @importFrom stats quantile IQR
-#' @export
 ReplaceOutlierNumValsData<-function(data, multIQR=1.5, minnumgroup=10){
   if (!is.data.frame(data)) stop("'data' must be a data frame.")
   
@@ -448,17 +359,8 @@ ReplaceOutlierNumValsData<-function(data, multIQR=1.5, minnumgroup=10){
 }
 
 
-#' @title MakeTestDataConfWithTrainData
 #'
-#' @description Ensure test data conforms to training data structure and factor levels.
-#' 1. Selects only columns present in training data.
-#' 2. For factor columns, replaces values not seen in training with NA.
-#' 3. Re-applies factor levels from training data to ensure consistency.
 #'
-#' @param traindata Data frame used for training.
-#' @param testdata Data frame to be conformed.
-#' @return Conformed test data frame.
-#' @export
 MakeTestDataConfWithTrainData<-function(traindata, testdata){
   if (!is.data.frame(traindata) || !is.data.frame(testdata)) {
       stop("Both 'traindata' and 'testdata' must be data frames.")
@@ -542,13 +444,8 @@ MakeTestDataConfWithTrainData<-function(traindata, testdata){
 
 
 
-#' @title RemoveEmptySpacesData
 #'
-#' @description Remove leading/trailing whitespace from character columns and factor levels.
 #'
-#' @param DATA Data frame.
-#' @return Data frame with whitespace trimmed.
-#' @export
 RemoveEmptySpacesData<-function(DATA){
   if (!is.data.frame(DATA)) stop("'DATA' must be a data frame.")
   DATA_out <- DATA

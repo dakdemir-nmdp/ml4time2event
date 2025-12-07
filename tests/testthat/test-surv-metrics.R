@@ -1,10 +1,10 @@
 library(testthat)
-library(here)
+# library(here) # Removed
 # library(data.table) # Removed
 library(survival)
 
 # Assuming the function is available in the environment
-source(here("R/surv_metrics.R"))
+# source(here("R/surv_metrics.R")) # Removed - functions should be available in package environment
 
 context("Testing surv_metrics functions")
 

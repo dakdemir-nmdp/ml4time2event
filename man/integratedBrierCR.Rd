@@ -2,7 +2,7 @@
 % Please edit documentation in R/cr_metrics.R
 \name{integratedBrierCR}
 \alias{integratedBrierCR}
-\title{integratedBrierCR}
+\title{Integrated Brier Score for Competing Risks}
 \usage{
 integratedBrierCR(
   SurvObj,
@@ -14,19 +14,27 @@ integratedBrierCR(
 )
 }
 \arguments{
-\item{SurvObj}{survival object (Surv(time, status))}
+\item{SurvObj}{Surv object with competing risks}
 
-\item{Predictions}{matrix of predicted CIFs (rows=times, cols=observations) for the cause of interest}
+\item{Predictions}{Matrix of predicted CIFs}
 
-\item{eval_times}{vector of evaluation time points}
+\item{eval_times}{Vector of evaluation times. If NULL, uses time grid from predictions.}
 
-\item{cause}{cause of interest (1 or 2)}
+\item{cause}{Integer cause of interest}
 
-\item{TestMat}{test dataset (optional, used if formula needs predictors)}
+\item{TestMat}{Optional test matrix}
+
+\item{pred_times}{Numeric vector of time grid from predictions}
 }
 \value{
-integrated Brier score (scalar)
+Scalar integrated Brier score
 }
 \description{
-Calculate integrated Brier score for competing risk predictions over time range
+Integrates cause-specific Brier scores over time using trapezoidal rule.
+Provides a single summary measure of calibration and discrimination.
 }
+\details{
+**Formula**:
+\eqn{IBS_j = \frac{1}{t_{max} - t_{min}} \int_0^{t_{max}} BS_j(t) dt}
+}
+\keyword{internal}

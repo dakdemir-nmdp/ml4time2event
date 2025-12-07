@@ -134,21 +134,25 @@ cifMatInterpolaltor <- function(probsMat, times, new_times, enforce_monotonicity
     zero_indices <- which(new_times == 0)
     
     # Interpolate to new times with robust error handling
-    interp_probs <- tryCatch({
-      stats::approx(
-        x = times_aug,
-        y = probs_aug,
-        xout = new_times,
-        method = "linear",
-        yleft = 0,
-        yright = if (all(is.na(probs_aug))) NA else utils::tail(probs_aug[!is.na(probs_aug)], 1),
-        rule = 2,
-        ties = "ordered"
-      )$y
-    }, error = function(e) {
-      warning("Interpolation failed for observation ", i, ": ", e$message)
-      rep(NA_real_, length(new_times))
-    })
+    if (length(times_aug) < 2) {
+      interp_probs <- rep(probs_aug[1], length(new_times))
+    } else {
+      interp_probs <- tryCatch({
+        stats::approx(
+          x = times_aug,
+          y = probs_aug,
+          xout = new_times,
+          method = "linear",
+          yleft = 0,
+          yright = if (all(is.na(probs_aug))) NA else utils::tail(probs_aug[!is.na(probs_aug)], 1),
+          rule = 2,
+          ties = "ordered"
+        )$y
+      }, error = function(e) {
+        warning("Interpolation failed for observation ", i, ": ", e$message)
+        rep(NA_real_, length(new_times))
+      })
+    }
     
     # Force time 0 to have CIF value exactly 0
     if (length(zero_indices) > 0) {
@@ -504,8 +508,13 @@ aalenJohansenFromCoxModels <- function(cox_models, newdata, times, event_of_inte
       
       for (t in 1:n_times) {
         if (t == 1) {
-          # At first time point, S(0-) = 1
-          cif_matrix[t, i] <- 1.0 * target_hazards[t]
+          # At time 0, CIF should be 0
+          if (abs(times[t]) < .Machine$double.eps) {
+            cif_matrix[t, i] <- 0
+          } else {
+            # First time point is not 0, use Aalen-Johansen formula: S(0-) = 1
+            cif_matrix[t, i] <- 1.0 * target_hazards[t]
+          }
         } else {
           # CIF(t) = CIF(t-1) + S(t-1) * Δλ_j(t)
           cif_matrix[t, i] <- cif_matrix[t-1, i] + overall_surv[t-1] * target_hazards[t]

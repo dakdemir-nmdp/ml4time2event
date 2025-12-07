@@ -2,11 +2,6 @@
 # Ensemble Model Persistence - Save and Load Functions
 # ==============================================================================
 
-#' @title Create SurvEnsemble S3 Class
-#' @description Converts ensemble model output to S3 class for better organization
-#' @param ensemble_list List returned by RunSurvModels
-#' @return Object of class "SurvEnsemble"
-#' @export
 SurvEnsemble <- function(ensemble_list) {
   # Validate input
   if (!is.list(ensemble_list)) {
@@ -22,11 +17,6 @@ SurvEnsemble <- function(ensemble_list) {
   ensemble_list
 }
 
-#' @title Create CREnsemble S3 Class
-#' @description Converts ensemble model output to S3 class for better organization
-#' @param ensemble_list List returned by RunCRModels
-#' @return Object of class "CREnsemble"
-#' @export
 CREnsemble <- function(ensemble_list) {
   # Validate input
   if (!is.list(ensemble_list)) {
@@ -42,29 +32,15 @@ CREnsemble <- function(ensemble_list) {
   ensemble_list
 }
 
-#' @title Check if Object is SurvEnsemble
-#' @description Check if an object is of class SurvEnsemble
-#' @param x Object to check
-#' @return Logical
-#' @export
 is.SurvEnsemble <- function(x) {
   inherits(x, "SurvEnsemble")
 }
 
-#' @title Check if Object is CREnsemble
-#' @description Check if an object is of class CREnsemble
-#' @param x Object to check
-#' @return Logical
-#' @export
 is.CREnsemble <- function(x) {
   inherits(x, "CREnsemble")
 }
 
-#' @title Print SurvEnsemble Object
-#' @description Print a summary of a SurvEnsemble object
-#' @param x SurvEnsemble object
-#' @param ... Additional arguments (ignored)
-#' @export
+#' @noRd
 print.SurvEnsemble <- function(x, ...) {
   cat("Survival Ensemble Model\n")
   cat("=======================\n\n")
@@ -96,11 +72,7 @@ print.SurvEnsemble <- function(x, ...) {
   invisible(x)
 }
 
-#' @title Print CREnsemble Object
-#' @description Print a summary of a CREnsemble object
-#' @param x CREnsemble object
-#' @param ... Additional arguments (ignored)
-#' @export
+#' @noRd
 print.CREnsemble <- function(x, ...) {
   cat("Competing Risks Ensemble Model\n")
   cat("==============================\n\n")
@@ -132,13 +104,6 @@ print.CREnsemble <- function(x, ...) {
   invisible(x)
 }
 
-#' @title Save Ensemble Model to File
-#' @description Save a survival or competing risks ensemble model to disk
-#' @param ensemble_model Ensemble model object (SurvEnsemble or CREnsemble)
-#' @param file Path where the model should be saved (will use .rds extension)
-#' @param compress Logical or character string specifying compression (default: TRUE)
-#' @return Invisibly returns the file path
-#' @export
 SaveEnsemble <- function(ensemble_model, file, compress = TRUE) {
   # Validate input
   if (!is.SurvEnsemble(ensemble_model) && !is.CREnsemble(ensemble_model)) {
@@ -179,11 +144,6 @@ SaveEnsemble <- function(ensemble_model, file, compress = TRUE) {
   invisible(file)
 }
 
-#' @title Load Ensemble Model from File
-#' @description Load a survival or competing risks ensemble model from disk
-#' @param file Path to the saved ensemble model (.rds file)
-#' @return Ensemble model object (SurvEnsemble or CREnsemble)
-#' @export
 LoadEnsemble <- function(file) {
   # Check file exists
   if (!file.exists(file)) {
@@ -225,11 +185,7 @@ LoadEnsemble <- function(file) {
   ensemble_model
 }
 
-#' @title Summary Method for SurvEnsemble
-#' @description Generate a summary of a SurvEnsemble object
-#' @param object SurvEnsemble object
-#' @param ... Additional arguments (ignored)
-#' @export
+#' @noRd
 summary.SurvEnsemble <- function(object, ...) {
   cat("Survival Ensemble Model Summary\n")
   cat("===============================\n\n")
@@ -262,11 +218,7 @@ summary.SurvEnsemble <- function(object, ...) {
   invisible(object)
 }
 
-#' @title Summary Method for CREnsemble
-#' @description Generate a summary of a CREnsemble object
-#' @param object CREnsemble object
-#' @param ... Additional arguments (ignored)
-#' @export
+#' @noRd
 summary.CREnsemble <- function(object, ...) {
   cat("Competing Risks Ensemble Model Summary\n")
   cat("======================================\n\n")

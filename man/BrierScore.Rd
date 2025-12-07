@@ -2,7 +2,7 @@
 % Please edit documentation in R/surv_metrics.R
 \name{BrierScore}
 \alias{BrierScore}
-\title{BrierScore}
+\title{Brier Score for Survival Predictions}
 \usage{
 BrierScore(
   predsurv,
@@ -14,21 +14,40 @@ BrierScore(
 )
 }
 \arguments{
-\item{predsurv}{Predicted survival probability matrix (rows=times, cols=observations). If needed, orientation is fixed automatically.}
+\item{predsurv}{Matrix of predicted survival probabilities (rows = times, cols = observations)}
 
-\item{pred_times}{Numeric vector of prediction times matching the rows or columns of `predsurv`.}
+\item{pred_times}{Numeric vector of time points}
 
-\item{obstimes}{Observed follow-up times.}
+\item{obstimes}{Observed times}
 
-\item{obsevents}{Observed event indicator (0=censored, 1=event).}
+\item{obsevents}{Binary event indicator}
 
-\item{eval_times}{Optional numeric vector of evaluation times (defaults to `pred_times`).}
+\item{eval_times}{Optional evaluation time points. If NULL, computed at all `pred_times`.}
 
-\item{TestMat}{Optional test dataset (ignored, preserved for backward compatibility).}
+\item{TestMat}{Optional test matrix (currently unused)}
 }
 \value{
-A `pec`-like list with element `AppErr$model` storing the Brier scores.
+List of class `ml4time2event_brier` containing Brier scores and time grid
 }
 \description{
-Calculate Brier score for survival predictions at specific times.
+Computes mean squared error between predicted survival probabilities and
+observed binary event status at specified time points. Lower values indicate
+better calibration.
 }
+\details{
+**Formula**:
+\eqn{BS(t) = E[(S(t|X) - Y(t))^2]}
+
+where \eqn{S(t|X)} is predicted survival probability and \eqn{Y(t)} is binary
+event status at time \eqn{t}.
+
+**Interpretation**:
+- Range: 0 (perfect calibration) to 1 (worst)
+- Combines discrimination and calibration
+- 0.25 at all times = baseline for completely random predictions
+}
+\references{
+Brier, G. W. (1950). "Verification of forecasts expressed in terms of
+probability." *Monthly Weather Review*, 78(1), 1–3.
+}
+\keyword{internal}

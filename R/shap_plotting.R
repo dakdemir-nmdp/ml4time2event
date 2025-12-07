@@ -1,36 +1,28 @@
-#' @title SHAP Variable Importance Plot
+# Suppress R CMD check NOTEs about variables used in NSE contexts
+utils::globalVariables(c(
+  "shap_value", "feature_value_norm", "feature", "feature_value",
+  "component", "value", "color_value_norm"
+))
+
 #'
-#' @description Creates a variable importance plot showing which features
-#' contribute most to predictions based on SHAP values.
 #'
-#' @param shap_result An object of class "ml4t2e_shap" from [ml4t2e_calculate_shap()].
-#' @param max_features Maximum number of features to display. If NULL, shows all features.
-#'   Features are ranked by mean absolute SHAP value.
-#' @param plot_type Type of plot: "beeswarm" for scatter plot showing distribution,
-#'   or "bar" for simple bar chart. Default is "beeswarm".
 #'
-#' @return A ggplot2 object showing variable importance.
 #'
-#' @details
-#' The importance plot shows features ranked by their average impact on predictions.
-#' In a beeswarm plot, each point represents one observation, colored by the
-#' feature value (red = high, blue = low). The horizontal position shows the
-#' SHAP value (contribution to prediction).
 #'
-#' In a bar plot, features are shown with their mean absolute SHAP value.
 #'
-#' @examples
-#' \dontrun{
-#' # Calculate SHAP values
-#' shap_result <- ml4t2e_calculate_shap(pipeline, data, time_horizon = 365)
 #'
-#' # Create importance plot
-#' ml4t2e_shap_importance(shap_result)
 #'
-#' # Show top 10 features only
-#' ml4t2e_shap_importance(shap_result, max_features = 10)
-#' }
 #'
+#' Plot SHAP feature importance
+#'
+#' Visualises the magnitude and distribution of SHAP values for the supplied
+#' `ml4t2e_shap` result using either a beeswarm or bar chart.
+#'
+#' @param shap_result Object returned by `ml4t2e_calculate_shap()`.
+#' @param max_features Optional integer limiting the number of features shown.
+#' @param plot_type One of `"beeswarm"` or `"bar"` indicating the plot style.
+#'
+#' @return A `ggplot` object.
 #' @export
 ml4t2e_shap_importance <- function(shap_result,
                                     max_features = NULL,
@@ -128,6 +120,7 @@ ml4t2e_shap_importance <- function(shap_result,
     plot_data$feature <- factor(plot_data$feature,
                                  levels = rev(selected_features))
 
+    # Updated ggplot2 code to ensure variables are properly referenced
     p <- ggplot2::ggplot(plot_data,
                          ggplot2::aes(x = shap_value, y = feature, color = feature_value_norm)) +
       ggplot2::geom_jitter(alpha = 0.6, height = 0.2, size = 2) +
@@ -154,39 +147,26 @@ ml4t2e_shap_importance <- function(shap_result,
 }
 
 
-#' @title SHAP Dependence Plot
 #'
-#' @description Creates a dependence plot showing how a specific feature
-#' affects predictions across different feature values.
 #'
-#' @param shap_result An object of class "ml4t2e_shap" from [ml4t2e_calculate_shap()].
-#' @param feature Name of the feature to plot. Must be one of the features
-#'   in the SHAP result.
-#' @param color_by Optional name of another feature to use for coloring points.
-#'   If NULL (default), automatically selects the feature with highest interaction
-#'   with the main feature.
 #'
-#' @return A ggplot2 object showing the dependence plot.
 #'
-#' @details
-#' A dependence plot shows the relationship between a feature's value and its
-#' impact on predictions (SHAP value). Points are colored by another feature
-#' to reveal interactions.
 #'
-#' The x-axis shows the feature value, the y-axis shows the SHAP value
-#' (contribution to prediction). The color reveals interactions with other features.
 #'
-#' @examples
-#' \dontrun{
-#' shap_result <- ml4t2e_calculate_shap(pipeline, data, time_horizon = 365)
 #'
-#' # Dependence plot for age
-#' ml4t2e_shap_dependence(shap_result, feature = "age")
 #'
-#' # Specify interaction feature
-#' ml4t2e_shap_dependence(shap_result, feature = "age", color_by = "sex")
-#' }
 #'
+#' Plot SHAP dependence for a feature
+#'
+#' Creates a scatter plot that relates SHAP values for a single feature to its
+#' observed values, optionally colouring points by the strongest interacting
+#' feature.
+#'
+#' @param shap_result Object returned by `ml4t2e_calculate_shap()`.
+#' @param feature Feature name whose SHAP dependence should be visualised.
+#' @param color_by Optional second feature used to colour the points.
+#'
+#' @return A `ggplot` object.
 #' @export
 ml4t2e_shap_dependence <- function(shap_result,
                                     feature,
@@ -308,43 +288,28 @@ ml4t2e_shap_dependence <- function(shap_result,
 }
 
 
-#' @title SHAP Waterfall Plot for Individual Prediction
 #'
-#' @description Creates a waterfall plot explaining an individual prediction
-#' by showing how each feature contributes.
 #'
-#' @param shap_result An object of class "ml4t2e_shap" from [ml4t2e_calculate_shap()].
-#' @param obs_id Integer index of the observation to explain (row number in the
-#'   original data).
-#' @param max_features Maximum number of features to display. If NULL, shows all.
-#'   Features are ranked by absolute SHAP value.
 #'
-#' @return A ggplot2 object showing the waterfall plot.
 #'
-#' @details
-#' A waterfall plot shows how the prediction for a single observation builds up
-#' from the baseline (average prediction) by adding the contribution of each feature.
 #'
-#' The plot shows:
-#' \itemize{
-#'   \item Baseline: The average prediction across all observations
-#'   \item Feature contributions: How each feature pushes the prediction higher or lower
-#'   \item Final prediction: The actual prediction for this observation
-#' }
 #'
-#' Formula: Prediction = Baseline + sum(SHAP values)
 #'
-#' @examples
-#' \dontrun{
-#' shap_result <- ml4t2e_calculate_shap(pipeline, data, time_horizon = 365)
 #'
-#' # Explain first observation
-#' ml4t2e_shap_waterfall(shap_result, obs_id = 1)
 #'
-#' # Show top 10 features only
-#' ml4t2e_shap_waterfall(shap_result, obs_id = 5, max_features = 10)
-#' }
 #'
+#' Plot a SHAP waterfall for a single observation
+#'
+#' Displays how individual feature contributions accumulate from the baseline
+#' prediction to the final expected-time-lost estimate for a selected
+#' observation.
+#'
+#' @param shap_result Object returned by `ml4t2e_calculate_shap()`.
+#' @param obs_id Row index of the observation to plot.
+#' @param max_features Optional integer limiting the number of feature bars to
+#'   display; remaining contributions are grouped as "Other".
+#'
+#' @return A `ggplot` object.
 #' @export
 ml4t2e_shap_waterfall <- function(shap_result,
                                    obs_id,
@@ -487,3 +452,4 @@ ml4t2e_shap_waterfall <- function(shap_result,
 
   return(p)
 }
+

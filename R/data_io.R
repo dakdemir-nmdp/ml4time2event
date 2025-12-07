@@ -1,21 +1,21 @@
-#' @title readData
+#' Read Data from Various File Formats
 #'
-#' @description Import data from csv, xlsx, or sas7bdat file.
-#' Converts column names to lowercase.
+#' Reads data from CSV, XLSX, or SAS formats and converts column names to lowercase.
 #'
-#' @param file Path to the data file.
-#' @param filetype Type of data file ("csv", "xlsx", "sas7bdat").
-#' @param ... Additional arguments passed to the respective reading function
-#'   (read.csv, openxlsx::read.xlsx, haven::read_sas).
-#' @return A data frame containing the imported data with lowercase column names.
+#' @param file Character. Path to the data file to read.
+#' @param filetype Character. File type - "csv", "xlsx", or "sas7bdat". Default is "csv".
+#' @param ... Additional arguments passed to the underlying read function.
+#'
+#' @return A data frame with column names converted to lowercase.
+#' @export
+#'
 #' @examples
 #' \dontrun{
-#' mydata <- readData(file = "path/to/data.csv", filetype = "csv")
+#'   # Read CSV file
+#'   data <- readData("mydata.csv")
+#'   # Read XLSX file
+#'   data <- readData("mydata.xlsx", filetype = "xlsx")
 #' }
-#' @importFrom utils read.csv
-#' @importFrom openxlsx read.xlsx
-#' @importFrom haven read_sas
-#' @export
 readData <- function(file = NULL, filetype="csv",...) {
   if (is.null(file)) {
     stop("Provide file location using the 'file' argument.")

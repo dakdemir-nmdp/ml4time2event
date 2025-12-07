@@ -34,3 +34,10 @@ inst/doc/
 doc/
 Meta/
 vignettes/*.html
+
+# design folder
+design/
+/doc/
+data/agvhd24_individual_hla.csv
+/Meta/*.log
+vignettes_output/

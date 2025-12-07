@@ -1,5 +1,5 @@
 library(testthat)
-library(here)
+# library(here) # Removed
 # library(data.table) # Removed
 library(recipes)
 library(rsample)
@@ -7,7 +7,7 @@ library(survival) # For Surv object in formula creation
 
 # Assuming the functions are available in the environment
 # Use here::here for robustness
-source(here::here("R/recipes_steps.R"))
+# source(here::here("R/recipes_steps.R")) # Removed - functions should be available in package environment
 
 context("Testing recipes_steps functions")
 

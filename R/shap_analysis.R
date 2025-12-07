@@ -1,240 +1,165 @@
-#' @title Create SHAP Prediction Function
 #'
-#' @description Creates a prediction wrapper function that takes raw data,
-#' applies the pipeline's preprocessing, and returns scalar predictions
-#' (expected time lost) suitable for SHAP analysis.
 #'
-#' @param pipeline A fitted ml4t2e_pipeline object from [ml4t2e_fit_pipeline()].
-#' @param time_horizon Numeric value specifying the upper limit for expected
-#'   time lost calculation. Should be a clinically meaningful time point
-#'   (e.g., 365 for 1-year, 730 for 2-year).
-#' @param ensemble_method Character string specifying ensemble method for
-#'   predictions. Default is "average". Options: "average", "weighted", "stacking".
 #'
-#' @return A function that takes a data frame of raw (unprocessed) data and
-#'   returns a numeric vector of expected time lost predictions.
 #'
-#' @details
-#' The returned prediction function:
-#' \itemize{
-#'   \item Accepts raw data (before preprocessing)
-#'   \item Applies the pipeline's preprocessing recipe
-#'   \item Generates ensemble predictions (survival curves or CIFs)
-#'   \item Calculates expected time lost up to time_horizon
-#'   \item Returns scalar values suitable for SHAP analysis
-#' }
 #'
-#' Expected time lost is calculated as the integral of the event probability
-#' from 0 to time_horizon. For survival models, this is the integral of
-#' \eqn{1 - S(t)}. For competing risks, it's the integral of the CIF.
 #'
-#' @examples
-#' \dontrun{
-#' library(ml4time2event)
 #'
-#' # Fit a pipeline
-#' lung_df <- get_lung_survival_data()
-#' pipeline <- ml4t2e_fit_pipeline(
-#'   data = lung_df,
-#'   analysis_type = "survival",
-#'   timevar = "time",
-#'   eventvar = "status",
-#'   models = c("coxph", "glmnet")
-#' )
 #'
-#' # Create prediction function for 1-year expected time lost
-#' pred_fn <- ml4t2e_shap_predict_fn(pipeline, time_horizon = 365)
 #'
-#' # Use with new data
-#' predictions <- pred_fn(lung_df[1:10, ])
-#' }
-#'
-#' @export
+#' @importFrom rlang sym
+#' @importFrom tidyr pivot_wider
 ml4t2e_shap_predict_fn <- function(pipeline,
                                     time_horizon,
                                     ensemble_method = "average") {
 
-  # Validate inputs
-  if (!inherits(pipeline, "ml4t2e_pipeline")) {
-    stop("'pipeline' must be an ml4t2e_pipeline object created with ml4t2e_fit_pipeline().",
+  if (!inherits(pipeline, "T2EPipeline")) {
+    stop("'pipeline' must be created with `ml4t2e_pipeline()` or `ml4t2e_fit_pipeline()`.",
          call. = FALSE)
   }
-
   if (!is.numeric(time_horizon) || length(time_horizon) != 1 ||
       is.na(time_horizon) || time_horizon <= 0) {
     stop("'time_horizon' must be a single positive numeric value.", call. = FALSE)
   }
 
-  if (!is.character(ensemble_method) || length(ensemble_method) != 1) {
-    stop("'ensemble_method' must be a character string.", call. = FALSE)
+  outcome_type <- pipeline$outcome$type
+  fit_object <- pipeline$fit_object
+  if (is.null(fit_object)) {
+    stop("Pipeline must be fitted before SHAP predictions can be generated.", call. = FALSE)
   }
 
-  # Extract pipeline components
-  analysis_type <- pipeline$analysis_type
-  recipe <- pipeline$recipe
-  model <- pipeline$model
-  timevar <- pipeline$timevar
-  eventvar <- pipeline$eventvar
+  base_grid <- fit_object$time_grid %||% numeric(0)
+  prediction_times <- sort(unique(c(0, base_grid, time_horizon)))
+  model_candidates <- fit_object$model_names %||% character(0)
+  preferred_model <- if ("ensemble" %in% model_candidates) {
+    "ensemble"
+  } else if (length(pipeline$models) > 0) {
+    pipeline$models[1]
+  } else if (length(model_candidates) > 0) {
+    model_candidates[1]
+  } else {
+    stop("No fitted models available inside the pipeline.", call. = FALSE)
+  }
 
-  # Create prediction grid that includes the time_horizon
-  # Use a fine grid for accurate integration
-  max_time <- max(time_horizon, max(pipeline$prediction_grid, na.rm = TRUE))
-  prediction_times <- sort(unique(c(0, seq(0, max_time, length.out = 100), time_horizon)))
-
-  # Return the prediction function
   function(newdata) {
-
     if (!is.data.frame(newdata)) {
       stop("Input to prediction function must be a data.frame.", call. = FALSE)
     }
 
-    # Prepare newdata to have all required columns
-    required_cols <- unique(c(timevar, eventvar, pipeline$original_expvars, pipeline$idvars))
-    missing_cols <- setdiff(required_cols, colnames(newdata))
+    processed <- .pipeline_process_new_data(
+      pipeline = pipeline,
+      newdata = newdata,
+      require_outcomes = FALSE
+    )
 
-    if (length(missing_cols) > 0) {
-      for (col in missing_cols) {
-        newdata[[col]] <- NA
-      }
-    }
-
-    # Apply preprocessing using the pipeline's recipe
-    tryCatch({
-      baked_data <- bake_data_recipe(recipe, data = newdata)
+    prediction_type <- if (identical(outcome_type, "survival")) "survival" else "cif"
+    pred_df <- tryCatch({
+      predict(
+        fit_object,
+        newdata = processed,
+        times = prediction_times,
+        type = prediction_type,
+        include = "all"
+      )
     }, error = function(e) {
-      stop("Error applying preprocessing recipe: ", e$message, call. = FALSE)
+      stop("Error generating predictions for SHAP calculation: ", e$message, call. = FALSE)
     })
 
-    # Generate predictions using the pipeline's model
-    if (identical(analysis_type, "survival")) {
-      preds <- tryCatch({
-        suppressMessages(
-          PredictSurvModels(
-            models = model,
-            newdata = baked_data,
-            new_times = prediction_times,
-            ensemble_method = ensemble_method
-          )
-        )
-      }, error = function(e) {
-        stop("Error generating survival predictions: ", e$message, call. = FALSE)
-      })
-
-      # preds should contain NewProbs (survival probabilities)
-      if (is.null(preds$NewProbs)) {
-        stop("Prediction output missing 'NewProbs' component.", call. = FALSE)
-      }
-
-      survival_probs <- preds$NewProbs  # Matrix: rows = times, cols = observations
-      pred_times <- preds$NewTimes
-
-      # Calculate expected time lost for each observation
-      # ETL = integral of (1 - S(t)) from 0 to time_horizon
-      event_probs <- 1 - survival_probs
-
-    } else {
-      # Competing risks
-      preds <- tryCatch({
-        suppressMessages(
-          PredictCRModels(
-            models = model,
-            newdata = baked_data,
-            new_times = prediction_times,
-            ensemble_method = ensemble_method
-          )
-        )
-      }, error = function(e) {
-        stop("Error generating competing risks predictions: ", e$message, call. = FALSE)
-      })
-
-      if (is.null(preds$NewProbs)) {
-        stop("Prediction output missing 'NewProbs' component.", call. = FALSE)
-      }
-
-      # For CR, NewProbs contains CIF (already event probability)
-      event_probs <- preds$NewProbs
-      pred_times <- preds$NewTimes
+    pred_df <- pred_df[pred_df$set != "train", , drop = FALSE]
+    if (nrow(pred_df) == 0) {
+      return(rep(NA_real_, nrow(processed)))
     }
 
-    # Calculate expected time lost using integration
-    # Use the Integrator function with time_horizon as upper limit
+    available_models <- unique(pred_df$model)
+    model_choice <- if (preferred_model %in% available_models) {
+      preferred_model
+    } else {
+      available_models[1]
+    }
+
+    value_col <- if (identical(outcome_type, "survival")) "surv" else "cif"
+    pred_selected <- pred_df[pred_df$model == model_choice, , drop = FALSE]
+    if (nrow(pred_selected) == 0) {
+      return(rep(NA_real_, nrow(processed)))
+    }
+
+    val_sym <- rlang::sym(value_col)
+
+    if (!identical(outcome_type, "survival")) {
+      pred_selected <- pred_selected |>
+        dplyr::group_by(id, time) |>
+        dplyr::summarise(
+          !!value_col := sum(!!val_sym, na.rm = TRUE),
+          .groups = "drop"
+        )
+    }
+
+    id_levels <- unique(pred_selected$id)
+    pred_selected <- pred_selected |>
+      dplyr::mutate(id = factor(id, levels = id_levels)) |>
+      dplyr::arrange(time, id)
+
+    wide <- pred_selected |>
+      dplyr::select(time, id, value = !!val_sym) |>
+      tidyr::pivot_wider(names_from = id, values_from = value) |>
+      dplyr::arrange(time)
+
+    time_vec <- wide$time
+    value_mat <- as.matrix(wide[, -1, drop = FALSE])
+
+    if (identical(outcome_type, "survival")) {
+      value_mat[is.na(value_mat)] <- 1
+      event_probs <- 1 - value_mat
+    } else {
+      value_mat[is.na(value_mat)] <- 0
+      value_mat[value_mat < 0] <- 0
+      value_mat[value_mat > 1] <- 1
+      event_probs <- value_mat
+    }
+
     time_lost <- apply(event_probs, 2, function(obs_probs) {
       Integrator(
-        times = pred_times,
+        times = time_vec,
         scores = obs_probs,
         minmax = c(0, time_horizon),
         scale = FALSE
       )
     })
 
-    # Return scalar predictions
-    as.numeric(time_lost)
+    ordered_cols <- colnames(event_probs)
+    as.numeric(time_lost[ordered_cols])
   }
 }
 
 
-#' @title Calculate SHAP Values for ml4time2event Pipeline
 #'
-#' @description Calculates SHAP (SHapley Additive exPlanations) values for
-#' a fitted ml4time2event pipeline. SHAP values explain individual predictions
-#' by showing the contribution of each feature.
 #'
-#' @param pipeline A fitted ml4t2e_pipeline object from [ml4t2e_fit_pipeline()].
-#' @param data Data frame containing observations to explain. Should contain
-#'   the same variables used to train the pipeline (raw data, before preprocessing).
-#' @param time_horizon Numeric value specifying the time horizon for expected
-#'   time lost calculation.
-#' @param background Optional data frame to use as background/reference for
-#'   SHAP calculation. If NULL (default), uses a random sample from `data`.
-#' @param nsim Number of Monte Carlo simulations for SHAP calculation.
-#'   Higher values give more accurate estimates but take longer. Default is 100.
-#' @param ... Additional arguments passed to the SHAP calculation function.
 #'
-#' @return A list of class "ml4t2e_shap" containing:
-#' \describe{
-#'   \item{shap_values}{Matrix of SHAP values (rows = observations, cols = features)}
-#'   \item{baseline}{Baseline prediction (expected value over background data)}
-#'   \item{predictions}{Actual predictions for each observation}
-#'   \item{feature_values}{Original feature values for each observation}
-#'   \item{feature_names}{Names of features}
-#'   \item{time_horizon}{Time horizon used for expected time lost}
-#'   \item{analysis_type}{Type of analysis ("survival" or "competing_risks")}
-#' }
 #'
-#' @details
-#' This function uses Kernel SHAP (or fast SHAP if available) to calculate
-#' feature contributions. SHAP values satisfy:
-#' \deqn{prediction = baseline + sum(SHAP values)}
 #'
-#' The calculation works on raw (unprocessed) features, so SHAP values
-#' directly reflect the contribution of original variables.
 #'
-#' @examples
-#' \dontrun{
-#' library(ml4time2event)
 #'
-#' # Fit pipeline
-#' lung_df <- get_lung_survival_data()
-#' pipeline <- ml4t2e_fit_pipeline(
-#'   data = lung_df,
-#'   analysis_type = "survival",
-#'   timevar = "time",
-#'   eventvar = "status",
-#'   models = c("coxph", "glmnet")
-#' )
 #'
-#' # Calculate SHAP values
-#' shap_result <- ml4t2e_calculate_shap(
-#'   pipeline = pipeline,
-#'   data = lung_df[1:50, ],
-#'   time_horizon = 365,
-#'   nsim = 100
-#' )
 #'
-#' # Examine results
-#' print(shap_result)
-#' }
 #'
+#' Calculate SHAP values for ml4time2event pipelines
+#'
+#' Generates expected-time-lost SHAP values for a fitted `ml4time2event`
+#' pipeline by wrapping the tidy survival predictions in a prediction function
+#' suitable for `fastshap` or `kernelshap`.
+#'
+#' @param pipeline A fitted pipeline produced by `ml4t2e_fit_pipeline()`.
+#' @param data Data frame of observations to explain.
+#' @param time_horizon Single positive numeric time horizon used for expected
+#'   time lost calculations.
+#' @param background Optional background data frame; defaults to a sample from
+#'   `data`.
+#' @param nsim Number of Monte Carlo simulations passed to `fastshap::explain()`
+#'   when available.
+#' @param ... Additional arguments forwarded to the underlying SHAP engine.
+#'
+#' @return An object of class `ml4t2e_shap` containing SHAP values, baseline
+#'   prediction, raw predictions, and feature values.
 #' @export
 ml4t2e_calculate_shap <- function(pipeline,
                                    data,
@@ -244,8 +169,8 @@ ml4t2e_calculate_shap <- function(pipeline,
                                    ...) {
 
   # Validate inputs
-  if (!inherits(pipeline, "ml4t2e_pipeline")) {
-    stop("'pipeline' must be an ml4t2e_pipeline object created with ml4t2e_fit_pipeline().",
+  if (!inherits(pipeline, "T2EPipeline")) {
+    stop("'pipeline' must be created with `ml4t2e_pipeline()` or `ml4t2e_fit_pipeline()`.",
          call. = FALSE)
   }
 
@@ -271,7 +196,7 @@ ml4t2e_calculate_shap <- function(pipeline,
   }
 
   # Extract feature columns (exclude time, event, and id variables)
-  feature_cols <- pipeline$original_expvars
+  feature_cols <- pipeline$features %||% pipeline$outcome$features
 
   # Ensure all features are present in data
   missing_features <- setdiff(feature_cols, colnames(data))
@@ -312,8 +237,23 @@ ml4t2e_calculate_shap <- function(pipeline,
   # Calculate SHAP values
   message("Calculating SHAP values using ", nsim, " simulations...")
 
-  if (requireNamespace("fastshap", quietly = TRUE)) {
-    # Use fastshap if available
+  if (requireNamespace("kernelshap", quietly = TRUE)) {
+    # Use kernelshap if available (preferred for consistency)
+    shap_obj <- tryCatch({
+      kernelshap::kernelshap(
+        object = pred_fn,
+        X = X,
+        bg_X = background,
+        ...
+      )
+    }, error = function(e) {
+      stop("Error calculating SHAP values with kernelshap: ", e$message, call. = FALSE)
+    })
+
+    shap_values <- shap_obj$S
+
+  } else if (requireNamespace("fastshap", quietly = TRUE)) {
+    # Fall back to fastshap
     shap_obj <- tryCatch({
       fastshap::explain(
         object = pred_fn,
@@ -330,21 +270,6 @@ ml4t2e_calculate_shap <- function(pipeline,
     })
 
     shap_values <- as.matrix(shap_obj)
-
-  } else if (requireNamespace("kernelshap", quietly = TRUE)) {
-    # Fall back to kernelshap
-    shap_obj <- tryCatch({
-      kernelshap::kernelshap(
-        object = pred_fn,
-        X = X,
-        bg_X = background,
-        ...
-      )
-    }, error = function(e) {
-      stop("Error calculating SHAP values with kernelshap: ", e$message, call. = FALSE)
-    })
-
-    shap_values <- shap_obj$S
   } else {
     stop("Neither fastshap nor kernelshap could be loaded.", call. = FALSE)
   }
@@ -362,7 +287,7 @@ ml4t2e_calculate_shap <- function(pipeline,
     feature_values = as.data.frame(X),
     feature_names = feature_cols,
     time_horizon = time_horizon,
-    analysis_type = pipeline$analysis_type,
+    analysis_type = pipeline$outcome$type,
     pipeline = pipeline
   )
 
@@ -373,7 +298,7 @@ ml4t2e_calculate_shap <- function(pipeline,
 }
 
 
-#' @export
+#' @noRd
 print.ml4t2e_shap <- function(x, ...) {
   cat("ml4time2event SHAP Analysis\n")
   cat("============================\n")

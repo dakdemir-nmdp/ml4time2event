@@ -1,9 +1,3 @@
-#' @title VariableProfile
-#' @description Creates a profile of variables in a dataset, summarizing factors and numeric ranges.
-#' @param data data frame
-#' @param expvars character vector of variable names to profile
-#' @return a list named by expvars, containing tables for factors/characters or min/max for numerics.
-#' @export
 VariableProfile<-function(data, expvars){
   varprofile<-vector(mode="list", length=length(expvars))
   names(varprofile)<-expvars
@@ -26,14 +20,66 @@ VariableProfile<-function(data, expvars){
   varprofile
 }
 
-#' @title listrules
-#' @description Extract rules from a partykit tree object.
-#' (Adapted from partykit:::.list.rules.party)
-#' @param x A party object representing a tree.
-#' @param i Node ID(s) to extract rules for (default: terminal nodes).
-#' @return A character vector or list of character vectors representing the rules.
-#' @importFrom partykit nodeids data_party id_node kids_node split_node varid_split index_split breaks_split right_split node_party
-#' @noRd
+format_model_name <- function(model_names, model_type = "survival") {
+
+  # Define mapping for survival models
+  surv_mapping <- c(
+    RF_Model = "Random Forest",
+    RF_Model2 = "Random Forest (Top Vars)",
+    glmnet_Model = "GLMNet",
+    CPH_Model = "Cox PH",
+    bart_Model = "BART",
+    shallownn_Model = "Shallow NN",
+    gam_Model = "GAM",
+    gbm_Model = "GBM",
+    survregexp_Model = "ExpSurvReg",
+    survregweib_Model = "WeibSurvReg",
+    xgboost_Model = "XGBoost",
+    RuleFit_Model = "RuleFit",
+    ttah_Model = "TTAH",
+    Ensemble = "Ensemble"
+  )
+
+  # Define mapping for competing risks models
+  cr_mapping <- c(
+    Cox_Model = "Cox (Cause-Specific)",
+    FG_Model = "Fine-Gray",
+    RF_Model = "Random Forest",
+    glmnet_Model = "GLMNet",
+    bart_Model = "BART",
+    shallownn_Model = "Shallow NN",
+    gam_Model = "GAM",
+    xgboost_Model = "XGBoost",
+    RuleFit_Model = "RuleFit",
+    ttah_Model = "TTAH",
+    survregexp_Model = "ExpSurvReg",
+    Ensemble = "Ensemble"
+  )
+
+  # Select appropriate mapping
+  mapping <- if (tolower(model_type) == "competing_risks" || tolower(model_type) == "cr") {
+    cr_mapping
+  } else {
+    surv_mapping
+  }
+
+  # Apply mapping
+  formatted <- vapply(model_names, function(x) {
+    if (x %in% names(mapping)) {
+      mapping[[x]]
+    } else {
+      # Fallback: convert underscores to spaces and title case
+      gsub("_Model$", "", x) |>
+        gsub("_", " ", x = _) |>
+        tools::toTitleCase()
+    }
+  }, character(1), USE.NAMES = FALSE)
+
+  names(formatted) <- model_names
+  formatted
+}
+
+
 listrules <- function(x, i = NULL) {
   # Get terminal node IDs if not specified
   if (is.null(i)) {
@@ -97,4 +143,7 @@ listrules <- function(x, i = NULL) {
     # Fallback if internal function is not available
     return(paste("Rule for node", node_id))
   })
+}
+`%||%` <- function(x, y) {
+  if (!is.null(x)) x else y
 }

@@ -2,17 +2,16 @@
 % Please edit documentation in R/vignette_data_utils.R
 \name{get_bmt_competing_risks_data}
 \alias{get_bmt_competing_risks_data}
-\title{Retrieve the prepared bone marrow transplant competing-risks dataset}
+\title{Prepared bone marrow transplant competing-risks dataset}
 \usage{
 get_bmt_competing_risks_data()
 }
 \value{
-A data frame containing the prepared BMT competing-risks data used in
-  the competing-risks vignette.
+A tibble containing outcome columns (`ftime`, `status`) along with
+  categorical predictors used in the examples.
 }
 \description{
-Retrieve the prepared bone marrow transplant competing-risks dataset
-}
-\examples{
-bmt_df <- get_bmt_competing_risks_data()
+Loads the BMT competing-risks example used in vignettes. If the packaged data
+object is not available the helper rebuilds it from the CSV stored in
+`inst/extdata`.
 }

@@ -2,27 +2,28 @@
 % Please edit documentation in R/data_io.R
 \name{readData}
 \alias{readData}
-\title{readData}
+\title{Read Data from Various File Formats}
 \usage{
 readData(file = NULL, filetype = "csv", ...)
 }
 \arguments{
-\item{file}{Path to the data file.}
+\item{file}{Character. Path to the data file to read.}
 
-\item{filetype}{Type of data file ("csv", "xlsx", "sas7bdat").}
+\item{filetype}{Character. File type - "csv", "xlsx", or "sas7bdat". Default is "csv".}
 
-\item{...}{Additional arguments passed to the respective reading function
-(read.csv, openxlsx::read.xlsx, haven::read_sas).}
+\item{...}{Additional arguments passed to the underlying read function.}
 }
 \value{
-A data frame containing the imported data with lowercase column names.
+A data frame with column names converted to lowercase.
 }
 \description{
-Import data from csv, xlsx, or sas7bdat file.
-Converts column names to lowercase.
+Reads data from CSV, XLSX, or SAS formats and converts column names to lowercase.
 }
 \examples{
 \dontrun{
-mydata <- readData(file = "path/to/data.csv", filetype = "csv")
+  # Read CSV file
+  data <- readData("mydata.csv")
+  # Read XLSX file
+  data <- readData("mydata.xlsx", filetype = "xlsx")
 }
 }

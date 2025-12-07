@@ -1,10 +1,10 @@
 library(testthat)
-library(here)
+# library(here) # Removed
 library(pracma) # Required for trapz
 
 # Assuming the function is available in the environment
 # Use here::here for robustness
-source(here::here("R/math_utils.R"))
+# source(here::here("R/math_utils.R")) # Removed - functions should be available in package environment
 
 context("Testing math_utils functions (Integrator)")
 

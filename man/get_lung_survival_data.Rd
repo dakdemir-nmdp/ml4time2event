@@ -2,17 +2,17 @@
 % Please edit documentation in R/vignette_data_utils.R
 \name{get_lung_survival_data}
 \alias{get_lung_survival_data}
-\title{Retrieve the prepared lung cancer survival dataset}
+\title{Prepared lung survival dataset}
 \usage{
 get_lung_survival_data()
 }
 \value{
-A data frame containing the prepared NCCTG lung cancer data used in
-  the survival vignette.
+A tibble with survival outcomes, engineered predictors, and no
+  missing values.
 }
 \description{
-Retrieve the prepared lung cancer survival dataset
-}
-\examples{
-lung_df <- get_lung_survival_data()
+Returns the preprocessed NCCTG lung cancer survival dataset used throughout
+the vignettes. When the package is installed the precomputed object
+`lung_survival_prepared` is loaded; otherwise a local CSV under `inst/extdata`
+is processed on the fly.
 }

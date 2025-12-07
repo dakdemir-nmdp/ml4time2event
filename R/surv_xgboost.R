@@ -1,25 +1,3 @@
-#' @title xgb.train.surv (Internal Helper)
-#' @description Internal function to train xgboost for survival and estimate baseline hazard.
-#' Adapts xgboost training for Cox PH objective and calculates an optimized baseline hazard.
-#' @param params list of xgboost parameters (must include objective='survival:cox', eval_metric='cox-nloglik').
-#' @param data training data matrix (features only).
-#' @param label training labels (negative time for censored, positive time for event).
-#' @param weight optional observation weights.
-#' @param nrounds number of boosting rounds.
-#' @param watchlist list for monitoring evaluation metrics during training.
-#' @param verbose verbosity level.
-#' @param print_every_n print evaluation metric every n rounds.
-#' @param early_stopping_rounds rounds to wait for improvement before stopping.
-#' @param save_period frequency to save model during training (0 = never).
-#' @param save_name filename for saved models.
-#' @param xgb_model existing xgboost model to continue training from.
-#' @param callbacks list of callback functions for training.
-#' @param ... other arguments passed to xgboost::xgb.train.
-#' @return An xgb.Booster object with an added 'baseline_hazard' component.
-#' @importFrom xgboost xgb.DMatrix xgb.train
-#' @importFrom survival coxph Surv basehaz
-#' @importFrom stats optim complete.cases
-#' @noRd
 xgb.train.surv <- function(params = list(), data, label, weight = NULL, nrounds,
                            watchlist = list(), verbose = 1, print_every_n = 1L,
                            early_stopping_rounds = NULL, save_period = NULL,
@@ -91,24 +69,21 @@ xgb.train.surv <- function(params = list(), data, label, weight = NULL, nrounds,
     }
   }
 
-  # Store the optimized baseline hazard in the model object
-  xgboost_model$baseline_hazard <- baseline_hazard
-  class(xgboost_model) <- c("xgb.Booster.surv", class(xgboost_model)) # Add specific class
-  return(xgboost_model)
+  # Store the optimized baseline hazard in a wrapper object
+  # We cannot modify the xgboost_model directly if it is an ALTREP object
+  result <- list(
+    model = xgboost_model,
+    baseline_hazard = baseline_hazard
+  )
+  class(result) <- c("xgb.Booster.surv", "list") 
+  return(result)
 }
 
-#' @title predict.xgb.Booster.surv (Internal Helper)
-#' @description Prediction method for survival xgboost models trained with xgb.train.surv.
-#' @param object A model object of class 'xgb.Booster.surv'.
-#' @param newdata New data matrix for prediction.
-#' @param type Type of prediction: "risk" (linear predictor/log hazard ratio) or "surv" (survival probability).
-#' @param times Optional numeric vector of times at which to predict survival probabilities. If NULL, uses times from baseline hazard.
-#' @return Predicted risk scores or survival probabilities matrix (rows=observations, cols=times).
-#' @importFrom stats approxfun
 #' @noRd
 predict.xgb.Booster.surv <- function(object, newdata, type = "risk", times = NULL) {
   # Predict the linear predictor (log hazard ratio) using the base xgboost model
-  lp <- xgboost:::predict.xgb.Booster(object, newdata) # Ensure calling the base predict method
+  # object is now a wrapper list containing 'model'
+  lp <- xgboost:::predict.xgb.Booster(object$model, newdata) # Ensure calling the base predict method
 
   if (type == "risk") {
     return(lp) # Return linear predictor
@@ -154,32 +129,10 @@ predict.xgb.Booster.surv <- function(object, newdata, type = "risk", times = NUL
 
 
 
-#' @title SurvModel_xgboost
 #'
-#' @description Fit an xgboost model for survival outcomes.
 #'
-#' @param data data frame with explanatory and outcome variables
-#' @param expvars character vector of names of explanatory variables in data
-#' @param timevar character name of time variable in data
-#' @param eventvar character name of event variable in data (needs to be 0/1)
-#' @param eta learning rate (default: 0.01)
-#' @param max_depth maximum depth of trees (default: 5)
-#' @param nrounds number of boosting rounds (default: 100)
-#' @param ntimes integer, number of time points to use for prediction grid (default: 50)
-#' @param verbose logical, print progress messages (default: FALSE)
-#' @param ... additional parameters passed to xgboost
 #'
-#' @return a list of components:
-#'   \item{model}{fitted xgboost model object (class xgb.Booster.surv)}
-#'   \item{times}{vector of time points for prediction grid}
-#'   \item{varprof}{profile of explanatory variables}
-#'   \item{expvars}{character vector of explanatory variables used}
-#'   \item{timevar}{character name of time variable}
-#'   \item{eventvar}{character name of event variable}
 #'
-#' @importFrom xgboost xgb.DMatrix
-#' @importFrom stats model.matrix
-#' @export
 SurvModel_xgboost<-function(data, expvars, timevar, eventvar, eta = 0.01, max_depth = 5, nrounds = 100, ntimes = 50, verbose = FALSE, ...){
   # Assuming VariableProfile is loaded/available
   if (verbose) cat("Creating variable profile...\n")
@@ -234,20 +187,10 @@ SurvModel_xgboost<-function(data, expvars, timevar, eventvar, eta = 0.01, max_de
 
 
 
-#' @title Predict_SurvModel_xgboost
 #'
-#' @description Get predictions from an xgboost survival model for a test dataset.
 #'
-#' @param modelout the output from 'SurvModel_xgboost'
-#' @param newdata the data for which the predictions are to be calculated
 #'
-#' @return a list containing the following items:
-#' Probs: predicted survival probability matrix (rows=times, cols=observations),
-#' Times: the unique times for which the probabilities are calculated (including 0).
 #'
-#' @importFrom stats model.matrix
-#' @importFrom xgboost xgb.DMatrix
-#' @export
 Predict_SurvModel_xgboost <- function(modelout, newdata, new_times = NULL) {
   # ============================================================================
   # Input Validation

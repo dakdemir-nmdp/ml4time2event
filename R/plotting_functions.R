@@ -1,41 +1,58 @@
-#' @title plot_survival_curves
-#'
-#' @description Plot survival curves from one or more survival model predictions
-#'
-#' @param predictions A list of prediction objects from survival models, or a single prediction object.
-#'   Each prediction object should have components 'Probs' (survival probabilities matrix) 
-#'   and 'Times' (time points vector).
-#' @param model_names Character vector of model names. If NULL, uses names from predictions list.
-#' @param patients_to_plot Integer vector specifying which patients (row indices) to plot.
-#'   If NULL, plots first 3 patients.
-#' @param colors Named character vector of colors for each model. If NULL, uses default colors.
-#' @param highlight_ensemble Logical, whether to highlight ensemble predictions in black (default TRUE).
-#' @param title Character string for plot title. If NULL, uses default title.
-#' @param subtitle Character string for plot subtitle. If NULL, uses default subtitle.
-#' @param ncol_facets Integer, number of columns for facetting by patient (default 3).
-#' @param add_median_line Logical, whether to add horizontal line at 0.5 survival (default FALSE).
-#' @param legend_position Character, position of legend ("bottom", "right", "top", "left", "none").
-#'
-#' @return A ggplot object
-#'
-#' @examples
-#' \dontrun{
-#' # Single model
-#' cox_pred <- Predict_SurvModel_Cox(cox_model, test_data)
-#' plot_survival_curves(cox_pred, model_names = "Cox")
-#' 
-#' # Multiple models
-#' predictions <- list(
-#'   Cox = Predict_SurvModel_Cox(cox_model, test_data),
-#'   RF = Predict_SurvModel_RF(rf_model, test_data)
-#' )
-#' plot_survival_curves(predictions, patients_to_plot = 1:5)
-#' }
-#'
-#' @importFrom rlang .data
+#' @importFrom ggplot2 ggplot aes geom_point geom_text labs theme_minimal theme element_text ggsave
 #' @importFrom grDevices rainbow
-#' @importFrom stats median
-#' @export
+.organize_predictions_for_plotting <- function(predictions_output,
+                                              model_type = "survival",
+                                              include_ensemble = TRUE) {
+
+  # Validate input
+  if (!is.list(predictions_output)) {
+    stop("predictions_output must be a list from PredictSurvModels or PredictCRModels")
+  }
+
+  if (is.null(predictions_output$ModelPredictions) || is.null(predictions_output$NewTimes)) {
+    stop("predictions_output must contain 'ModelPredictions' and 'NewTimes' components")
+  }
+
+  individual_predictions <- predictions_output$ModelPredictions
+  common_times <- predictions_output$NewTimes
+  ensemble_probs <- predictions_output$NewProbs
+
+  # Determine the probability/CIF component name
+  prob_name <- if (tolower(model_type) == "competing_risks" || tolower(model_type) == "cr") {
+    "CIFs"
+  } else {
+    "Probs"
+  }
+
+  # Organize individual model predictions
+  model_prediction_objects <- lapply(individual_predictions, function(mat) {
+    pred_obj <- list(Times = common_times)
+    pred_obj[[prob_name]] <- mat
+    pred_obj
+  })
+
+  # Format model names
+  raw_names <- names(individual_predictions)
+  formatted_names <- format_model_name(raw_names, model_type = model_type)
+  names(model_prediction_objects) <- formatted_names
+
+  # Add ensemble if requested and available
+  if (include_ensemble && !is.null(ensemble_probs)) {
+    ensemble_obj <- list(Times = common_times)
+    ensemble_obj[[prob_name]] <- ensemble_probs
+    model_prediction_objects[["Ensemble"]] <- ensemble_obj
+  }
+
+  return(model_prediction_objects)
+}
+
+
+#'
+#'
+#'
+#'
+#'
+#'
 plot_survival_curves <- function(predictions,
                                  model_names = NULL,
                                  patients_to_plot = NULL,
@@ -46,12 +63,21 @@ plot_survival_curves <- function(predictions,
                                  ncol_facets = 3,
                                  add_median_line = FALSE,
                                  legend_position = "bottom") {
-  
+
   # Input validation
   if (is.null(predictions)) {
     stop("'predictions' cannot be NULL")
   }
-  
+
+  # Check if this is output from PredictSurvModels()
+  if (!is.null(predictions$ModelPredictions) && !is.null(predictions$NewTimes)) {
+    predictions <- .organize_predictions_for_plotting(
+      predictions,
+      model_type = "survival",
+      include_ensemble = highlight_ensemble
+    )
+  }
+
   # Handle single prediction object
   if (!is.list(predictions) || (!is.null(predictions$Probs) && !is.null(predictions$Times))) {
     predictions <- list(Model1 = predictions)
@@ -176,43 +202,12 @@ plot_survival_curves <- function(predictions,
 }
 
 
-#' @title plot_cif_curves
 #'
-#' @description Plot cumulative incidence function (CIF) curves from one or more competing risks model predictions
 #'
-#' @param predictions A list of prediction objects from competing risks models, or a single prediction object.
-#'   Each prediction object should have components 'CIFs' (cumulative incidence matrix) 
-#'   and 'Times' (time points vector).
-#' @param model_names Character vector of model names. If NULL, uses names from predictions list.
-#' @param patients_to_plot Integer vector specifying which patients (row indices) to plot.
-#'   If NULL, plots first 3 patients.
-#' @param colors Named character vector of colors for each model. If NULL, uses default colors.
-#' @param highlight_ensemble Logical, whether to highlight ensemble predictions in black (default TRUE).
-#' @param title Character string for plot title. If NULL, uses default title.
-#' @param subtitle Character string for plot subtitle. If NULL, uses default subtitle.
-#' @param ncol_facets Integer, number of columns for facetting by patient (default 3).
-#' @param legend_position Character, position of legend ("bottom", "right", "top", "left", "none").
-#' @param event_label Character string describing the event of interest (default "Event").
 #'
-#' @return A ggplot object
 #'
-#' @examples
-#' \dontrun{
-#' # Single model
-#' cox_pred <- Predict_CRModel_Cox(cox_model, test_data)
-#' plot_cif_curves(cox_pred, model_names = "Cox", event_label = "Relapse")
-#' 
-#' # Multiple models
-#' predictions <- list(
-#'   Cox = Predict_CRModel_Cox(cox_model, test_data),
-#'   FineGray = Predict_CRModel_FineGray(fg_model, test_data)
-#' )
-#' plot_cif_curves(predictions, patients_to_plot = 1:5, event_label = "Disease Progression")
-#' }
 #'
-#' @importFrom rlang .data
-#' @importFrom grDevices rainbow
-#' @export
+#'
 plot_cif_curves <- function(predictions,
                            model_names = NULL,
                            patients_to_plot = NULL,
@@ -223,12 +218,21 @@ plot_cif_curves <- function(predictions,
                            ncol_facets = 3,
                            legend_position = "bottom",
                            event_label = "Event") {
-  
+
   # Input validation
   if (is.null(predictions)) {
     stop("'predictions' cannot be NULL")
   }
-  
+
+  # Check if this is output from PredictCRModels()
+  if (!is.null(predictions$ModelPredictions) && !is.null(predictions$NewTimes)) {
+    predictions <- .organize_predictions_for_plotting(
+      predictions,
+      model_type = "competing_risks",
+      include_ensemble = highlight_ensemble
+    )
+  }
+
   # Handle single prediction object
   if (!is.list(predictions) || (!is.null(predictions$CIFs) && !is.null(predictions$Times))) {
     predictions <- list(Model1 = predictions)
@@ -346,35 +350,11 @@ plot_cif_curves <- function(predictions,
 }
 
 
-#' @title plot_model_performance
 #'
-#' @description Create performance comparison plots for survival or competing risks models
 #'
-#' @param performance_df Data frame with columns 'Model', 'Concordance', and optionally 'Brier_Score', 'Prediction_Error'
-#' @param metric Character string specifying which metric to plot ("concordance", "brier", "prediction_error")
-#' @param highlight_ensemble Logical, whether to highlight ensemble in black (default TRUE)
-#' @param title Character string for plot title. If NULL, uses default title.
-#' @param flip_coords Logical, whether to flip coordinates (horizontal bars, default TRUE)
 #'
-#' @return A ggplot object
 #'
-#' @examples
-#' \dontrun{
-#' performance_df <- data.frame(
-#'   Model = c("Cox", "RF", "Ensemble"),
-#'   Concordance = c(0.72, 0.75, 0.78),
-#'   Brier_Score = c(0.15, 0.12, 0.10)
-#' )
-#' 
-#' # Concordance plot
-#' plot_model_performance(performance_df, metric = "concordance")
-#' 
-#' # Brier score plot
-#' plot_model_performance(performance_df, metric = "brier")
-#' }
 #'
-#' @importFrom rlang .data
-#' @export
 plot_model_performance <- function(performance_df,
                                   metric = "concordance",
                                   highlight_ensemble = TRUE,

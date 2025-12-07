@@ -1,13 +1,12 @@
 library(testthat)
-library(here)
+# library(here) # Removed
 # library(data.table) # Removed
 library(survival) # For Surv object
 library(cmprsk)   # Required for crr and predict.crr
 
 # Assuming the functions are available in the environment
-source("/Users/dakdemir/Library/CloudStorage/OneDrive-NMDP/Year2025/Github/ml4time2event/R/data_summary.R")
-source("/Users/dakdemir/Library/CloudStorage/OneDrive-NMDP/Year2025/Github/ml4time2event/R/cr_fine_gray.R")
-source("/Users/dakdemir/Library/CloudStorage/OneDrive-NMDP/Year2025/Github/ml4time2event/R/data_summary.R")
+# Source lines removed as package is loaded by devtools
+# source(...)
 
 context("Testing cr_fine_gray functions")
 

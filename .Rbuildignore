@@ -8,3 +8,6 @@
 ^Rplots\.pdf$
 ^vignettes/Vignette\.Rmd$
 ^inst/examples$
+^doc$
+data/agvhd24_individual_hla.csv
+^Meta$

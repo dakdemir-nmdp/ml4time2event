@@ -1,24 +1,7 @@
-#' @title SurvModel_BART
 #'
-#' @description Fit a BART model for survival outcomes using BART::surv.bart.
 #'
-#' @param data data frame with explanatory and outcome variables
-#' @param expvars character vector of names of explanatory variables in data
-#' @param timevar character name of time variable in data
-#' @param eventvar character name of event variable in data (needs to be 0/1)
-#' @param K parameter 'K' for BART (number of time points for discrete approximation)
-#' @param ntree number of trees in BART model
 #'
-#' @return a list containing the following objects:
-#' model: fitted BART model object from surv.bart,
-#' times: time points used in the BART model,
-#' varprof: profile of explanatory variables,
-#' expvars: character vector of explanatory variables used,
-#' factor_levels: list containing factor levels for consistent prediction.
 #'
-#' @importFrom BART surv.bart
-#' @importFrom stats model.matrix
-#' @export
 SurvModel_BART <- function(data,
                            expvars,
                            timevar,
@@ -98,21 +81,10 @@ SurvModel_BART <- function(data,
 }
 
 
-#' @title Predict_SurvModel_BART
 #'
-#' @description Make predictions using a fitted BART survival model.
 #'
-#' @param modelout the output from 'SurvModel_BART'
-#' @param newdata the data for which the predictions are to be calculated
-#' @param new_times optional vector of new time points for interpolation. If NULL, uses model's native time points.
 #'
-#' @return a list containing the following items:
-#' Probs: predicted survival probability matrix (rows=times, cols=observations),
-#' Times: the unique times for which the probabilities are calculated (including 0).
 #'
-#' @importFrom BART surv.pre.bart bartModelMatrix
-#' @importFrom stats model.matrix
-#' @export
 Predict_SurvModel_BART <- function(modelout, newdata, new_times = NULL) {
 
   if (missing(modelout)) stop("argument \"modelout\" is missing")
@@ -135,11 +107,11 @@ Predict_SurvModel_BART <- function(modelout, newdata, new_times = NULL) {
   x.test_orig <- stats::model.matrix(~ -1 + ., data = data_test)
 
   # Prepare BART prediction structure using stored training data
-  pre <- surv.pre.bart(
+  pre <- BART::surv.pre.bart(
     times = modelout$times_train,
     delta = modelout$delta_train,
-    x.train = bartModelMatrix(modelout$x_train),
-    x.test = bartModelMatrix(x.test_orig),
+    x.train = BART::bartModelMatrix(modelout$x_train),
+    x.test = BART::bartModelMatrix(x.test_orig),
     K = modelout$model$K
   )
 
