@@ -17,15 +17,29 @@
 
 utils::globalVariables(c("feature", "importance", "model"))
 
-ml4t2e_explain <- function(fit,
+ml4t2e_explain <- function(object,
                            newdata = NULL,
                            method = c("auto", "permutation"),
                            include = "all",
                            times = NULL,
                            top_n = NULL) {
-  if (!inherits(fit, "t2e_fit")) {
-    rlang::abort("`fit` must be a `t2e_fit` object.")
+  fit <- NULL
+  if (inherits(object, "T2EPipeline")) {
+    if (is.null(object$fit_object)) {
+      rlang::abort("Pipeline must be fitted before explanation.")
+    }
+    fit <- object$fit_object
+    if (!is.null(newdata)) {
+      # For pipelines, we must process the new data (bake recipes)
+      # We require outcomes because we need them for evaluation (c-index)
+      newdata <- .pipeline_process_new_data(object, newdata, require_outcomes = TRUE)
+    }
+  } else if (inherits(object, "t2e_fit")) {
+    fit <- object
+  } else {
+    rlang::abort("`object` must be a `t2e_fit` or `ml4t2e_pipeline` object.")
   }
+
   outcome_type <- fit[["outcome_type"]]
   if (!identical(outcome_type, "survival")) {
     rlang::abort("Explanation is currently implemented for survival outcomes only.")
@@ -45,7 +59,11 @@ ml4t2e_explain <- function(fit,
     eval_task <- task
   } else {
     data <- dplyr::as_tibble(newdata)
-    .verify_new_data_columns(data, task)
+    # For pipelines, data is already verified/processed. For raw fits, verify.
+    if (!inherits(object, "T2EPipeline")) {
+      .verify_new_data_columns(data, task)
+    }
+
     eval_task <- ml4t2e_task_surv(
       data = data,
       time = task$time_col,

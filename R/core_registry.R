@@ -54,8 +54,10 @@ ml4t2e_list_models <- function(outcome = c("survival", "competing_risk", "all"))
   outcome <- match.arg(outcome)
   entries <- .t2e_model_registry$models
   if (length(entries) == 0) {
-    return(data.frame(engine = character(), outcome = character(), label = character(),
-                      packages = I(list()), tags = I(list()), stringsAsFactors = FALSE))
+    return(data.frame(
+      engine = character(), outcome = character(), label = character(),
+      packages = I(list()), tags = I(list()), stringsAsFactors = FALSE
+    ))
   }
   df <- lapply(entries, function(entry) {
     data.frame(
@@ -79,12 +81,7 @@ ml4t2e_list_models <- function(outcome = c("survival", "competing_risk", "all"))
   entry <- .t2e_model_registry_get(engine, outcome)
   needed <- entry$packages
   if (length(needed) > 0) {
-    missing_pkgs <- needed[!vlapply(needed, requireNamespace, quietly = TRUE)]
-    if (length(missing_pkgs) > 0) {
-      rlang::abort(glue::glue(
-        "The following packages are required for engine '{engine}': {paste(missing_pkgs, collapse = ', ')}"
-      ))
-    }
+    rlang::check_installed(needed, reason = glue::glue("for engine '{engine}'"))
   }
   entry$constructor(spec = modifyList(spec, list(engine = entry$engine)))
 }

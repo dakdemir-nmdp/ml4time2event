@@ -5,7 +5,7 @@
 \title{Calculate SHAP values for ml4time2event pipelines}
 \usage{
 ml4t2e_calculate_shap(
-  pipeline,
+  object,
   data,
   time_horizon,
   background = NULL,
@@ -14,8 +14,6 @@ ml4t2e_calculate_shap(
 )
 }
 \arguments{
-\item{pipeline}{A fitted pipeline produced by `ml4t2e_fit_pipeline()`.}
-
 \item{data}{Data frame of observations to explain.}
 
 \item{time_horizon}{Single positive numeric time horizon used for expected
@@ -28,6 +26,8 @@ time lost calculations.}
 when available.}
 
 \item{...}{Additional arguments forwarded to the underlying SHAP engine.}
+
+\item{pipeline}{A fitted pipeline produced by `ml4t2e_fit_pipeline()`.}
 }
 \value{
 An object of class `ml4t2e_shap` containing SHAP values, baseline

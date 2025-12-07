@@ -9,6 +9,12 @@ Machine learning for time-to-event analysis. Provides tools for predicting survi
 install.packages("pak")  # or remotes
 pak::pak("dakdemir-nmdp/ml4time2event")
 
+# Load the package
+library(ml4time2event)
+
+# Install optional heavy dependencies (e.g., XGBoost, BART, SHAP tools)
+ml4t2e_install_extras()
+
 # Alternatively with renv (recreates the development library)
 install.packages("renv")
 renv::restore()

@@ -9,23 +9,30 @@
 #'
 #' @importFrom rlang sym
 #' @importFrom tidyr pivot_wider
-ml4t2e_shap_predict_fn <- function(pipeline,
-                                    time_horizon,
-                                    ensemble_method = "average") {
-
-  if (!inherits(pipeline, "T2EPipeline")) {
-    stop("'pipeline' must be created with `ml4t2e_pipeline()` or `ml4t2e_fit_pipeline()`.",
-         call. = FALSE)
+ml4t2e_shap_predict_fn <- function(object,
+                                   time_horizon,
+                                   ensemble_method = "average") {
+  if (inherits(object, "T2EPipeline")) {
+    pipeline <- object
+    outcome_type <- pipeline$outcome$type
+    fit_object <- pipeline$fit_object
+    model_names <- pipeline$models
+  } else if (inherits(object, "t2e_fit")) {
+    pipeline <- NULL
+    outcome_type <- object$outcome_type
+    fit_object <- object
+    model_names <- object$model_names
+  } else {
+    stop("'object' must be a `T2EPipeline` or `t2e_fit` object.", call. = FALSE)
   }
+
   if (!is.numeric(time_horizon) || length(time_horizon) != 1 ||
-      is.na(time_horizon) || time_horizon <= 0) {
+    is.na(time_horizon) || time_horizon <= 0) {
     stop("'time_horizon' must be a single positive numeric value.", call. = FALSE)
   }
 
-  outcome_type <- pipeline$outcome$type
-  fit_object <- pipeline$fit_object
   if (is.null(fit_object)) {
-    stop("Pipeline must be fitted before SHAP predictions can be generated.", call. = FALSE)
+    stop("Object must be fitted before SHAP predictions can be generated.", call. = FALSE)
   }
 
   base_grid <- fit_object$time_grid %||% numeric(0)
@@ -33,12 +40,12 @@ ml4t2e_shap_predict_fn <- function(pipeline,
   model_candidates <- fit_object$model_names %||% character(0)
   preferred_model <- if ("ensemble" %in% model_candidates) {
     "ensemble"
-  } else if (length(pipeline$models) > 0) {
-    pipeline$models[1]
+  } else if (length(model_names) > 0) {
+    model_names[1]
   } else if (length(model_candidates) > 0) {
     model_candidates[1]
   } else {
-    stop("No fitted models available inside the pipeline.", call. = FALSE)
+    stop("No fitted models available.", call. = FALSE)
   }
 
   function(newdata) {
@@ -46,24 +53,31 @@ ml4t2e_shap_predict_fn <- function(pipeline,
       stop("Input to prediction function must be a data.frame.", call. = FALSE)
     }
 
-    processed <- .pipeline_process_new_data(
-      pipeline = pipeline,
-      newdata = newdata,
-      require_outcomes = FALSE
-    )
+    if (!is.null(pipeline)) {
+      processed <- .pipeline_process_new_data(
+        pipeline = pipeline,
+        newdata = newdata,
+        require_outcomes = FALSE
+      )
+    } else {
+      processed <- newdata
+    }
 
     prediction_type <- if (identical(outcome_type, "survival")) "survival" else "cif"
-    pred_df <- tryCatch({
-      predict(
-        fit_object,
-        newdata = processed,
-        times = prediction_times,
-        type = prediction_type,
-        include = "all"
-      )
-    }, error = function(e) {
-      stop("Error generating predictions for SHAP calculation: ", e$message, call. = FALSE)
-    })
+    pred_df <- tryCatch(
+      {
+        predict(
+          fit_object,
+          newdata = processed,
+          times = prediction_times,
+          type = prediction_type,
+          include = "all"
+        )
+      },
+      error = function(e) {
+        stop("Error generating predictions for SHAP calculation: ", e$message, call. = FALSE)
+      }
+    )
 
     pred_df <- pred_df[pred_df$set != "train", , drop = FALSE]
     if (nrow(pred_df) == 0) {
@@ -161,17 +175,23 @@ ml4t2e_shap_predict_fn <- function(pipeline,
 #' @return An object of class `ml4t2e_shap` containing SHAP values, baseline
 #'   prediction, raw predictions, and feature values.
 #' @export
-ml4t2e_calculate_shap <- function(pipeline,
-                                   data,
-                                   time_horizon,
-                                   background = NULL,
-                                   nsim = 100,
-                                   ...) {
-
-  # Validate inputs
-  if (!inherits(pipeline, "T2EPipeline")) {
-    stop("'pipeline' must be created with `ml4t2e_pipeline()` or `ml4t2e_fit_pipeline()`.",
-         call. = FALSE)
+ml4t2e_calculate_shap <- function(object,
+                                  data,
+                                  time_horizon,
+                                  background = NULL,
+                                  nsim = 100,
+                                  ...) {
+  # Determine object type and properties
+  if (inherits(object, "T2EPipeline")) {
+    pipeline <- object
+    feature_cols <- pipeline$features %||% pipeline$outcome$features
+    analysis_type <- pipeline$outcome$type
+  } else if (inherits(object, "t2e_fit")) {
+    pipeline <- NULL
+    feature_cols <- object$task$features
+    analysis_type <- object$outcome_type
+  } else {
+    stop("'object' must be a `T2EPipeline` or `t2e_fit` object.", call. = FALSE)
   }
 
   if (!is.data.frame(data)) {
@@ -179,7 +199,7 @@ ml4t2e_calculate_shap <- function(pipeline,
   }
 
   if (!is.numeric(time_horizon) || length(time_horizon) != 1 ||
-      is.na(time_horizon) || time_horizon <= 0) {
+    is.na(time_horizon) || time_horizon <= 0) {
     stop("'time_horizon' must be a single positive numeric value.", call. = FALSE)
   }
 
@@ -189,20 +209,19 @@ ml4t2e_calculate_shap <- function(pipeline,
 
   # Check for required packages
   if (!requireNamespace("fastshap", quietly = TRUE) &&
-      !requireNamespace("kernelshap", quietly = TRUE)) {
+    !requireNamespace("kernelshap", quietly = TRUE)) {
     stop("Either 'fastshap' or 'kernelshap' package must be installed for SHAP calculation.\n",
-         "Install with: install.packages('fastshap') or install.packages('kernelshap')",
-         call. = FALSE)
+      "Install with: install.packages('fastshap') or install.packages('kernelshap')",
+      call. = FALSE
+    )
   }
-
-  # Extract feature columns (exclude time, event, and id variables)
-  feature_cols <- pipeline$features %||% pipeline$outcome$features
 
   # Ensure all features are present in data
   missing_features <- setdiff(feature_cols, colnames(data))
   if (length(missing_features) > 0) {
     stop("Missing features in data: ", paste(missing_features, collapse = ", "),
-         call. = FALSE)
+      call. = FALSE
+    )
   }
 
   # Extract feature matrix
@@ -224,7 +243,7 @@ ml4t2e_calculate_shap <- function(pipeline,
 
   # Create prediction wrapper
   pred_fn <- ml4t2e_shap_predict_fn(
-    pipeline = pipeline,
+    object = object,
     time_horizon = time_horizon
   )
 
@@ -239,35 +258,40 @@ ml4t2e_calculate_shap <- function(pipeline,
 
   if (requireNamespace("kernelshap", quietly = TRUE)) {
     # Use kernelshap if available (preferred for consistency)
-    shap_obj <- tryCatch({
-      kernelshap::kernelshap(
-        object = pred_fn,
-        X = X,
-        bg_X = background,
-        ...
-      )
-    }, error = function(e) {
-      stop("Error calculating SHAP values with kernelshap: ", e$message, call. = FALSE)
-    })
+    shap_obj <- tryCatch(
+      {
+        kernelshap::kernelshap(
+          object = pred_fn,
+          X = X,
+          bg_X = background,
+          ...
+        )
+      },
+      error = function(e) {
+        stop("Error calculating SHAP values with kernelshap: ", e$message, call. = FALSE)
+      }
+    )
 
     shap_values <- shap_obj$S
-
   } else if (requireNamespace("fastshap", quietly = TRUE)) {
     # Fall back to fastshap
-    shap_obj <- tryCatch({
-      fastshap::explain(
-        object = pred_fn,
-        X = X,
-        pred_wrapper = function(object, newdata) {
-          object(newdata)
-        },
-        nsim = nsim,
-        newdata = X,
-        ...
-      )
-    }, error = function(e) {
-      stop("Error calculating SHAP values with fastshap: ", e$message, call. = FALSE)
-    })
+    shap_obj <- tryCatch(
+      {
+        fastshap::explain(
+          object = pred_fn,
+          X = X,
+          pred_wrapper = function(object, newdata) {
+            object(newdata)
+          },
+          nsim = nsim,
+          newdata = X,
+          ...
+        )
+      },
+      error = function(e) {
+        stop("Error calculating SHAP values with fastshap: ", e$message, call. = FALSE)
+      }
+    )
 
     shap_values <- as.matrix(shap_obj)
   } else {
@@ -287,8 +311,8 @@ ml4t2e_calculate_shap <- function(pipeline,
     feature_values = as.data.frame(X),
     feature_names = feature_cols,
     time_horizon = time_horizon,
-    analysis_type = pipeline$outcome$type,
-    pipeline = pipeline
+    analysis_type = analysis_type,
+    source_object = object
   )
 
   class(result) <- c("ml4t2e_shap", "list")

@@ -75,7 +75,7 @@ surv_pipe$summary()
 ```{r surv-shap}
 set.seed(42)
 surv_shap <- ml4t2e_calculate_shap(
-  pipeline = surv_pipe,
+  object = surv_pipe,
   data = lung[1:20, ],
   time_horizon = 365,
   nsim = 10
@@ -133,7 +133,7 @@ cr_pipe$summary()
 ```{r cr-shap}
 set.seed(99)
 cr_shap <- ml4t2e_calculate_shap(
-  pipeline = cr_pipe,
+  object = cr_pipe,
   data = bmt[1:20, ],
   time_horizon = 100,
   nsim = 10

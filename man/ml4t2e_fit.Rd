@@ -22,15 +22,15 @@ ml4t2e_fit(
 `ml4t2e_list_models()` to discover available options.}
 
 \item{ensemble}{Character or logical; controls ensembling strategy:
-- `FALSE` or `"none"`: No ensembling; returns individual model predictions only.
-- `"simple"`: Unweighted average of predictions across models. **Currently the only implemented strategy.**
-- `"auto"`, `TRUE`: Alias for `"simple"` (stacking not yet implemented; falls back with warning).
-- `"stack"`: Planned for future release; currently falls back to `"simple"` with a warning.
+  - `FALSE` or `"none"`: No ensembling; returns individual model predictions only.
+  - `"simple"`: Unweighted average of predictions across models. **Currently the only implemented strategy.**
+  - `"auto"`, `TRUE`: Alias for `"simple"` (stacking not yet implemented; falls back with warning).
+  - `"stack"`: Planned for future release; currently falls back to `"simple"` with a warning.
 
-Default: `FALSE`.
+  Default: `FALSE`.
 
-**Note**: When ensemble is enabled, model predictions are combined before metrics calculation.
-All specified models are still trained.}
+  **Note**: When ensemble is enabled, model predictions are combined before metrics calculation.
+  All specified models are still trained.}
 
 \item{recipe}{Optional `recipes` recipe for preprocessing. Not yet supported
 in this refactor; placeholder for future work.}
@@ -40,7 +40,9 @@ in this refactor; placeholder for future work.}
 \item{seed}{Optional integer seed for reproducibility.}
 
 \item{controls}{Named list of engine-specific parameter lists. Use entries
-like `controls = list(cox = list(penalized = TRUE))`.}
+like `controls = list(cox = list(penalized = TRUE))`. Can also include
+global controls like `time_limit` (in seconds) to stop training after a
+certain duration.}
 
 \item{conformal_calibration}{Optional numeric value between 0 and 1. If provided,
 specifies the fraction of data to use for conformal calibration.}
