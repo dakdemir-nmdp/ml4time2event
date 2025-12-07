@@ -1,6 +1,5 @@
 # Source the concordance function robustly
-if (!requireNamespace("here", quietly = TRUE)) install.packages("here")
-source(here::here("R", "cr_metrics.R"))
+# Removed source() - functions should be available in package environment
 
 # Test for concordance function with risk scores
 

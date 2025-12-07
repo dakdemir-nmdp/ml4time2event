@@ -1,11 +1,11 @@
 library(testthat)
-library(here)
+# library(here) # Removed
 # library(data.table) # Removed
 library(survival)
 # library(pec) # Often used for C-index calculations, might be a dependency
 
 # Assuming the function is available in the environment
-source(here("R/cr_metrics.R"))  # Ensure timedepConcordanceCR is available when running tests standalone
+# source(here("R/cr_metrics.R"))  # Removed - functions should be available in package environment
 
 context("Testing cr_metrics functions")
 

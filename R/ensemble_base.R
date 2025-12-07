@@ -1,3 +1,6 @@
+# Suppress R CMD check NOTEs about variables used in NSE contexts
+utils::globalVariables(c("id", "time", "cause", "surv", "cif"))
+
 #' Base classes for ensembling time-to-event models
 #'
 #' Provide reusable infrastructure for combining predictions across multiple
@@ -6,6 +9,8 @@
 #'
 #' @keywords internal
 #' @noRd
+#' @importFrom magrittr %>%
+
 EnsemblerBase <- R6::R6Class(
   classname = "EnsemblerBase",
   public = list(

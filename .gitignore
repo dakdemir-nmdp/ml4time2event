@@ -39,7 +39,5 @@ vignettes/*.html
 design/
 /doc/
 data/agvhd24_individual_hla.csv
-/Meta/
-
-# .github folder
-.github/
+/Meta/*.log
+vignettes_output/

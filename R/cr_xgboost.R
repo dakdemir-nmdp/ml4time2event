@@ -185,11 +185,14 @@ CRModel_xgboost <- function(data, expvars, timevar, eventvar, event_codes = NULL
       which.est = "point"
     )
 
-    # Store baseline model in the XGBoost model object
-    xgb_model_cause$baseline_model <- baseline_info$model
-    xgb_model_cause$baseline_sf <- baseline_info$sf
+    # Store baseline model in a wrapper list
+    xgb_wrapper <- list(
+      model = xgb_model_cause,
+      baseline_model = baseline_info$model,
+      baseline_sf = baseline_info$sf
+    )
 
-    xgb_models_all_causes[[cause_char]] <- xgb_model_cause
+    xgb_models_all_causes[[cause_char]] <- xgb_wrapper
   }
 
   # The main model for the event of interest
@@ -319,12 +322,14 @@ Predict_CRModel_xgboost <- function(modelout, newdata, new_times = NULL, event_o
 
   for (i in seq_len(n_causes)) {
     cause_char <- modelout$event_codes[i]
-    cause_model <- modelout$xgb_models_all_causes[[cause_char]]
+    cause_wrapper <- modelout$xgb_models_all_causes[[cause_char]]
 
-    if (is.null(cause_model)) {
+    if (is.null(cause_wrapper)) {
       missing_cause_idx <- c(missing_cause_idx, i)
       next
     }
+    
+    cause_model <- cause_wrapper$model
 
     linear_preds <- tryCatch(
       predict(cause_model, X_new),
@@ -335,7 +340,7 @@ Predict_CRModel_xgboost <- function(modelout, newdata, new_times = NULL, event_o
     )
 
     sf_baseline <- tryCatch(
-      survival::survfit(cause_model$baseline_model,
+      survival::survfit(cause_wrapper$baseline_model,
                         newdata = data.frame("score" = 0)),
       error = function(e) NULL
     )

@@ -278,6 +278,14 @@ ml4t2e_pipeline <- function(outcome,
     }
     prepped <- recipes::prep(recipe_obj, training = data, retain = TRUE)
     processed <- recipes::bake(prepped, new_data = NULL)
+    # Restore outcome columns from original data (they should not be preprocessed)
+    processed[[outcome$time]] <- data[[outcome$time]]
+    if (!is.null(outcome$event)) {
+      processed[[outcome$event]] <- data[[outcome$event]]
+    }
+    if (!is.null(outcome$status)) {
+      processed[[outcome$status]] <- data[[outcome$status]]
+    }
     if (!is.null(outcome$cause) && !outcome$cause %in% colnames(processed)) {
       processed[[outcome$cause]] <- data[[outcome$cause]]
     }
@@ -298,6 +306,15 @@ ml4t2e_pipeline <- function(outcome,
     outcome = outcome,
     features = features
   )
+
+  # DEBUG: Check if outcome columns are numeric
+  if (!is.null(outcome$time)) {
+    time_val <- processed[[outcome$time]]
+    if (!is.numeric(time_val)) {
+      warning("DEBUG: time column is not numeric. Class: ", class(time_val), 
+              " Values: ", paste(head(time_val), collapse=", "))
+    }
+  }
 
   list(
     task = task,
@@ -365,7 +382,19 @@ ml4t2e_pipeline <- function(outcome,
   }
 
   if (!is.null(pipeline$prepped_recipe)) {
-    recipes::bake(pipeline$prepped_recipe, new_data = newdata)
+    processed <- recipes::bake(pipeline$prepped_recipe, new_data = newdata)
+    # Restore outcome columns from original data (they should not be preprocessed)
+    processed[[pipeline$outcome$time]] <- newdata[[pipeline$outcome$time]]
+    if (!is.null(pipeline$outcome$event)) {
+      processed[[pipeline$outcome$event]] <- newdata[[pipeline$outcome$event]]
+    }
+    if (!is.null(pipeline$outcome$status)) {
+      processed[[pipeline$outcome$status]] <- newdata[[pipeline$outcome$status]]
+    }
+    if (!is.null(pipeline$outcome$cause)) {
+      processed[[pipeline$outcome$cause]] <- newdata[[pipeline$outcome$cause]]
+    }
+    processed
   } else {
     newdata
   }
@@ -407,7 +436,19 @@ ml4t2e_pipeline <- function(outcome,
     features <- train_prepared$features
 
     assessment_processed <- if (!is.null(prepped)) {
-      recipes::bake(prepped, new_data = assessment_data)
+      processed <- recipes::bake(prepped, new_data = assessment_data)
+      # Restore outcome columns from original data (they should not be preprocessed)
+      processed[[outcome$time]] <- assessment_data[[outcome$time]]
+      if (!is.null(outcome$event)) {
+        processed[[outcome$event]] <- assessment_data[[outcome$event]]
+      }
+      if (!is.null(outcome$status)) {
+        processed[[outcome$status]] <- assessment_data[[outcome$status]]
+      }
+      if (!is.null(outcome$cause)) {
+        processed[[outcome$cause]] <- assessment_data[[outcome$cause]]
+      }
+      processed
     } else {
       assessment_data
     }

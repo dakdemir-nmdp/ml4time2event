@@ -16,13 +16,29 @@ t2edata_split<-function(data, ...){
 #'
 t2emodel_data_recipe_init<-function(timevar, eventvar, expvar,idvars,  traindata){
 
-  frml<-as.formula(paste(paste(timevar, eventvar, sep="+"),paste(expvar, collapse="+"), sep="~") )
-  # Ensure subsetting returns a data.frame, not a vector
+  # Initialize recipe with all data but mark outcomes as "outcomes" role
+  # This ensures they are not modified by the recipe steps
   recipe_vars <- c(timevar, eventvar, expvar, idvars)
-  # Initialize recipe with the full training data
-  out<-recipes::recipe(frml,
-                       data = traindata) # Use full traindata for initialization
-  out$vars <- recipe_vars # Restore custom attribute assignment
+  
+  out <- recipes::recipe(traindata) %>%
+    recipes::update_role(tidyselect::all_of(c(timevar, eventvar)), 
+                         new_role = "outcome")
+  
+  # Add ID role if there are ID variables
+  if (length(idvars) > 0 && idvars[1] != "") {
+    out <- out %>%
+      recipes::update_role(tidyselect::all_of(idvars), 
+                           new_role = "id")
+  }
+  
+  # Update predictor role
+  if (length(expvar) > 0) {
+    out <- out %>%
+      recipes::update_role(tidyselect::all_of(expvar), 
+                           new_role = "predictor")
+  }
+  
+  out$vars <- recipe_vars
   return(out)
 }
 
@@ -34,20 +50,20 @@ t2emodel_data_recipe_init<-function(timevar, eventvar, expvar,idvars,  traindata
 #'
 minimal_data_recipe<-function(model_recipe, pmiss=.3, pother=.05,dummy=TRUE, onehot=FALSE){
   vars<-model_recipe$vars
+  
   if (dummy){
   out<-model_recipe %>%
-
     recipes::step_filter_missing(threshold = pmiss) %>%
-  # mean impute numeric variables
+    # mean impute numeric variables - EXCLUDE outcomes
     recipes::step_impute_mean(recipes::all_numeric_predictors()) %>%
-  # convert the additional ingredients variable to dummy variables
+    # convert the additional ingredients variable to dummy variables
     recipes::step_other(threshold = pother)%>%
     recipes::step_impute_mode(recipes::all_nominal_predictors()) %>%
     recipes::step_dummy(recipes::all_nominal_predictors(), one_hot = onehot) %>%
-  # remove predictor variables that are almost the same for every entry
-    recipes::step_nzv(recipes::all_predictors()) %>% # Move nzv before range
-    recipes::step_zv(recipes::all_predictors()) %>% # Add step_zv
-  # rescale all numeric variables except for vanilla, salt and baking powder to lie between 0 and 1
+    # remove predictor variables that are almost the same for every entry
+    recipes::step_nzv(recipes::all_predictors()) %>%
+    recipes::step_zv(recipes::all_predictors()) %>%
+    # rescale all numeric predictors ONLY (exclude outcomes)
     recipes::step_range(recipes::all_numeric_predictors(), min = 0, max = 1)
 
   } else {
@@ -59,9 +75,9 @@ minimal_data_recipe<-function(model_recipe, pmiss=.3, pother=.05,dummy=TRUE, one
      recipes::step_other(threshold = pother)%>%
      recipes::step_impute_mode(recipes::all_nominal_predictors()) %>%
       # remove predictor variables that are almost the same for every entry
-     recipes::step_nzv(recipes::all_predictors()) %>% # Move nzv before range
-     recipes::step_zv(recipes::all_predictors()) %>% # Add step_zv
-      # rescale all numeric variables except for vanilla, salt and baking powder to lie between 0 and 1
+     recipes::step_nzv(recipes::all_predictors()) %>%
+     recipes::step_zv(recipes::all_predictors()) %>%
+      # rescale all numeric variables
      recipes::step_range(recipes::all_numeric_predictors(), min = 0, max = 1)
   }
 

@@ -5,7 +5,7 @@
 library(testthat)
 
 # Load the package
-devtools::load_all()
+# devtools::load_all() # Removed - not needed in test_check environment
 
 # ==============================================================================
 # Test Data Setup
@@ -67,7 +67,9 @@ test_that("CRModel_xgboost fits basic model", {
   ))
 
   expect_equal(model$model_type, "cr_xgboost")
-  expect_s3_class(model$xgb_model, "xgb.Booster")
+  expect_type(model$xgb_model, "list")
+  expect_true("model" %in% names(model$xgb_model))
+  expect_s3_class(model$xgb_model$model, "xgb.Booster")
 
   expect_equal(model$default_event_code, "1")
   expect_equal(model$event_codes, c("1", "2"))
@@ -101,7 +103,8 @@ test_that("CRModel_xgboost handles factor predictors", {
     nrounds = 10
   )
 
-  expect_s3_class(model$xgb_model, "xgb.Booster")
+  expect_type(model$xgb_model, "list")
+  expect_s3_class(model$xgb_model$model, "xgb.Booster")
   expect_true(length(model$feature_names) > length(expvars_numeric))
 })
 

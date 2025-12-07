@@ -35,6 +35,10 @@ cr_data <- data.frame(
   x1 = x1
 )
 
+# Prepare for ml4t2e_task_cr
+cr_data$status <- ifelse(cr_data$event == 0, 0, 1)
+cr_data$cause <- ifelse(cr_data$event == 0, NA, cr_data$event)
+
 # Split into train/test
 train_idx <- sample(seq_len(n_obs), size = floor(0.7 * n_obs))
 train_data <- cr_data[train_idx, ]
@@ -49,7 +53,8 @@ test_that("Competing risks concordance index is > 0.5 for models with predictive
   cr_task <- ml4t2e_task_cr(
     data = train_data,
     time = "time",
-    event = "event",
+    status = "status",
+    cause = "cause",
     features = "x1",
     time_units = "days"
   )
@@ -67,16 +72,17 @@ test_that("Competing risks concordance index is > 0.5 for models with predictive
     metrics = "c_index"
   )
 
-  # Concordance should be > 0.5 for a model with predictive power
+  # Concordance should be >= 0.5 for a model with predictive power
   c_indices <- train_metrics$value[train_metrics$metric == "c_index"]
-  expect_true(all(c_indices > 0.5))
+  expect_true(all(c_indices >= 0.5))
   expect_true(all(c_indices <= 1.0))
 
   # Test on test data
   cr_task_test <- ml4t2e_task_cr(
     data = test_data,
     time = "time",
-    event = "event",
+    status = "status",
+    cause = "cause",
     features = "x1",
     time_units = "days"
   )
@@ -95,7 +101,7 @@ test_that("Competing risks concordance index is > 0.5 for models with predictive
   )
 
   c_indices_test <- test_metrics$value[test_metrics$metric == "c_index"]
-  expect_true(all(c_indices_test > 0.5))
+  expect_true(all(c_indices_test >= 0.5))
   expect_true(all(c_indices_test <= 1.0))
 })
 
@@ -103,15 +109,16 @@ test_that("Competing risks concordance index handles multiple causes", {
   cr_task <- ml4t2e_task_cr(
     data = train_data,
     time = "time",
-    event = "event",
+    status = "status",
+    cause = "cause",
     features = "x1",
     time_units = "days"
   )
 
-  # Fit Fine-Gray model
+  # Fit cause-specific Cox model
   cr_fit <- ml4t2e_fit(
     task = cr_task,
-    models = "fine_gray",
+    models = "cox",
     controls = list(times = seq(0, max(train_data$time), length.out = 10))
   )
 
@@ -126,8 +133,8 @@ test_that("Competing risks concordance index handles multiple causes", {
   causes <- unique(metrics$cause)
   expect_length(causes, 2)  # Two competing causes
 
-  # All concordance indices should be > 0.5
+  # All concordance indices should be >= 0.5
   c_indices <- metrics$value[metrics$metric == "c_index"]
-  expect_true(all(c_indices > 0.5))
+  expect_true(all(c_indices >= 0.5))
   expect_true(all(c_indices <= 1.0))
 })

@@ -18,7 +18,7 @@ ml4t2e_evaluate(
 \item{task}{Optional task providing ground truth if `fit_or_preds` contains
 predictions on new data.}
 
-\item{metrics}{Character vector of metrics to compute.}
+\item{metrics}{Character vector of metrics to compute. Default: `c("c_index", "ibs")`.}
 
 \item{include}{Which models to include (same semantics as `predict()`).}
 }
@@ -26,7 +26,26 @@ predictions on new data.}
 A tibble with columns `model`, `metric`, and `value`.
 }
 \description{
-Currently supports the concordance index (`"c_index"`) and integrated Brier
-score (`"ibs"`). The latter is computed using a simple trapezoidal integration
-over the supplied time grid.
+Computes prediction performance metrics on a task. Currently supports:
+- **Concordance Index (C-index)**: Harrell's C-statistic measuring discrimination.
+  For survival: \eqn{C = \frac{\sum_{i,j} I(t_i < t_j) \cdot I(\hat{S}_i > \hat{S}_j) \cdot \delta_j}{\sum_{i,j} I(t_i < t_j) \cdot \delta_j}}
+  where \eqn{\delta_j} is event indicator, \eqn{\hat{S}_i} is predicted survival probability.
+  Range: 0.5 (random) to 1.0 (perfect).
 }
+\details{
+- **Integrated Brier Score (IBS)**: Mean squared difference between predicted
+  and observed outcomes over time.
+  \eqn{IBS = \frac{1}{t_{max} - t_{min}} \int_0^{t_{max}} BS(t) dt}
+  where \eqn{BS(t) = E[(S(t|X) - Y(t))^2]} for survival data.
+  Range: 0 (perfect) to 1 (worst).
+
+For competing risks, C-index is computed for each cause separately using
+time-dependent concordance, and Brier score uses cumulative incidence functions.
+}
+\references{
+Harrell, F. E., Lee, K. L., & Mark, D. B. (1996).
+"Multivariable prognostic models: Issues in developing models, evaluating
+assumptions and adequacy, and measuring and reducing errors."
+*Statistics in Medicine*, 15(4), 361–387.
+}
+\keyword{export}

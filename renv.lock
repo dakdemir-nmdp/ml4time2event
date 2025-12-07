@@ -1042,15 +1042,13 @@
     },
     "xgboost": {
       "Package": "xgboost",
-      "Version": "1.7.11.1",
-      "Source": "Repository",
-      "Repository": "CRAN"
+      "Version": "3.1.2.1",
+      "Source": "Repository"
     },
     "xml2": {
       "Package": "xml2",
-      "Version": "1.4.1",
-      "Source": "Repository",
-      "Repository": "CRAN"
+      "Version": "1.5.1",
+      "Source": "Repository"
     },
     "yaml": {
       "Package": "yaml",

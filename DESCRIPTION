@@ -49,8 +49,10 @@ Imports:
 Suggests:
     checkmate,
     cmprsk,
+    devtools,
     fastshap,
     forcats,
+    here,
     kernelshap,
     knitr,
     mlr3,

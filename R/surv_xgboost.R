@@ -69,16 +69,21 @@ xgb.train.surv <- function(params = list(), data, label, weight = NULL, nrounds,
     }
   }
 
-  # Store the optimized baseline hazard in the model object
-  xgboost_model$baseline_hazard <- baseline_hazard
-  class(xgboost_model) <- c("xgb.Booster.surv", class(xgboost_model)) # Add specific class
-  return(xgboost_model)
+  # Store the optimized baseline hazard in a wrapper object
+  # We cannot modify the xgboost_model directly if it is an ALTREP object
+  result <- list(
+    model = xgboost_model,
+    baseline_hazard = baseline_hazard
+  )
+  class(result) <- c("xgb.Booster.surv", "list") 
+  return(result)
 }
 
 #' @noRd
 predict.xgb.Booster.surv <- function(object, newdata, type = "risk", times = NULL) {
   # Predict the linear predictor (log hazard ratio) using the base xgboost model
-  lp <- xgboost:::predict.xgb.Booster(object, newdata) # Ensure calling the base predict method
+  # object is now a wrapper list containing 'model'
+  lp <- xgboost:::predict.xgb.Booster(object$model, newdata) # Ensure calling the base predict method
 
   if (type == "risk") {
     return(lp) # Return linear predictor

@@ -116,6 +116,6 @@ autoplot.t2e_explain <- function(object,
   )) +
     ggplot2::geom_col(position = "dodge") +
     ggplot2::coord_flip() +
-    ggplot2::labs(x = "Feature", y = "Importance (Δ c-index)", fill = "Model") +
+    ggplot2::labs(x = "Feature", y = "Importance (\u0394 c-index)", fill = "Model") +
     ggplot2::theme_minimal()
 }

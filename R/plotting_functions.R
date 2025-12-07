@@ -1,3 +1,5 @@
+#' @importFrom ggplot2 ggplot aes geom_point geom_text labs theme_minimal theme element_text ggsave
+#' @importFrom grDevices rainbow
 .organize_predictions_for_plotting <- function(predictions_output,
                                               model_type = "survival",
                                               include_ensemble = TRUE) {

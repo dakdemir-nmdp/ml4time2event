@@ -1,5 +1,21 @@
+#' Read Data from Various File Formats
 #'
+#' Reads data from CSV, XLSX, or SAS formats and converts column names to lowercase.
 #'
+#' @param file Character. Path to the data file to read.
+#' @param filetype Character. File type - "csv", "xlsx", or "sas7bdat". Default is "csv".
+#' @param ... Additional arguments passed to the underlying read function.
+#'
+#' @return A data frame with column names converted to lowercase.
+#' @export
+#'
+#' @examples
+#' \dontrun{
+#'   # Read CSV file
+#'   data <- readData("mydata.csv")
+#'   # Read XLSX file
+#'   data <- readData("mydata.xlsx", filetype = "xlsx")
+#' }
 readData <- function(file = NULL, filetype="csv",...) {
   if (is.null(file)) {
     stop("Provide file location using the 'file' argument.")

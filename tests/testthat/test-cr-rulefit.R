@@ -1,5 +1,5 @@
 library(testthat)
-library(here)
+# library(here) # Removed
 library(survival) # For Surv object
 
 context("Testing cr_rulefit functions")

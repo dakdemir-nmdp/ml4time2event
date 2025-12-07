@@ -11,7 +11,8 @@ ml4t2e_fit(
   recipe = NULL,
   resampling = NULL,
   seed = NULL,
-  controls = list()
+  controls = list(),
+  conformal_calibration = NULL
 )
 }
 \arguments{
@@ -20,10 +21,16 @@ ml4t2e_fit(
 \item{models}{Character vector of engine names to fit. Use
 `ml4t2e_list_models()` to discover available options.}
 
-\item{ensemble}{Controls ensembling strategy. Currently `"auto"` and `TRUE`
-are treated as aliases for stacking; `"simple"` performs an unweighted
-average. Set to `FALSE` to skip ensembling. (Only `FALSE` is implemented in
-this initial refactor.)}
+\item{ensemble}{Character or logical; controls ensembling strategy:
+- `FALSE` or `"none"`: No ensembling; returns individual model predictions only.
+- `"simple"`: Unweighted average of predictions across models. **Currently the only implemented strategy.**
+- `"auto"`, `TRUE`: Alias for `"simple"` (stacking not yet implemented; falls back with warning).
+- `"stack"`: Planned for future release; currently falls back to `"simple"` with a warning.
+
+Default: `FALSE`.
+
+**Note**: When ensemble is enabled, model predictions are combined before metrics calculation.
+All specified models are still trained.}
 
 \item{recipe}{Optional `recipes` recipe for preprocessing. Not yet supported
 in this refactor; placeholder for future work.}
@@ -34,6 +41,9 @@ in this refactor; placeholder for future work.}
 
 \item{controls}{Named list of engine-specific parameter lists. Use entries
 like `controls = list(cox = list(penalized = TRUE))`.}
+
+\item{conformal_calibration}{Optional numeric value between 0 and 1. If provided,
+specifies the fraction of data to use for conformal calibration.}
 }
 \value{
 An object of class `t2e_fit`.

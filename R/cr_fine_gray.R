@@ -116,9 +116,8 @@ CRModel_FineGray <- function(data, expvars, timevar, eventvar, event_codes = NUL
     )
     model_data$cov <- I(cov)  # I() prevents data.frame from splitting matrix into columns
     # Explicitly set failcode and cencode for Crisk
-    censor_code <- min(XYTrain[[eventvar]], na.rm = TRUE)
     fastcmprsk::fastCrrp(
-      fastcmprsk::Crisk(ftime, fstatus, failcode = failcode, cencode = censor_code) ~ cov,
+      fastcmprsk::Crisk(ftime, fstatus, failcode = failcode, cencode = min(XYTrain[[eventvar]], na.rm = TRUE)) ~ cov,
       data = model_data,
       lambda = 0.01,
       alpha = 0.5,
@@ -265,16 +264,22 @@ Predict_CRModel_FineGray <- function(modelout, newdata, new_times = NULL, event_
 
   # Apply SVD transformation
   n_components <- min(c(20, ncol(covmat_scaled)))
-  Feat <- (covmat_scaled %*% modelout$loadings)[, 1:n_components]
+  Feat <- (covmat_scaled %*% modelout$loadings)[, 1:n_components, drop = FALSE]
 
   # Get baseline cumulative hazard from the model
   # The model provides Breslow jumps at specific times
-  baseline_times <- modelout$fg_model$breslowJump[, 1]
-  baseline_haz <- modelout$fg_model$breslowJump[, 2]
+  breslow <- modelout$fg_model$breslowJump
+  if (is.null(breslow) || !is.matrix(breslow) || nrow(breslow) == 0) {
+    baseline_times <- numeric(0)
+    baseline_haz <- numeric(0)
+  } else {
+    baseline_times <- as.numeric(breslow[, 1])
+    baseline_haz <- as.numeric(breslow[, 2])
+  }
 
   # Compute CIF for each observation
-  n_obs <- nrow(Feat)
-  cif_matrix <- matrix(NA, nrow = length(baseline_times) + 1, ncol = n_obs)
+  n_obs <- as.integer(nrow(Feat))
+  cif_matrix <- matrix(NA_real_, nrow = as.integer(length(baseline_times) + 1L), ncol = n_obs)
 
   # Time 0 has CIF = 0
   cif_matrix[1, ] <- 0

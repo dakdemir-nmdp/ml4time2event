@@ -134,21 +134,25 @@ cifMatInterpolaltor <- function(probsMat, times, new_times, enforce_monotonicity
     zero_indices <- which(new_times == 0)
     
     # Interpolate to new times with robust error handling
-    interp_probs <- tryCatch({
-      stats::approx(
-        x = times_aug,
-        y = probs_aug,
-        xout = new_times,
-        method = "linear",
-        yleft = 0,
-        yright = if (all(is.na(probs_aug))) NA else utils::tail(probs_aug[!is.na(probs_aug)], 1),
-        rule = 2,
-        ties = "ordered"
-      )$y
-    }, error = function(e) {
-      warning("Interpolation failed for observation ", i, ": ", e$message)
-      rep(NA_real_, length(new_times))
-    })
+    if (length(times_aug) < 2) {
+      interp_probs <- rep(probs_aug[1], length(new_times))
+    } else {
+      interp_probs <- tryCatch({
+        stats::approx(
+          x = times_aug,
+          y = probs_aug,
+          xout = new_times,
+          method = "linear",
+          yleft = 0,
+          yright = if (all(is.na(probs_aug))) NA else utils::tail(probs_aug[!is.na(probs_aug)], 1),
+          rule = 2,
+          ties = "ordered"
+        )$y
+      }, error = function(e) {
+        warning("Interpolation failed for observation ", i, ": ", e$message)
+        rep(NA_real_, length(new_times))
+      })
+    }
     
     # Force time 0 to have CIF value exactly 0
     if (length(zero_indices) > 0) {

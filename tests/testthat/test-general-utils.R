@@ -1,11 +1,11 @@
 library(testthat)
-library(here)
+# library(here) # Removed
 # library(data.table) # Removed
 library(partykit) # For listrules tests
 
 # Assuming the functions are available in the environment
 # Use here::here for robustness
-source(here::here("R/general_utils.R"))
+# source(here::here("R/general_utils.R")) # Removed - functions should be available in package environment
 
 context("Testing general_utils functions")
 

@@ -1,3 +1,9 @@
+# Suppress R CMD check NOTEs about variables used in NSE contexts
+utils::globalVariables(c(
+  "shap_value", "feature_value_norm", "feature", "feature_value",
+  "component", "value", "color_value_norm"
+))
+
 #'
 #'
 #'
@@ -114,6 +120,7 @@ ml4t2e_shap_importance <- function(shap_result,
     plot_data$feature <- factor(plot_data$feature,
                                  levels = rev(selected_features))
 
+    # Updated ggplot2 code to ensure variables are properly referenced
     p <- ggplot2::ggplot(plot_data,
                          ggplot2::aes(x = shap_value, y = feature, color = feature_value_norm)) +
       ggplot2::geom_jitter(alpha = 0.6, height = 0.2, size = 2) +
@@ -445,3 +452,4 @@ ml4t2e_shap_waterfall <- function(shap_result,
 
   return(p)
 }
+

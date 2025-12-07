@@ -1,5 +1,5 @@
 library(testthat)
-library(here)
+# library(here) # Removed
 # library(data.table) # Removed
 library(stats) # For model.matrix, cor
 # Conditional loading/skipping for dependencies
@@ -9,7 +9,7 @@ library(stats) # For model.matrix, cor
 
 # Assuming the functions are available in the environment
 # Use here::here for robustness
-source(here::here("R/data_summary.R"))
+# source(here::here("R/data_summary.R")) # Removed - functions should be available in package environment
 
 context("Testing data_summary functions")
 
