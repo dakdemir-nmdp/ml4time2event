@@ -338,7 +338,7 @@ Predict_CRModel_TTAH <- function(modelout, newdata, new_times = NULL, event_of_i
   if (!is.null(new_times)) {
     SortedTimes <- sort(unique(new_times))
     cif_interp_list <- lapply(seq_len(dim(CauseCIF_array)[3]), function(idx) {
-      cifMatInterpolaltor(
+      cifMatInterpolator(
         probsMat = CauseCIF_array[, , idx],
         times = Times,
         new_times = SortedTimes

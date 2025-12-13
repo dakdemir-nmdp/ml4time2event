@@ -7,10 +7,12 @@
 timedepConcordanceCR(
   SurvObj,
   Predictions,
-  time,
-  cause = 1,
+  eval_times = NULL,
+  cause,
   TestMat = NULL,
-  pred_times = NULL
+  pred_times = NULL,
+  time = NULL,
+  cens_model = NULL
 )
 }
 \arguments{
@@ -18,13 +20,13 @@ timedepConcordanceCR(
 
 \item{Predictions}{Matrix of predicted CIFs (rows = times, cols = observations)}
 
-\item{time}{Scalar evaluation time}
-
 \item{cause}{Integer cause of interest (default: 1)}
 
 \item{TestMat}{Optional test matrix (currently unused)}
 
 \item{pred_times}{Numeric vector of time grid from predictions}
+
+\item{time}{Scalar evaluation time}
 }
 \value{
 Scalar C-index value at specified time, or NA if no pairs comparable

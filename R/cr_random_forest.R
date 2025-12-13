@@ -259,7 +259,7 @@ Predict_CRModel_RF <- function(modelout, newdata, new_times = NULL, event_of_int
     }
     new_times <- sort(unique(new_times))
 
-    result_cifs <- cifMatInterpolaltor(
+    result_cifs <- cifMatInterpolator(
       probsMat = cif_time_obs,
       times = times_with_t0,
       new_times = new_times

@@ -734,40 +734,45 @@ ml4t2e_evaluate <- function(fit_or_preds,
 .integrated_brier <- function(predictions, task_df, id_col, time_col, event_col) {
   times <- sort(unique(predictions$time))
   base_preds <- as.data.frame(predictions[, c("id", "time", "surv")])
-  surv_mat <- stats::reshape(
+
+  # Reshape to wide: One row per ID, one column per time
+  surv_mat_wide <- stats::reshape(
     base_preds,
     idvar = "id",
     timevar = "time",
     direction = "wide"
   )
-  colnames(surv_mat) <- sub("^surv\\.", "", colnames(surv_mat))
-  surv_mat <- surv_mat[match(task_df[[id_col]], surv_mat$id), , drop = FALSE]
-  surv_mat <- surv_mat[, -1, drop = FALSE]
-  surv_mat <- as.matrix(surv_mat)
 
-  status <- task_df[[event_col]]
-  time <- task_df[[time_col]]
+  # Clean column names (remove "surv.")
+  colnames(surv_mat_wide) <- sub("^surv\\.", "", colnames(surv_mat_wide))
 
-  brier_values <- numeric(length(times))
-  for (i in seq_along(times)) {
-    t <- times[i]
-    surv_t <- surv_mat[, i]
-    at_risk <- (time > t) | (time <= t & status == 1)
-    valid_idx <- at_risk & !is.na(surv_t)
+  # Ensure alignment with task_df IDs
+  id_map <- match(task_df[[id_col]], surv_mat_wide$id)
+  surv_mat_wide <- surv_mat_wide[id_map, , drop = FALSE]
 
-    if (!any(valid_idx)) {
-      brier_values[i] <- NA_real_
-      next
-    }
+  # Remove ID column
+  # Identify numeric columns corresponding to times
+  # (reshape keeps id column)
+  surv_mat <- as.matrix(surv_mat_wide[, -1, drop = FALSE])
 
-    observed <- ifelse(time[valid_idx] <= t & status[valid_idx] == 1, 0, 1)
-    brier_values[i] <- mean((surv_t[valid_idx] - observed)^2, na.rm = TRUE)
-  }
-  valid_brier <- !is.na(brier_values)
-  if (sum(valid_brier) < 2) {
-    return(if (any(valid_brier)) brier_values[valid_brier][1] else NA_real_)
-  }
-  pracma::trapz(times[valid_brier], brier_values[valid_brier])
+  # BrierScore expects: rows = times, cols = observations
+  # Current: rows = observations, cols = times
+  # Transpose
+  surv_mat_t <- t(surv_mat)
+
+  # Extract observed data
+  obstimes <- task_df[[time_col]]
+  obsevents <- task_df[[event_col]]
+
+  # Call the IPCW-corrected Integrated Brier Score
+  # We use the predicted times as evaluation times for integration
+  integratedBrier(
+    predsurv = surv_mat_t,
+    pred_times = times,
+    obstimes = obstimes,
+    obsevents = obsevents,
+    eval_times = times
+  )
 }
 
 .evaluate_competing_risk <- function(predictions, task, metrics) {

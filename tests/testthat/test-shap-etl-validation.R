@@ -305,7 +305,7 @@ test_that("Age SHAP values have expected sign for CR models", {
   # Calculate SHAP for subset with age variation
   explain_data <- bmt_small[1:20, ]
   shap_result <- ml4t2e_calculate_shap(
-    pipeline = pipeline,
+    object = pipeline,
     data = explain_data,
     time_horizon = 100,
     nsim = 5
@@ -422,7 +422,7 @@ test_that("SHAP additivity holds for CR models (prediction = baseline + sum(SHAP
   )
 
   shap_result <- ml4t2e_calculate_shap(
-    pipeline = pipeline,
+    object = pipeline,
     data = bmt_small[1:10, ],
     time_horizon = 100,
     nsim = 5

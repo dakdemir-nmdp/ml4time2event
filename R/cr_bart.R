@@ -3,9 +3,8 @@
 #'
 #'
 CRModel_BART <- function(data, expvars, timevar, eventvar, event_codes = NULL,
-                        K = 10, ntree = 100, ndpost = 1000, nskip = 100,
-                        keepevery = 10, verbose = FALSE) {
-
+                         K = 10, ntree = 100, ndpost = 1000, nskip = 100,
+                         keepevery = 10, verbose = FALSE) {
   # ============================================================================
   # Input Validation
   # ============================================================================
@@ -23,7 +22,7 @@ CRModel_BART <- function(data, expvars, timevar, eventvar, event_codes = NULL,
   }
   missing_vars <- setdiff(expvars, colnames(data))
   if (length(missing_vars) > 0) {
-    stop("The following 'expvars' not found in data: ", paste(missing_vars, collapse=", "))
+    stop("The following 'expvars' not found in data: ", paste(missing_vars, collapse = ", "))
   }
   if (!is.null(event_codes) && length(event_codes) == 0) {
     stop("Input 'event_codes' must be NULL or a non-empty vector.")
@@ -46,14 +45,18 @@ CRModel_BART <- function(data, expvars, timevar, eventvar, event_codes = NULL,
   }
 
   if (!event_codes %in% available_events) {
-    stop("Requested event code ", event_codes, " not present in training data. Available codes: ",
-         paste(available_events, collapse = ", "))
+    stop(
+      "Requested event code ", event_codes, " not present in training data. Available codes: ",
+      paste(available_events, collapse = ", ")
+    )
   }
 
   event_code_numeric <- suppressWarnings(as.numeric(event_codes))
   if (is.na(event_code_numeric)) {
-    stop("BART competing risks requires numeric event codes. Unable to coerce '",
-         event_codes, "' to numeric.")
+    stop(
+      "BART competing risks requires numeric event codes. Unable to coerce '",
+      event_codes, "' to numeric."
+    )
   }
 
   # ============================================================================
@@ -86,13 +89,13 @@ CRModel_BART <- function(data, expvars, timevar, eventvar, event_codes = NULL,
             x.train = x_train,
             times = times_train,
             delta = delta_train,
-            x.test = x_train,  # Include training data for predictions
+            x.test = x_train, # Include training data for predictions
             K = K,
             ntree = ntree,
             ndpost = ndpost,
             nskip = nskip,
             keepevery = keepevery,
-            numcut = 2  # Small number of cuts for speed
+            numcut = 2 # Small number of cuts for speed
           ))
         } else {
           bart_fit <- NULL
@@ -101,13 +104,13 @@ CRModel_BART <- function(data, expvars, timevar, eventvar, event_codes = NULL,
               x.train = x_train,
               times = times_train,
               delta = delta_train,
-              x.test = x_train,  # Include training data for predictions
+              x.test = x_train, # Include training data for predictions
               K = K,
               ntree = ntree,
               ndpost = ndpost,
               nskip = nskip,
               keepevery = keepevery,
-              numcut = 2  # Small number of cuts for speed
+              numcut = 2 # Small number of cuts for speed
             ))
           }))
           bart_fit
@@ -164,7 +167,6 @@ CRModel_BART <- function(data, expvars, timevar, eventvar, event_codes = NULL,
 #'
 #'
 Predict_CRModel_BART <- function(modelout, newdata, new_times = NULL, event_of_interest = NULL) {
-
   # ============================================================================
   # Input Validation
   # ============================================================================
@@ -190,8 +192,10 @@ Predict_CRModel_BART <- function(modelout, newdata, new_times = NULL, event_of_i
   }
 
   if (!identical(event_of_interest, modelout$default_event_code)) {
-    stop("BART models can only predict for the event they were trained on (event code = ",
-         modelout$default_event_code, "). Requested event code: ", event_of_interest)
+    stop(
+      "BART models can only predict for the event they were trained on (event code = ",
+      modelout$default_event_code, "). Requested event code: ", event_of_interest
+    )
   }
 
   # ============================================================================
@@ -211,16 +215,20 @@ Predict_CRModel_BART <- function(modelout, newdata, new_times = NULL, event_of_i
           new_levels <- levels(newdata_prepared[[var]])
           extra_levels <- setdiff(new_levels, training_levels)
           if (length(extra_levels) > 0) {
-            warning("Factor '", var, "' has new levels in newdata: ",
-                    paste(extra_levels, collapse = ", "),
-                    ". These will be set to NA.")
+            warning(
+              "Factor '", var, "' has new levels in newdata: ",
+              paste(extra_levels, collapse = ", "),
+              ". These will be set to NA."
+            )
           }
           newdata_prepared[[var]] <- factor(newdata_prepared[[var]],
-                                            levels = training_levels)
+            levels = training_levels
+          )
         } else if (is.character(newdata_prepared[[var]])) {
           # Convert character to factor with training levels
           newdata_prepared[[var]] <- factor(newdata_prepared[[var]],
-                                            levels = training_levels)
+            levels = training_levels
+          )
         }
       }
     }
@@ -233,17 +241,13 @@ Predict_CRModel_BART <- function(modelout, newdata, new_times = NULL, event_of_i
   x_test <- as.matrix(stats::model.matrix(~ -1 + ., data = newdata_prepared))
 
   # Prepare BART prediction structure
-  # Note: BART crisk.pre.bart expects duplicated test data for some reason
-  # (this seems to be a BART package requirement)
-  test_duplicated <- rbind(x_test, x_test)
-
   pre <- BART::crisk.pre.bart(
     time = modelout$times_train,
     delta = modelout$delta_train,
     x.train = BART::bartModelMatrix(modelout$x_train),
-    x.test = BART::bartModelMatrix(test_duplicated),
+    x.test = BART::bartModelMatrix(x_test),
     x.train2 = BART::bartModelMatrix(modelout$x_train),
-    x.test2 = BART::bartModelMatrix(test_duplicated),
+    x.test2 = BART::bartModelMatrix(x_test),
     K = modelout$bart_model$K
   )
 
@@ -253,25 +257,18 @@ Predict_CRModel_BART <- function(modelout, newdata, new_times = NULL, event_of_i
   # Extract CIF predictions
   # pred$cif.test.mean is organized as [obs1_time1, obs1_time2, ..., obs1_timeK, obs2_time1, ...]
   # We need to reshape it to [observations, times]
-  N <- nrow(x_test)  # Number of actual test observations
-  K <- modelout$bart_model$K  # Number of time points
-  
+  N <- nrow(x_test) # Number of actual test observations
+  K <- modelout$bart_model$K # Number of time points
+
   total_len <- length(pred$cif.test.mean)
   expected_len <- N * K
-  if (total_len < expected_len) {
-    stop("Unexpected length of BART CIF predictions. Expected at least ", expected_len, " values, got ", total_len, ".")
-  } else if (total_len > expected_len) {
-    duplication_factor <- total_len / expected_len
-    if (!duplication_factor %in% c(2, 1)) {
-      warning("Unexpected duplication factor (", duplication_factor, ") in BART predictions; using first N*K entries.")
-    }
+  if (total_len != expected_len) {
+    stop("Unexpected length of BART CIF predictions. Expected ", expected_len, " values, got ", total_len, ".")
   }
 
-  # cif.test.mean often includes duplicated test rows; retain only the first N*K entries
-  cif_vector <- pred$cif.test.mean[seq_len(expected_len)]
-  
   # Reshape to matrix [observations, times]
-  cif_matrix <- matrix(cif_vector, nrow = N, ncol = K, byrow = TRUE)
+  cif_matrix <- matrix(pred$cif.test.mean, nrow = N, ncol = K, byrow = TRUE)
+
 
   # Convert to time-by-observation orientation and add time 0 with CIF = 0
   cif_time_obs <- t(cif_matrix)
@@ -290,7 +287,7 @@ Predict_CRModel_BART <- function(modelout, newdata, new_times = NULL, event_of_i
     }
     new_times <- sort(unique(new_times))
 
-    result_cifs <- cifMatInterpolaltor(
+    result_cifs <- cifMatInterpolator(
       probsMat = cif_time_obs,
       times = times_with_t0,
       new_times = new_times

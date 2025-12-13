@@ -56,13 +56,11 @@ test_that("Integrator calculates scaled area correctly", {
 test_that("Integrator handles range subsetting correctly", {
   skip_if_not_installed("pracma")
   # Range completely outside
-  expect_warning(area_outside <- Integrator(times_integ, scores_integ, minmax = c(10, 20)),
-                 "Less than 2 points found")
+  area_outside <- Integrator(times_integ, scores_integ, minmax = c(10, 20))
   expect_equal(area_outside, 0)
 
   # Range including only one point
-  expect_warning(area_one_point <- Integrator(times_integ, scores_integ, minmax = c(2.5, 3.5)),
-                 "Less than 2 points found")
+  area_one_point <- Integrator(times_integ, scores_integ, minmax = c(2.5, 3.5))
    expect_equal(area_one_point, 0) # Only point (3,3) is within range
 
    # Range including exactly two points

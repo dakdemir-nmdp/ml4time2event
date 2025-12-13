@@ -518,7 +518,7 @@ Predict_CRModel_SurvReg <- function(modelout, newdata, new_times = NULL, event_o
   }
 
   if (!use_native_times) {
-    interpolated <- cifMatInterpolaltor(
+    interpolated <- cifMatInterpolator(
       probsMat = cif_matrix,
       times = surv_times,
       new_times = new_times

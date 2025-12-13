@@ -3,7 +3,6 @@
                                           pred_times = NULL,
                                           default_time = NULL,
                                           context = "Predictions") {
-
   original_obj <- Predictions
 
   if (is.data.frame(Predictions)) {
@@ -125,71 +124,128 @@
 #'
 #' @keywords internal
 #'
-timedepConcordanceCR<-function(SurvObj, Predictions, time, cause=1, TestMat=NULL, pred_times = NULL){
+timedepConcordanceCR <- function(SurvObj, Predictions, eval_times = NULL, cause, TestMat = NULL, pred_times = NULL, time = NULL, cens_model = NULL) {
+  if (!is.null(time) && is.null(eval_times)) {
+    message("Parameter 'time' is deprecated. Please use 'eval_times' instead.")
+    eval_times <- time
+  }
+  if (is.null(eval_times)) rlang::abort("'eval_times' must be specified")
+
   # Input validation
   if (!inherits(SurvObj, "Surv")) {
     rlang::abort("'SurvObj' must be a Surv object")
   }
-  if (!is.numeric(time) || length(time) != 1) {
-    rlang::abort("'time' must be a single numeric value")
-  }
-  if (missing(cause)) {
-    rlang::abort("argument 'cause' is missing, with no default")
+  if (!is.numeric(eval_times)) {
+    rlang::abort("'eval_times' must be numeric")
   }
   if (!is.numeric(cause) || length(cause) != 1) {
     rlang::abort("'cause' must be a single numeric value")
   }
 
-  # Extract time and event from Surv object
   obstimes <- SurvObj[, "time"]
   obsevents <- SurvObj[, "status"]
-
   n_obs <- length(obstimes)
-  pred_prep <- .cr_prepare_prediction_matrix(
-    Predictions = Predictions,
-    n_obs = n_obs,
-    pred_times = pred_times,
-    default_time = time,
-    context = "Predictions"
-  )
-  pred_row <- .cr_select_prediction_row(
-    pred_matrix = pred_prep$matrix,
-    pred_times = pred_prep$times,
-    eval_time = time,
-    context = "Predictions"
-  )
-  pred_at_time <- pred_row$pred
 
-  event_idx <- which(obsevents == cause & obstimes <= time & !is.na(obsevents))
-  if (length(event_idx) == 0) {
-    return(NA_real_)
+  # Fit Censoring Model
+  if (is.null(cens_model)) {
+    cens_model <- .fit_censoring_km(obstimes, obsevents)
   }
 
-  concordant <- 0
-  total_pairs <- 0
+  # G(T_i) for all subjects
+  G_Ti <- .get_censoring_probs(cens_model, obstimes)
+  G_Ti <- pmax(G_Ti, 1e-5)
 
-  for (i in event_idx) {
-    if (is.na(pred_at_time[i])) next
-    for (j in seq_along(obstimes)) {
-      if (i == j) next
-      if (is.na(pred_at_time[j])) next
-      if (obstimes[j] < obstimes[i]) next
-      if (obsevents[j] == cause && obstimes[j] <= obstimes[i]) next
-      total_pairs <- total_pairs + 1
-      # Standard concordance: higher risk = earlier event
-      if (pred_at_time[i] > pred_at_time[j]) {
-        concordant <- concordant + 1
-      } else if (pred_at_time[i] == pred_at_time[j]) {
-        concordant <- concordant + 0.5
-      }
+  # Function for single time point
+  calc_auc_single <- function(t) {
+    # Get Predictions at t
+    pred_prep <- .cr_prepare_prediction_matrix(
+      Predictions = Predictions,
+      n_obs = n_obs,
+      pred_times = pred_times,
+      default_time = t,
+      context = "Predictions"
+    )
+    pred_row <- .cr_select_prediction_row(
+      pred_matrix = pred_prep$matrix,
+      pred_times = pred_prep$times,
+      eval_time = t,
+      context = "Predictions"
+    )
+    CIF_hat <- pred_row$pred
+
+    # Define Cases (Event 1 <= t)
+    idx_cases <- which(obsevents == cause & obstimes <= t)
+
+    # Define Controls (Not Case, but Observed)
+    # 1. Survivors > t
+    # 2. Competing Events <= t (Event != cause & Event != 0)
+    # Assumes obsevents contain 0=Censored, 1..k=Events.
+
+    idx_surv <- which(obstimes > t)
+    idx_comp <- which(obsevents != 0 & obsevents != cause & obstimes <= t)
+    idx_controls <- c(idx_surv, idx_comp)
+
+    if (length(idx_cases) == 0 || length(idx_controls) == 0) {
+      return(NA_real_)
     }
+
+    # Weights
+    w_cases <- 1 / G_Ti[idx_cases]
+
+    w_controls <- numeric(length(idx_controls))
+
+    # Fill weights for controls
+    # Survivors: 1/G(t)
+    G_t <- .get_censoring_probs(cens_model, t)
+    G_t <- max(G_t, 1e-5)
+
+    # Map back to indices for vectorized fill? easier to just iterate or subset
+    # Let's rebuild weight vector aligned with idx_controls
+
+    # Create temp dataframe or vectors
+    ctrl_times <- obstimes[idx_controls]
+    # ctrl_status <- obsevents[idx_controls] # Not strictly needed for weights, but good for context
+    ctrl_weights <- numeric(length(idx_controls))
+
+    # For Survivors (> t): Use G(t)
+    is_surv <- ctrl_times > t
+    ctrl_weights[is_surv] <- 1 / G_t
+
+    # For Competing (<= t): Use G(T)
+    # They are observed events (censoring status 1 for C).
+    is_comp <- !is_surv
+    ctrl_weights[is_comp] <- 1 / G_Ti[idx_controls[is_comp]]
+
+    w_controls <- ctrl_weights
+
+    # Comparison
+    # Cases have HIGH CIF (Prediction). Controls have LOW CIF.
+    # Concordant if CIF_case > CIF_control.
+
+    risk_cases <- CIF_hat[idx_cases]
+    risk_controls <- CIF_hat[idx_controls]
+
+    # Vectorized AUC
+    comp_mat <- outer(risk_cases, risk_controls, function(r_c, r_ctrl) {
+      ifelse(r_c > r_ctrl, 1, ifelse(r_c == r_ctrl, 0.5, 0))
+    })
+
+    w_mat <- outer(w_cases, w_controls, "*")
+
+    num <- sum(comp_mat * w_mat, na.rm = TRUE)
+    den <- sum(w_mat, na.rm = TRUE)
+
+    if (den == 0) {
+      return(NA_real_)
+    }
+    num / den
   }
 
-  if (total_pairs == 0) {
-    return(NA_real_)
+  if (length(eval_times) > 1) {
+    sapply(eval_times, calc_auc_single)
+  } else {
+    calc_auc_single(eval_times[1])
   }
-
-  concordant / total_pairs
 }
 
 
@@ -221,19 +277,18 @@ timedepConcordanceCR<-function(SurvObj, Predictions, time, cause=1, TestMat=NULL
 #'
 #' @keywords internal
 #'
-BrierScoreCR <- function(SurvObj, Predictions, eval_times = NULL, cause = 1, TestMat = NULL, pred_times = NULL, time = NULL) {
-  
+BrierScoreCR <- function(SurvObj, Predictions, eval_times = NULL, cause = 1, TestMat = NULL, pred_times = NULL, time = NULL, cens_model = NULL) {
   # Handle backward compatibility: support both 'time' and 'eval_times'
   if (!is.null(time) && is.null(eval_times)) {
     # Warn user about deprecation
     message("Parameter 'time' is deprecated. Please use 'eval_times' instead.")
     eval_times <- time
   }
-  
+
   if (is.null(eval_times)) {
     rlang::abort("'eval_times' must be specified (or 'time' for backward compatibility)")
   }
-  
+
   # Input validation
   if (!inherits(SurvObj, "Surv")) {
     rlang::abort("'SurvObj' must be a Surv object")
@@ -250,69 +305,82 @@ BrierScoreCR <- function(SurvObj, Predictions, eval_times = NULL, cause = 1, Tes
   obsevents <- SurvObj[, "status"]
 
   n_obs <- length(obstimes)
-  
-  # Handle vector of evaluation times - compute Brier score for each
+
+  # Fit or use censoring model
+  if (is.null(cens_model)) {
+    # 0 = censored, 1..k = events.
+    # .fit_censoring_km treats events==0 as the event of interest (censoring).
+    # This works for CR data too.
+    cens_model <- .fit_censoring_km(obstimes, obsevents)
+  }
+
+  # Pre-calculate weigths
+  G_Ti <- .get_censoring_probs(cens_model, obstimes)
+  G_Ti <- pmax(G_Ti, 1e-5)
+
+  # Vectorized Brier Calculation
+  # We loop over eval_times
+
+  calc_brier_single <- function(t) {
+    pred_prep <- .cr_prepare_prediction_matrix(
+      Predictions = Predictions,
+      n_obs = n_obs,
+      pred_times = pred_times,
+      default_time = t,
+      context = "Predictions"
+    )
+    pred_row <- .cr_select_prediction_row(
+      pred_matrix = pred_prep$matrix,
+      pred_times = pred_prep$times,
+      eval_time = t,
+      context = "Predictions"
+    )
+    CIF_hat <- pred_row$pred
+
+    # G(t)
+    G_t <- .get_censoring_probs(cens_model, t)
+    G_t <- pmax(G_t, 1e-5)
+
+    # Weights and Targets
+    # Case 1: T_i <= t, Delta_i != 0 (Any event observed) -> Weight 1/G(Ti)
+    # Case 2: T_i > t (Survivor) -> Weight 1/G(t)
+    # Case 3: T_i <= t, Delta_i == 0 (Censored) -> Weight 0
+
+    weights <- numeric(n_obs)
+
+    # Case 1
+    idx_event_any <- obstimes <= t & obsevents != 0
+    weights[idx_event_any] <- 1 / G_Ti[idx_event_any]
+
+    # Case 2
+    idx_surv <- obstimes > t
+    weights[idx_surv] <- 1 / G_t
+
+    # Target: I(T_i <= t, Delta_i == cause)
+    # 1 if event of interest happened by t
+    # 0 otherwise (survived past t, OR competing event happened by t)
+
+    target <- numeric(n_obs)
+    target[obstimes <= t & obsevents == cause] <- 1
+
+    # Squared Error
+    sq_err <- (target - CIF_hat)^2
+
+    # Weighted Score (exclude NAs in prediction)
+    valid_pred <- !is.na(CIF_hat)
+    if (sum(valid_pred) == 0) {
+      return(NA_real_)
+    }
+
+    score_contrib <- weights[valid_pred] * sq_err[valid_pred]
+    mean(score_contrib)
+  }
+
   if (length(eval_times) > 1) {
-    brier_scores <- sapply(eval_times, function(t) {
-      pred_prep <- .cr_prepare_prediction_matrix(
-        Predictions = Predictions,
-        n_obs = n_obs,
-        pred_times = pred_times,
-        default_time = t,
-        context = "Predictions"
-      )
-      pred_row <- .cr_select_prediction_row(
-        pred_matrix = pred_prep$matrix,
-        pred_times = pred_prep$times,
-        eval_time = t,
-        context = "Predictions"
-      )
-      pred_at_time <- pred_row$pred
-
-      # Only include observations at risk at time t
-      # At risk if: time > t (still at risk) OR (time <= t AND event == cause) (event of interest occurred)
-      # Note: Those with competing events before t are not in the risk set
-      at_risk <- (obstimes > t) | (obstimes <= t & obsevents == cause & !is.na(obsevents))
-      event_indicator <- as.numeric(obsevents == cause & obstimes <= t & !is.na(obsevents))
-      valid_idx <- at_risk & !is.na(pred_at_time)
-      
-      if (!any(valid_idx)) {
-        return(NA_real_)
-      }
-      mean((event_indicator[valid_idx] - pred_at_time[valid_idx])^2)
-    })
-    return(brier_scores)
+    sapply(eval_times, calc_brier_single)
+  } else {
+    calc_brier_single(eval_times[1])
   }
-  
-  # Single evaluation time - return scalar
-  time <- eval_times[1]
-  pred_prep <- .cr_prepare_prediction_matrix(
-    Predictions = Predictions,
-    n_obs = n_obs,
-    pred_times = pred_times,
-    default_time = time,
-    context = "Predictions"
-  )
-  pred_row <- .cr_select_prediction_row(
-    pred_matrix = pred_prep$matrix,
-    pred_times = pred_prep$times,
-    eval_time = time,
-    context = "Predictions"
-  )
-  pred_at_time <- pred_row$pred
-
-  # Only include observations at risk at time t
-  # At risk if: time > t (still at risk) OR (time <= t AND event == cause) (event of interest occurred)
-  # Note: Those with competing events before t are not in the risk set
-  at_risk <- (obstimes > time) | (obstimes <= time & obsevents == cause & !is.na(obsevents))
-  event_indicator <- as.numeric(obsevents == cause & obstimes <= time & !is.na(obsevents))
-  valid_idx <- at_risk & !is.na(pred_at_time)
-  
-  if (!any(valid_idx)) {
-    return(NA_real_)
-  }
-
-  mean((event_indicator[valid_idx] - pred_at_time[valid_idx])^2)
 }
 
 

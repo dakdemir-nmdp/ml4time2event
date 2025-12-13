@@ -28,10 +28,7 @@ Integrator <- function(times, scores, minmax = c(1, 35), scale = FALSE) {
   if (length(timesn) < 2) {
     if (minmax[1] == minmax[2]) {
       return(0)
-    } # Zero width interval
-    # If range is outside strict bounds of times, but valid integration requested,
-    # we might want linear interpolation, but for now returning 0 is safe fallback
-    # to avoid failing.
+    } 
     return(0)
   }
 

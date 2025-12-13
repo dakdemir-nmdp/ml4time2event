@@ -25,12 +25,12 @@ time_points <- c(quantile(train_data$time[train_data$status != 0], 0.25, na.rm =
                  median(train_data$time[train_data$status != 0], na.rm = TRUE),
                  quantile(train_data$time[train_data$status != 0], 0.75, na.rm = TRUE))
 
-# --- Tests for CRModel_BART ---
+# --- Tests for ml4time2event:::CRModel_BART ---
 
-test_that("CRModel_BART fits basic model with correct interface", {
+test_that("ml4time2event:::CRModel_BART fits basic model with correct interface", {
   skip_if_not_installed("BART")
 
-  model_bart <- CRModel_BART(data = train_data, expvars = expvars,
+  model_bart <- ml4time2event:::CRModel_BART(data = train_data, expvars = expvars,
                             timevar = "time", eventvar = "status",
                             ntree = 20, ndpost = 50, nskip = 25)
 
@@ -55,11 +55,11 @@ test_that("CRModel_BART fits basic model with correct interface", {
   expect_length(model_bart$time_range, 2)
 })
 
-test_that("CRModel_BART handles custom event codes", {
+test_that("ml4time2event:::CRModel_BART handles custom event codes", {
   skip_if_not_installed("BART")
 
   # Test with event code = 2
-  model_bart_2 <- CRModel_BART(data = train_data, expvars = expvars,
+  model_bart_2 <- ml4time2event:::CRModel_BART(data = train_data, expvars = expvars,
                                timevar = "time", eventvar = "status",
                                event_codes = 2, ntree = 20, ndpost = 50, nskip = 25)
 
@@ -67,66 +67,66 @@ test_that("CRModel_BART handles custom event codes", {
   expect_s3_class(model_bart_2$bart_model, "criskbart")
 })
 
-test_that("CRModel_BART handles additional parameters", {
+test_that("ml4time2event:::CRModel_BART handles additional parameters", {
   skip_if_not_installed("BART")
 
   # Test with different parameters
-  model_bart_params <- CRModel_BART(data = train_data, expvars = expvars,
+  model_bart_params <- ml4time2event:::CRModel_BART(data = train_data, expvars = expvars,
                                    timevar = "time", eventvar = "status",
                                    K = 5, ntree = 30, ndpost = 50, nskip = 25)
 
   expect_s3_class(model_bart_params$bart_model, "criskbart")
 })
 
-test_that("CRModel_BART validates inputs", {
+test_that("ml4time2event:::CRModel_BART validates inputs", {
   skip_if_not_installed("BART")
 
   # Test missing data
-  expect_error(CRModel_BART(expvars = expvars, timevar = "time", eventvar = "status"),
+  expect_error(ml4time2event:::CRModel_BART(expvars = expvars, timevar = "time", eventvar = "status"),
                "argument \"data\" is missing, with no default")
 
   # Test invalid expvars
-  expect_error(CRModel_BART(data = train_data, expvars = character(0),
+  expect_error(ml4time2event:::CRModel_BART(data = train_data, expvars = character(0),
                            timevar = "time", eventvar = "status"),
                "^(Input )?'expvars' must be a non-empty character vector\\.?$")
 
   # Test missing timevar
-  expect_error(CRModel_BART(data = train_data, expvars = expvars,
+  expect_error(ml4time2event:::CRModel_BART(data = train_data, expvars = expvars,
                            timevar = "nonexistent", eventvar = "status"),
                "^(Input )?'timevar' not found in data.*$")
 
   # Test missing eventvar
-  expect_error(CRModel_BART(data = train_data, expvars = expvars,
+  expect_error(ml4time2event:::CRModel_BART(data = train_data, expvars = expvars,
                            timevar = "time", eventvar = "nonexistent"),
                "^(Input )?'eventvar' not found in data.*$")
 
   # Test missing expvars in data
-  expect_error(CRModel_BART(data = train_data, expvars = c("x1", "nonexistent"),
+  expect_error(ml4time2event:::CRModel_BART(data = train_data, expvars = c("x1", "nonexistent"),
                            timevar = "time", eventvar = "status"),
                "^(The following )?'expvars' not found in data.*$")
 
   # Test invalid event_codes inputs
-  expect_error(CRModel_BART(data = train_data, expvars = expvars,
+  expect_error(ml4time2event:::CRModel_BART(data = train_data, expvars = expvars,
                             timevar = "time", eventvar = "status",
                             event_codes = character(0)),
                "^(Input )?'event_codes' must be NULL or a non-empty vector\\.?$")
 
-  expect_error(CRModel_BART(data = train_data, expvars = expvars,
+  expect_error(ml4time2event:::CRModel_BART(data = train_data, expvars = expvars,
                             timevar = "time", eventvar = "status",
                             event_codes = 999),
                "not present in training data")
 })
 
-# --- Tests for Predict_CRModel_BART ---
+# --- Tests for ml4time2event:::Predict_CRModel_BART ---
 
-test_that("Predict_CRModel_BART returns predictions in correct format", {
+test_that("ml4time2event:::Predict_CRModel_BART returns predictions in correct format", {
   skip_if_not_installed("BART")
 
-  model_bart <- CRModel_BART(data = train_data, expvars = expvars,
+  model_bart <- ml4time2event:::CRModel_BART(data = train_data, expvars = expvars,
                             timevar = "time", eventvar = "status",
                             ntree = 20, ndpost = 50, nskip = 25)
 
-  predictions <- Predict_CRModel_BART(modelout = model_bart, newdata = test_data)
+  predictions <- ml4time2event:::Predict_CRModel_BART(modelout = model_bart, newdata = test_data)
 
   # Check output structure
   expect_type(predictions, "list")
@@ -144,19 +144,19 @@ test_that("Predict_CRModel_BART returns predictions in correct format", {
   expect_true(all(predictions$CIFs[1, ] == 0))
 
   # Requesting unsupported event should error
-  expect_error(Predict_CRModel_BART(modelout = model_bart, newdata = test_data,
+  expect_error(ml4time2event:::Predict_CRModel_BART(modelout = model_bart, newdata = test_data,
                                     event_of_interest = 2),
                "BART models can only predict")
 })
 
-test_that("Predict_CRModel_BART handles custom time points", {
+test_that("ml4time2event:::Predict_CRModel_BART handles custom time points", {
   skip_if_not_installed("BART")
 
-  model_bart <- CRModel_BART(data = train_data, expvars = expvars,
+  model_bart <- ml4time2event:::CRModel_BART(data = train_data, expvars = expvars,
                             timevar = "time", eventvar = "status",
                             ntree = 20, ndpost = 50, nskip = 25)
 
-  predictions <- Predict_CRModel_BART(modelout = model_bart, newdata = test_data,
+  predictions <- ml4time2event:::Predict_CRModel_BART(modelout = model_bart, newdata = test_data,
                                      new_times = time_points)
 
   # Check dimensions match requested time points
@@ -168,28 +168,28 @@ test_that("Predict_CRModel_BART handles custom time points", {
   expect_equal(as.numeric(predictions$Times), as.numeric(sort(time_points)))
 })
 
-test_that("Predict_CRModel_BART validates inputs", {
+test_that("ml4time2event:::Predict_CRModel_BART validates inputs", {
   skip_if_not_installed("BART")
 
-  model_bart <- CRModel_BART(data = train_data, expvars = expvars,
+  model_bart <- ml4time2event:::CRModel_BART(data = train_data, expvars = expvars,
                             timevar = "time", eventvar = "status",
                             ntree = 20, ndpost = 50, nskip = 25)
 
   # Test invalid modelout
-  expect_error(Predict_CRModel_BART(modelout = list(), newdata = test_data),
+  expect_error(ml4time2event:::Predict_CRModel_BART(modelout = list(), newdata = test_data),
                "^(Input )?'event_of_interest' must be a single event code\\.?$")
 
   # Test missing newdata
-  expect_error(Predict_CRModel_BART(modelout = model_bart),
+  expect_error(ml4time2event:::Predict_CRModel_BART(modelout = model_bart),
                "argument \"newdata\" is missing, with no default")
 
   # Test missing variables in newdata
   test_data_missing <- test_data[, -which(names(test_data) == "x1")]
-  expect_error(Predict_CRModel_BART(modelout = model_bart, newdata = test_data_missing),
+  expect_error(ml4time2event:::Predict_CRModel_BART(modelout = model_bart, newdata = test_data_missing),
                "^(The following )?'expvars' are missing in 'newdata':.*$")
 
   # Test invalid new_times
-  expect_error(Predict_CRModel_BART(modelout = model_bart, newdata = test_data,
+  expect_error(ml4time2event:::Predict_CRModel_BART(modelout = model_bart, newdata = test_data,
                                    new_times = c(-1, 1)),
                "^(Input )?'new_times' must be a numeric vector of non-negative values\\.?$")
 })

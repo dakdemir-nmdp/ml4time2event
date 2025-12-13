@@ -4,7 +4,14 @@
 \alias{timedepConcordance}
 \title{Time-Dependent Concordance Index for Survival Analysis}
 \usage{
-timedepConcordance(predsurv, pred_times, obstimes, obsevents, TestMat = NULL)
+timedepConcordance(
+  predsurv,
+  pred_times,
+  obstimes,
+  obsevents,
+  TestMat = NULL,
+  cens_model = NULL
+)
 }
 \arguments{
 \item{predsurv}{Matrix of predicted survival probabilities (rows = times, cols = observations)}

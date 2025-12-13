@@ -1,0 +1,190 @@
+---
+title: "BART Implementation Summary - Quick Reference"
+subtitle: "Key Points for Meeting with Dr. Rodney Sparapani"
+author: "ml4time2event Development Team"
+date: "`r Sys.Date()`"
+output:
+  word_document:
+    toc: false
+  html_document:
+    toc: false
+---
+
+# Overview
+
+We use the **CRAN BART package** (v2.9.9) for time-to-event analysis in ml4time2event:
+- **Survival analysis**: `BART::surv.bart()`
+- **Competing risks**: `BART::crisk.bart()`
+
+---
+
+# Current Implementation
+
+## Survival BART Parameters
+
+```r
+BART::surv.bart(
+  x.train = x.train,
+  times = timevarvec,
+  delta = eventvarvec,
+  x.test = x.train,
+  K = 8,              # Time grid points
+  ntree = 50,         # Number of trees
+  ndpost = 200,       # Posterior draws
+  nskip = 50,         # Burn-in
+  keepevery = 2       # Thinning
+)
+```
+
+## Competing Risks BART Parameters
+
+```r
+BART::crisk.bart(
+  x.train = x_train,
+  times = times_train,
+  delta = delta_train,
+  x.test = x_train,
+  K = 10,             # Time grid points (higher than survival)
+  ntree = 100,        # More trees for complexity
+  ndpost = 1000,      # More posterior draws
+  nskip = 100,        # Longer burn-in
+  keepevery = 10,     # Higher thinning
+  numcut = 2          # Speed optimization
+)
+```
+
+---
+
+# Key Implementation Details
+
+## Survival Predictions
+
+1. **Reshaping**: Convert vector output to matrix with `byrow=TRUE`
+2. **Sorting**: Post-hoc sorting of times (not guaranteed sorted by BART)
+3. **Time Zero**: Prepend S(0) = 1.0
+4. **Interpolation**: Linear interpolation to user-specified times
+
+## Competing Risks Predictions
+
+1. **Test Data Duplication**: `crisk.pre.bart()` requires `rbind(x_test, x_test)`
+2. **Single-Event Models**: One model per event type (not joint)
+3. **CIF Extraction**: Handle potential duplication in output vector
+4. **Time Zero**: Prepend F(0) = 0.0
+
+---
+
+# Top Questions for Dr. Sparapani
+
+## 1. Model Selection (CRITICAL)
+**"For general-purpose time-to-event prediction, should we use `surv.bart`, `abart`, or NFT BART methodology? When should we specifically consider NFT BART?"**
+
+## 2. Hyperparameters
+- Are our defaults appropriate for clinical datasets (100-10,000 patients, 10-100 features)?
+- Should we adjust based on sample size, censoring rate, or dimensionality?
+- Minimum recommended values for `ndpost`, `ntree`, `K`?
+
+## 3. Implementation Validation
+
+### Survival
+- Is vector-to-matrix reshaping with `byrow=TRUE` correct?
+- Should times be sorted before fitting or post-hoc?
+- Is linear interpolation appropriate for BART curves?
+
+### Competing Risks
+- Why does `crisk.pre.bart()` require duplicated test data?
+- Is single-event approach optimal, or should we implement joint modeling?
+- How to handle CIF prediction duplication in output?
+
+## 4. Robustness
+- Common causes of `crisk.bart()` fitting failures?
+- Parameter adjustments to improve stability?
+- Retry logic best practices?
+
+## 5. Performance
+- Scalability to 10,000+ patients, 100+ features?
+- Effective parallelization strategies (`mc.cores`)?
+- Memory-efficient alternatives for large datasets?
+
+---
+
+# Implementation Files
+
+| File | Purpose | Lines |
+|------|---------|-------|
+| `R/surv_bart.R` | Survival BART core functions | 145 |
+| `R/cr_bart.R` | Competing risks BART functions | 311 |
+| `R/model_survival_bart.R` | R6 wrapper for package integration | 164 |
+| `tests/testthat/test-surv-bart.R` | Survival unit tests | 121 |
+| `tests/testthat/test-cr-bart.R` | Competing risks unit tests | 196 |
+
+---
+
+# Known Issues
+
+## Issue 1: Time Ordering
+**Problem**: `bart_model$times` not always sorted  
+**Current Fix**: Post-hoc sorting with `order()`  
+**Question**: Is this the recommended approach?
+
+## Issue 2: Test Data Duplication (CR)
+**Problem**: `crisk.pre.bart()` requires duplicated test data  
+**Current Fix**: `rbind(x_test, x_test)`  
+**Question**: Why is this necessary?
+
+## Issue 3: Occasional Fitting Failures (CR)
+**Problem**: `crisk.bart()` occasionally fails  
+**Current Fix**: Retry logic (up to 4 attempts)  
+**Question**: How to improve stability?
+
+## Issue 4: Single-Event Limitation (CR)
+**Problem**: One model per event type  
+**Current Fix**: Users fit multiple models  
+**Question**: Joint modeling alternatives?
+
+---
+
+# Alternative BART Implementations
+
+| Function | Package | Use Case |
+|----------|---------|----------|
+| `surv.bart` | BART | **Currently using** - Standard survival |
+| `abart` | BART | **Not using** - AFT modeling |
+| NFT BART | nftbart | **Not using** - Heteroskedastic survival |
+| `crisk.bart` | BART | **Currently using** - Competing risks |
+| `recur.bart` | BART | **Not using** - Recurrent events |
+
+---
+
+# Clinical Use Cases
+
+Our package is used for:
+1. Transplant outcome prediction (graft failure, relapse, death)
+2. Competing risks analysis (relapse vs. non-relapse mortality)
+3. Personalized risk scores (individual survival/CIF curves)
+4. Model comparison (BART vs. Cox, RF, XGBoost)
+5. Conformal prediction (uncertainty quantification)
+
+**Question**: BART-specific best practices for these applications?
+
+---
+
+# Next Steps
+
+1. ✅ Document current implementation
+2. ⏳ Meet with Dr. Sparapani
+3. ⏳ Validate/adjust implementation based on feedback
+4. ⏳ Consider adding `abart` and NFT BART options
+5. ⏳ Optimize hyperparameters for clinical datasets
+6. ⏳ Improve robustness and error handling
+
+---
+
+# References
+
+- Sparapani et al. (2016). Nonparametric survival analysis using BART. *Statistics in Medicine*, 35(16), 2741-2753.
+- Sparapani et al. (2020). Nonparametric competing risks analysis using BART. *Statistical Methods in Medical Research*, 29(1), 57-77.
+- BART R Package: https://cran.r-project.org/package=BART
+
+---
+
+**For detailed technical documentation, see**: `BART_Implementation_Details.Rmd`

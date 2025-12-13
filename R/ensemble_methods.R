@@ -4,13 +4,21 @@
 
 survprobMatWeightedAveraging <- function(listprobsMat, weights) {
   # Validate inputs
-  if (length(listprobsMat) == 0) return(NULL)
-  if (length(listprobsMat) == 1) return(listprobsMat[[1]])
+  if (length(listprobsMat) == 0) {
+    return(NULL)
+  }
+  if (length(listprobsMat) == 1) {
+    return(listprobsMat[[1]])
+  }
 
   # Filter out NULL entries
   listprobsMat <- Filter(Negate(is.null), listprobsMat)
-  if (length(listprobsMat) == 0) return(NULL)
-  if (length(listprobsMat) == 1) return(listprobsMat[[1]])
+  if (length(listprobsMat) == 0) {
+    return(NULL)
+  }
+  if (length(listprobsMat) == 1) {
+    return(listprobsMat[[1]])
+  }
 
   # Validate weights
   if (is.null(weights)) {
@@ -36,7 +44,7 @@ survprobMatWeightedAveraging <- function(listprobsMat, weights) {
 
   # Check dimensions consistency and filter if needed
   dims <- lapply(listprobsMat, dim)
-  dim_strings <- sapply(dims, paste, collapse="x")
+  dim_strings <- sapply(dims, paste, collapse = "x")
 
   if (length(unique(dim_strings)) > 1) {
     dim_table <- table(dim_strings)
@@ -51,8 +59,12 @@ survprobMatWeightedAveraging <- function(listprobsMat, weights) {
     }
   }
 
-  if (length(listprobsMat) == 0) return(NULL)
-  if (length(listprobsMat) == 1) return(listprobsMat[[1]])
+  if (length(listprobsMat) == 0) {
+    return(NULL)
+  }
+  if (length(listprobsMat) == 1) {
+    return(listprobsMat[[1]])
+  }
 
   # Create weighted average on cumulative hazard scale
   HazzardArray <- array(dim = c(dim(listprobsMat[[1]]), length(listprobsMat)))
@@ -83,13 +95,21 @@ cifMatWeightedAveraging <- function(listprobsMat, weights, type = "CumHaz") {
     stop("Type must be either 'CumHaz' or 'prob'")
   }
 
-  if (length(listprobsMat) == 0) return(NULL)
-  if (length(listprobsMat) == 1) return(listprobsMat[[1]])
+  if (length(listprobsMat) == 0) {
+    return(NULL)
+  }
+  if (length(listprobsMat) == 1) {
+    return(listprobsMat[[1]])
+  }
 
   # Filter NULL
   listprobsMat <- Filter(Negate(is.null), listprobsMat)
-  if (length(listprobsMat) == 0) return(NULL)
-  if (length(listprobsMat) == 1) return(listprobsMat[[1]])
+  if (length(listprobsMat) == 0) {
+    return(NULL)
+  }
+  if (length(listprobsMat) == 1) {
+    return(listprobsMat[[1]])
+  }
 
   # Validate weights
   if (is.null(weights)) {
@@ -126,8 +146,12 @@ cifMatWeightedAveraging <- function(listprobsMat, weights, type = "CumHaz") {
     }
   }
 
-  if (length(listprobsMat) == 0) return(NULL)
-  if (length(listprobsMat) == 1) return(listprobsMat[[1]])
+  if (length(listprobsMat) == 0) {
+    return(NULL)
+  }
+  if (length(listprobsMat) == 1) {
+    return(listprobsMat[[1]])
+  }
 
   if (type == "CumHaz") {
     HazzardArray <- array(dim = c(dim(listprobsMat[[1]]), length(listprobsMat)))
@@ -152,12 +176,12 @@ cifMatWeightedAveraging <- function(listprobsMat, weights, type = "CumHaz") {
   }
 
   NewProbs <- pmax(0, pmin(NewProbs, 1))
-  
+
   # Ensure matrix dimensions are preserved
   if (!is.matrix(NewProbs)) {
     dim(NewProbs) <- dim(listprobsMat[[1]])
   }
-  
+
   NewProbs
 }
 
@@ -167,7 +191,7 @@ optimizeSuperLearnerWeights <- function(predictions_list, actual_surv, loss_type
   if (length(predictions_list) == 0) {
     stop("No valid predictions available")
   }
-  
+
   n_models <- length(predictions_list)
 
   if (!is.matrix(actual_surv)) {
@@ -200,15 +224,24 @@ optimizeSuperLearnerWeights <- function(predictions_list, actual_surv, loss_type
 
     # Compute weighted average
     weighted_pred <- Reduce(`+`, mapply(function(p, w) p * w,
-                                         predictions_list, weights,
-                                         SIMPLIFY = FALSE))
+      predictions_list, weights,
+      SIMPLIFY = FALSE
+    ))
 
     # Calculate loss
     if (loss_type == "mse") {
       loss <- mean((weighted_pred - actual_surv)^2, na.rm = TRUE)
     } else if (loss_type == "loglik") {
-      # Negative log-likelihood (for survival probabilities)
-      loss <- -mean(log(pmax(weighted_pred, 1e-10)), na.rm = TRUE)
+      # Binary Cross Entropy / Negative Log-Likelihood
+      # We assume actual_surv is binary: 1 = survived, 0 = event
+      # weighted_pred is predicted survival probability
+
+      p_safe <- pmax(pmin(weighted_pred, 1 - 1e-10), 1e-10)
+
+      # Log-likelihood: y*log(p) + (1-y)*log(1-p)
+      ll_terms <- actual_surv * log(p_safe) + (1 - actual_surv) * log(1 - p_safe)
+
+      loss <- -mean(ll_terms, na.rm = TRUE)
     } else {
       stop("Unknown loss_type")
     }
@@ -257,15 +290,15 @@ fitMetaLearner <- function(base_predictions, outcomes, meta_learner = "mse") {
 }
 
 EnsemblePredictions <- function(model_predictions,
-                                 ensemble_method = "average",
-                                 model_weights = NULL,
-                                 type = "survival",
-                                 sl_training_predictions = NULL,
-                                 sl_actual = NULL,
-                                 sl_loss = "mse",
-                                 sl_weights = NULL,
-                                 times,
-                                 ...) {
+                                ensemble_method = "average",
+                                model_weights = NULL,
+                                type = "survival",
+                                sl_training_predictions = NULL,
+                                sl_actual = NULL,
+                                sl_loss = "mse",
+                                sl_weights = NULL,
+                                times,
+                                ...) {
   # Validate inputs
   if (missing(times) || is.null(times)) {
     stop("'times' is a required argument and must not be NULL")

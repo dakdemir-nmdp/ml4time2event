@@ -61,7 +61,7 @@ cifInterpolator<-function(x, probs, times){
   result
 }
 
-#' @title cifMatInterpolaltor
+#' @title cifMatInterpolator
 #' @description Interpolate a matrix of CIFs for new times.
 #'   This function takes a matrix of probabilities where rows are time points and columns are observations.
 #'   It interpolates the probabilities to new time points and returns a matrix where rows are new time points
@@ -73,7 +73,7 @@ cifInterpolator<-function(x, probs, times){
 #' @param propagate_na logical, whether to propagate NAs across the entire observation (default: FALSE)
 #' @return matrix of interpolated CIFs (rows=new_times, cols=observations)
 #' @noRd
-cifMatInterpolaltor <- function(probsMat, times, new_times, enforce_monotonicity = FALSE, propagate_na = FALSE) {
+cifMatInterpolator <- function(probsMat, times, new_times, enforce_monotonicity = FALSE, propagate_na = FALSE) {
   # Input validation with strict orientation enforcement
   if (!is.matrix(probsMat)) {
     stop("probsMat must be a matrix. Got ", class(probsMat), " instead.")

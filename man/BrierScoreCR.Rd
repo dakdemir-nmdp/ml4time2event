@@ -11,7 +11,8 @@ BrierScoreCR(
   cause = 1,
   TestMat = NULL,
   pred_times = NULL,
-  time = NULL
+  time = NULL,
+  cens_model = NULL
 )
 }
 \arguments{

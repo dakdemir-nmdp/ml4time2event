@@ -440,7 +440,7 @@ Predict_CRModel_xgboost <- function(modelout, newdata, new_times = NULL, event_o
     result_cifs <- cif_matrix
     result_times <- base_times
   } else {
-    result_cifs <- cifMatInterpolaltor(
+    result_cifs <- cifMatInterpolator(
       probsMat = cif_matrix,
       times = base_times,
       new_times = requested_times

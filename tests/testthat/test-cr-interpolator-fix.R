@@ -1,7 +1,7 @@
 library(testthat)
 library(ml4time2event)
 
-# Create a simplified test version of the cifMatInterpolaltor function
+# Create a simplified test version of the cifMatInterpolator function
 # This avoids using the existing function which might depend on other parts
 test_interpolator <- function(probsMat, times, new_times) {
   n_obs <- ncol(probsMat)
@@ -34,7 +34,7 @@ test_interpolator <- function(probsMat, times, new_times) {
   return(result_mat)
 }
 
-# Test the cifMatInterpolaltor function with synthetic data
+# Test the cifMatInterpolator function with synthetic data
 test_that("interpolation works with simple synthetic data", {
   # Create synthetic probability matrix and times
   n_times <- 5

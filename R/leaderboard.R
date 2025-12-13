@@ -123,9 +123,9 @@ autoplot.t2e_leaderboard <- function(object, metric = NULL, ...) {
         ggplot2::theme_minimal()
 
     if (any(!is.na(plot_data$sd))) {
-        p <- p + ggplot2::geom_errorbarh(
+        p <- p + ggplot2::geom_errorbar(
             ggplot2::aes(xmin = mean - sd, xmax = mean + sd),
-            height = 0.2
+            width = 0.2
         )
     }
 

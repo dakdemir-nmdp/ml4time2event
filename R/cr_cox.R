@@ -348,7 +348,7 @@ Predict_CRModel_Cox <- function(modelout, newdata, new_times = NULL, event_of_in
   } else {
     # Interpolate to new time points
     # Use the standard CIF interpolation utility function
-    result_cifs <- cifMatInterpolaltor(
+    result_cifs <- cifMatInterpolator(
       probsMat = cif_matrix,
       times = base_times,
       new_times = new_times

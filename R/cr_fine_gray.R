@@ -314,7 +314,7 @@ Predict_CRModel_FineGray <- function(modelout, newdata, new_times = NULL, event_
     }
     new_times <- sort(unique(new_times))
 
-    result_cifs <- cifMatInterpolaltor(
+    result_cifs <- cifMatInterpolator(
       probsMat = cif_matrix,
       times = c(0, baseline_times),
       new_times = new_times

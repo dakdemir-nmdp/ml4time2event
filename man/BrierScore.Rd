@@ -2,7 +2,7 @@
 % Please edit documentation in R/surv_metrics.R
 \name{BrierScore}
 \alias{BrierScore}
-\title{Brier Score for Survival Predictions}
+\title{Brier Score for Survival Predictions (IPCW Corrected)}
 \usage{
 BrierScore(
   predsurv,
@@ -10,7 +10,8 @@ BrierScore(
   obstimes,
   obsevents,
   eval_times = NULL,
-  TestMat = NULL
+  TestMat = NULL,
+  cens_model = NULL
 )
 }
 \arguments{
@@ -25,29 +26,31 @@ BrierScore(
 \item{eval_times}{Optional evaluation time points. If NULL, computed at all `pred_times`.}
 
 \item{TestMat}{Optional test matrix (currently unused)}
+
+\item{cens_model}{Optional pre-fitted censoring model (survfit object). If NULL, computed from provided data.}
 }
 \value{
 List of class `ml4time2event_brier` containing Brier scores and time grid
 }
 \description{
-Computes mean squared error between predicted survival probabilities and
-observed binary event status at specified time points. Lower values indicate
-better calibration.
+Computes the Inverse Probability of Censoring Weighted (IPCW) Brier Score.
+Measures mean squared error between predicted survival probabilities and
+observed binary event status, weighted to account for censoring.
 }
 \details{
 **Formula**:
-\eqn{BS(t) = E[(S(t|X) - Y(t))^2]}
+\eqn{BS(t) = \frac{1}{N} \sum_{i=1}^N \hat{W}_i(t) (Y_i(t) - \hat{S}(t|X_i))^2}
 
-where \eqn{S(t|X)} is predicted survival probability and \eqn{Y(t)} is binary
-event status at time \eqn{t}.
+Weights \eqn{\hat{W}_i(t)} definition:
+- If \eqn{T_i \le t} and \eqn{\delta_i = 1} (Observed event): \eqn{1/\hat{G}(T_i-)}
+- If \eqn{T_i > t} (Observed survivor): \eqn{1/\hat{G}(t)}
+- Otherwise (Censored before \eqn{t}): \eqn{0}
 
-**Interpretation**:
-- Range: 0 (perfect calibration) to 1 (worst)
-- Combines discrimination and calibration
-- 0.25 at all times = baseline for completely random predictions
+Where \eqn{\hat{G}} is the Kaplan-Meier estimate of the censoring distribution.
 }
 \references{
-Brier, G. W. (1950). "Verification of forecasts expressed in terms of
-probability." *Monthly Weather Review*, 78(1), 1–3.
+Graf, E., Schmoor, C., Sauerbrei, W., & Schumacher, M. (1999).
+"Assessment and comparison of prognostic classification schemes for survival data."
+*Statistics in Medicine*, 18(17‐18), 2529-2545.
 }
 \keyword{internal}

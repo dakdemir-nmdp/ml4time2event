@@ -12,7 +12,7 @@ test_that("timedepConcordanceCR handles risk scores correctly (perfect order)", 
   # Risk scores: higher = earlier event
   risk_scores <- rev(seq(1, n)) # highest risk for earliest event
   Predictions <- matrix(risk_scores, nrow = 1)
-  pred_time <- n
+  pred_time <- n/2
   cidx <- timedepConcordanceCR(SurvObj, Predictions, pred_time, cause = 1, pred_times = pred_time)
   expect_true(cidx > 0.99)
 

@@ -1,12 +1,12 @@
-#' Test file for the updated cifMatInterpolaltor function
+#' Test file for the updated cifMatInterpolator function
 #' 
-#' This file contains tests for the fixed cifMatInterpolaltor function
+#' This file contains tests for the fixed cifMatInterpolator function
 #' to ensure it correctly handles edge cases.
 
 library(testthat)
 library(ml4time2event)
 
-# Test the cifMatInterpolaltor function with synthetic data
+# Test the cifMatInterpolator function with synthetic data
 test_that("interpolation works with well-formed synthetic data", {
   # Create synthetic probability matrix and times
   n_times <- 5
@@ -18,7 +18,7 @@ test_that("interpolation works with well-formed synthetic data", {
   
   # Test vector of new times
   new_times_vec <- c(2, 4, 6, 8)
-  result_vec <- cifMatInterpolaltor(probsMat, times, new_times_vec)
+  result_vec <- cifMatInterpolator(probsMat, times, new_times_vec)
   
   # Test structure of result
   expect_true(is.matrix(result_vec))
@@ -27,7 +27,7 @@ test_that("interpolation works with well-formed synthetic data", {
   
   # Test scalar new time
   new_times_scalar <- 5
-  result_scalar <- cifMatInterpolaltor(probsMat, times, new_times_scalar)
+  result_scalar <- cifMatInterpolator(probsMat, times, new_times_scalar)
   
   # Test structure of scalar result
   expect_true(is.matrix(result_scalar))
@@ -45,7 +45,7 @@ test_that("interpolation handles transposed matrices correctly", {
   times <- seq(1, 10, length.out = n_times)
   # Test with transposed matrix - should now error
   expect_error(
-    cifMatInterpolaltor(probsMat, times, c(2, 4, 6, 8)),
+    cifMatInterpolator(probsMat, times, c(2, 4, 6, 8)),
     regexp = "rows=times and cols=observations"
   )
 })
@@ -61,7 +61,7 @@ test_that("interpolation handles edge cases with time=0", {
   times_with_zero <- c(0, seq(1, 10, length.out = (n_times - 1)))
   
   # Should work without warning
-  result <- cifMatInterpolaltor(probsMat, times_with_zero, c(0.5, 5, 8))
+  result <- cifMatInterpolator(probsMat, times_with_zero, c(0.5, 5, 8))
   
   # Test structure
   expect_true(is.matrix(result))
@@ -69,7 +69,7 @@ test_that("interpolation handles edge cases with time=0", {
   expect_equal(ncol(result), n_subj)
   
   # Test that values at time=0 are 0 when interpolating back
-  result_at_zero <- cifMatInterpolaltor(probsMat, times_with_zero, 0)
+  result_at_zero <- cifMatInterpolator(probsMat, times_with_zero, 0)
   expect_equal(as.vector(result_at_zero), rep(0, n_subj))
 })
 
@@ -87,7 +87,7 @@ test_that("interpolation handles NA values correctly", {
   times <- seq(1, 10, length.out = n_times)
   
   # Should handle NA values appropriately
-  result <- cifMatInterpolaltor(probsMat, times, c(2, 4, 6, 8))
+  result <- cifMatInterpolator(probsMat, times, c(2, 4, 6, 8))
   
   # Test structure
   expect_true(is.matrix(result))

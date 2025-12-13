@@ -647,7 +647,7 @@ Predict_CRModel_ShallowNN <- function(modelout, newdata, new_times = NULL,
     )
 
     if (!is.null(cif_matrix)) {
-      cif_matrix <- cifMatInterpolaltor(
+      cif_matrix <- cifMatInterpolator(
         probsMat = cif_matrix,
         times = times_full,
         new_times = target_times

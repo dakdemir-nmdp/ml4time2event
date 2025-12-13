@@ -1,0 +1,1124 @@
+Loading required package: nlme
+Loading required package: survival
+================================================================================ 
+SURVIVAL BART HYPERPARAMETER TESTING
+================================================================================ 
+
+
+ ================================================================================ 
+Sample Size: 100, Predictors: 5
+================================================================================ 
+Censoring rate: 29.0%
+Median time: 0.63
+
+Testing Minimal configuration...
+*****In main of C++ for bart prediction
+tc (threadcount): 1
+number of bart draws: 200
+number of trees in bart sum: 20
+number of x columns: 6
+from x,np,p: 6, 150
+***using serial code
+  Fit time: 0.09 sec
+  Prediction time: 0.05 sec
+  Total time: 0.14 sec
+
+Testing Default configuration...
+*****In main of C++ for bart prediction
+tc (threadcount): 1
+number of bart draws: 200
+number of trees in bart sum: 50
+number of x columns: 6
+from x,np,p: 6, 240
+***using serial code
+  Fit time: 0.19 sec
+  Prediction time: 0.04 sec
+  Total time: 0.23 sec
+
+Testing Enhanced configuration...
+*****In main of C++ for bart prediction
+tc (threadcount): 1
+number of bart draws: 200
+number of trees in bart sum: 100
+number of x columns: 6
+from x,np,p: 6, 300
+***using serial code
+  Fit time: 0.41 sec
+  Prediction time: 0.07 sec
+  Total time: 0.48 sec
+
+Prediction Correlations:
+  Minimal vs Default: 0.9584
+  Minimal vs Enhanced: 0.9672
+  Default vs Enhanced: 0.9777
+
+
+ ================================================================================ 
+Sample Size: 100, Predictors: 10
+================================================================================ 
+Censoring rate: 37.0%
+Median time: 0.39
+
+Testing Minimal configuration...
+*****In main of C++ for bart prediction
+tc (threadcount): 1
+number of bart draws: 200
+number of trees in bart sum: 20
+number of x columns: 11
+from x,np,p: 11, 150
+***using serial code
+  Fit time: 0.07 sec
+  Prediction time: 0.02 sec
+  Total time: 0.10 sec
+
+Testing Default configuration...
+*****In main of C++ for bart prediction
+tc (threadcount): 1
+number of bart draws: 200
+number of trees in bart sum: 50
+number of x columns: 11
+from x,np,p: 11, 240
+***using serial code
+  Fit time: 0.19 sec
+  Prediction time: 0.04 sec
+  Total time: 0.23 sec
+
+Testing Enhanced configuration...
+*****In main of C++ for bart prediction
+tc (threadcount): 1
+number of bart draws: 200
+number of trees in bart sum: 100
+number of x columns: 11
+from x,np,p: 11, 300
+***using serial code
+  Fit time: 0.40 sec
+  Prediction time: 0.07 sec
+  Total time: 0.48 sec
+
+Prediction Correlations:
+  Minimal vs Default: 0.9622
+  Minimal vs Enhanced: 0.9566
+  Default vs Enhanced: 0.9747
+
+
+ ================================================================================ 
+Sample Size: 100, Predictors: 20
+================================================================================ 
+Censoring rate: 40.0%
+Median time: 0.42
+
+Testing Minimal configuration...
+*****In main of C++ for bart prediction
+tc (threadcount): 1
+number of bart draws: 200
+number of trees in bart sum: 20
+number of x columns: 21
+from x,np,p: 21, 150
+***using serial code
+  Fit time: 0.08 sec
+  Prediction time: 0.02 sec
+  Total time: 0.10 sec
+
+Testing Default configuration...
+*****In main of C++ for bart prediction
+tc (threadcount): 1
+number of bart draws: 200
+number of trees in bart sum: 50
+number of x columns: 21
+from x,np,p: 21, 240
+***using serial code
+  Fit time: 0.21 sec
+  Prediction time: 0.04 sec
+  Total time: 0.25 sec
+
+Testing Enhanced configuration...
+*****In main of C++ for bart prediction
+tc (threadcount): 1
+number of bart draws: 200
+number of trees in bart sum: 100
+number of x columns: 21
+from x,np,p: 21, 300
+***using serial code
+  Fit time: 0.41 sec
+  Prediction time: 0.07 sec
+  Total time: 0.49 sec
+
+Prediction Correlations:
+  Minimal vs Default: 0.9352
+  Minimal vs Enhanced: 0.9297
+  Default vs Enhanced: 0.9757
+
+
+ ================================================================================ 
+Sample Size: 500, Predictors: 5
+================================================================================ 
+Censoring rate: 34.2%
+Median time: 0.49
+
+Testing Minimal configuration...
+*****In main of C++ for bart prediction
+tc (threadcount): 1
+number of bart draws: 200
+number of trees in bart sum: 20
+number of x columns: 6
+from x,np,p: 6, 750
+***using serial code
+  Fit time: 0.32 sec
+  Prediction time: 0.04 sec
+  Total time: 0.36 sec
+
+Testing Default configuration...
+*****In main of C++ for bart prediction
+tc (threadcount): 1
+number of bart draws: 200
+number of trees in bart sum: 50
+number of x columns: 6
+from x,np,p: 6, 1200
+***using serial code
+  Fit time: 0.84 sec
+  Prediction time: 0.09 sec
+  Total time: 0.93 sec
+
+Testing Enhanced configuration...
+*****In main of C++ for bart prediction
+tc (threadcount): 1
+number of bart draws: 200
+number of trees in bart sum: 100
+number of x columns: 6
+from x,np,p: 6, 1500
+***using serial code
+  Fit time: 1.70 sec
+  Prediction time: 0.17 sec
+  Total time: 1.87 sec
+
+Prediction Correlations:
+  Minimal vs Default: 0.9588
+  Minimal vs Enhanced: 0.9619
+  Default vs Enhanced: 0.9820
+
+
+ ================================================================================ 
+Sample Size: 500, Predictors: 10
+================================================================================ 
+Censoring rate: 39.4%
+Median time: 0.43
+
+Testing Minimal configuration...
+*****In main of C++ for bart prediction
+tc (threadcount): 1
+number of bart draws: 200
+number of trees in bart sum: 20
+number of x columns: 11
+from x,np,p: 11, 750
+***using serial code
+  Fit time: 0.29 sec
+  Prediction time: 0.05 sec
+  Total time: 0.34 sec
+
+Testing Default configuration...
+*****In main of C++ for bart prediction
+tc (threadcount): 1
+number of bart draws: 200
+number of trees in bart sum: 50
+number of x columns: 11
+from x,np,p: 11, 1200
+***using serial code
+  Fit time: 0.85 sec
+  Prediction time: 0.10 sec
+  Total time: 0.94 sec
+
+Testing Enhanced configuration...
+*****In main of C++ for bart prediction
+tc (threadcount): 1
+number of bart draws: 200
+number of trees in bart sum: 100
+number of x columns: 11
+from x,np,p: 11, 1500
+***using serial code
+  Fit time: 1.67 sec
+  Prediction time: 0.22 sec
+  Total time: 1.89 sec
+
+Prediction Correlations:
+  Minimal vs Default: 0.9463
+  Minimal vs Enhanced: 0.9433
+  Default vs Enhanced: 0.9726
+
+
+ ================================================================================ 
+Sample Size: 500, Predictors: 20
+================================================================================ 
+Censoring rate: 39.8%
+Median time: 0.49
+
+Testing Minimal configuration...
+*****In main of C++ for bart prediction
+tc (threadcount): 1
+number of bart draws: 200
+number of trees in bart sum: 20
+number of x columns: 21
+from x,np,p: 21, 750
+***using serial code
+  Fit time: 0.31 sec
+  Prediction time: 0.05 sec
+  Total time: 0.36 sec
+
+Testing Default configuration...
+*****In main of C++ for bart prediction
+tc (threadcount): 1
+number of bart draws: 200
+number of trees in bart sum: 50
+number of x columns: 21
+from x,np,p: 21, 1200
+***using serial code
+  Fit time: 0.89 sec
+  Prediction time: 0.10 sec
+  Total time: 0.99 sec
+
+Testing Enhanced configuration...
+*****In main of C++ for bart prediction
+tc (threadcount): 1
+number of bart draws: 200
+number of trees in bart sum: 100
+number of x columns: 21
+from x,np,p: 21, 1500
+***using serial code
+  Fit time: 1.75 sec
+  Prediction time: 0.18 sec
+  Total time: 1.93 sec
+
+Prediction Correlations:
+  Minimal vs Default: 0.9114
+  Minimal vs Enhanced: 0.9266
+  Default vs Enhanced: 0.9592
+
+
+ ================================================================================ 
+Sample Size: 1000, Predictors: 5
+================================================================================ 
+Censoring rate: 36.5%
+Median time: 0.49
+
+Testing Minimal configuration...
+*****In main of C++ for bart prediction
+tc (threadcount): 1
+number of bart draws: 200
+number of trees in bart sum: 20
+number of x columns: 6
+from x,np,p: 6, 1500
+***using serial code
+  Fit time: 0.60 sec
+  Prediction time: 0.07 sec
+  Total time: 0.68 sec
+
+Testing Default configuration...
+*****In main of C++ for bart prediction
+tc (threadcount): 1
+number of bart draws: 200
+number of trees in bart sum: 50
+number of x columns: 6
+from x,np,p: 6, 2400
+***using serial code
+  Fit time: 1.50 sec
+  Prediction time: 0.17 sec
+  Total time: 1.67 sec
+
+Testing Enhanced configuration...
+*****In main of C++ for bart prediction
+tc (threadcount): 1
+number of bart draws: 200
+number of trees in bart sum: 100
+number of x columns: 6
+from x,np,p: 6, 3000
+***using serial code
+  Fit time: 3.18 sec
+  Prediction time: 0.30 sec
+  Total time: 3.48 sec
+
+Prediction Correlations:
+  Minimal vs Default: 0.9590
+  Minimal vs Enhanced: 0.9564
+  Default vs Enhanced: 0.9775
+
+
+ ================================================================================ 
+Sample Size: 1000, Predictors: 10
+================================================================================ 
+Censoring rate: 38.5%
+Median time: 0.47
+
+Testing Minimal configuration...
+*****In main of C++ for bart prediction
+tc (threadcount): 1
+number of bart draws: 200
+number of trees in bart sum: 20
+number of x columns: 11
+from x,np,p: 11, 1500
+***using serial code
+  Fit time: 0.60 sec
+  Prediction time: 0.08 sec
+  Total time: 0.68 sec
+
+Testing Default configuration...
+*****In main of C++ for bart prediction
+tc (threadcount): 1
+number of bart draws: 200
+number of trees in bart sum: 50
+number of x columns: 11
+from x,np,p: 11, 2400
+***using serial code
+  Fit time: 1.57 sec
+  Prediction time: 0.17 sec
+  Total time: 1.74 sec
+
+Testing Enhanced configuration...
+*****In main of C++ for bart prediction
+tc (threadcount): 1
+number of bart draws: 200
+number of trees in bart sum: 100
+number of x columns: 11
+from x,np,p: 11, 3000
+***using serial code
+  Fit time: 3.14 sec
+  Prediction time: 0.31 sec
+  Total time: 3.44 sec
+
+Prediction Correlations:
+  Minimal vs Default: 0.9657
+  Minimal vs Enhanced: 0.9583
+  Default vs Enhanced: 0.9746
+
+
+ ================================================================================ 
+Sample Size: 1000, Predictors: 20
+================================================================================ 
+Censoring rate: 43.5%
+Median time: 0.37
+
+Testing Minimal configuration...
+*****In main of C++ for bart prediction
+tc (threadcount): 1
+number of bart draws: 200
+number of trees in bart sum: 20
+number of x columns: 21
+from x,np,p: 21, 1500
+***using serial code
+  Fit time: 0.70 sec
+  Prediction time: 0.09 sec
+  Total time: 0.79 sec
+
+Testing Default configuration...
+*****In main of C++ for bart prediction
+tc (threadcount): 1
+number of bart draws: 200
+number of trees in bart sum: 50
+number of x columns: 21
+from x,np,p: 21, 2400
+***using serial code
+  Fit time: 1.70 sec
+  Prediction time: 0.18 sec
+  Total time: 1.88 sec
+
+Testing Enhanced configuration...
+*****In main of C++ for bart prediction
+tc (threadcount): 1
+number of bart draws: 200
+number of trees in bart sum: 100
+number of x columns: 21
+from x,np,p: 21, 3000
+***using serial code
+  Fit time: 3.34 sec
+  Prediction time: 0.37 sec
+  Total time: 3.71 sec
+
+Prediction Correlations:
+  Minimal vs Default: 0.9143
+  Minimal vs Enhanced: 0.9140
+  Default vs Enhanced: 0.9502
+
+
+
+ ================================================================================ 
+COMPETING RISKS BART HYPERPARAMETER TESTING
+================================================================================ 
+
+
+ ================================================================================ 
+Sample Size: 100, Predictors: 5
+================================================================================ 
+Censoring rate: 14.0%
+Event 1 rate: 40.0%
+Event 2 rate: 46.0%
+
+Testing Minimal configuration...
+*****In main of C++ for bart prediction
+tc (threadcount): 1
+number of bart draws: 500
+number of trees in bart sum: 50
+number of x columns: 6
+from x,np,p: 6, 240
+***using serial code
+*****In main of C++ for bart prediction
+tc (threadcount): 1
+number of bart draws: 500
+number of trees in bart sum: 50
+number of x columns: 6
+from x,np,p: 6, 240
+***using serial code
+  Fit time: 1.69 sec
+  Prediction time: 0.23 sec
+  Total time: 1.93 sec
+
+Testing Default configuration...
+*****In main of C++ for bart prediction
+tc (threadcount): 1
+number of bart draws: 1000
+number of trees in bart sum: 100
+number of x columns: 6
+from x,np,p: 6, 300
+***using serial code
+*****In main of C++ for bart prediction
+tc (threadcount): 1
+number of bart draws: 1000
+number of trees in bart sum: 100
+number of x columns: 6
+from x,np,p: 6, 300
+***using serial code
+  Fit time: 13.67 sec
+  Prediction time: 0.66 sec
+  Total time: 14.33 sec
+
+Testing Enhanced configuration...
+*****In main of C++ for bart prediction
+tc (threadcount): 1
+number of bart draws: 2000
+number of trees in bart sum: 150
+number of x columns: 6
+from x,np,p: 6, 450
+***using serial code
+*****In main of C++ for bart prediction
+tc (threadcount): 1
+number of bart draws: 2000
+number of trees in bart sum: 150
+number of x columns: 6
+from x,np,p: 6, 450
+***using serial code
+  Fit time: 52.93 sec
+  Prediction time: 2.20 sec
+  Total time: 55.13 sec
+
+Prediction Correlations:
+  Minimal vs Default: 0.9969
+  Minimal vs Enhanced: 0.9925
+  Default vs Enhanced: 0.9978
+
+
+ ================================================================================ 
+Sample Size: 100, Predictors: 10
+================================================================================ 
+Censoring rate: 9.0%
+Event 1 rate: 38.0%
+Event 2 rate: 53.0%
+
+Testing Minimal configuration...
+*****In main of C++ for bart prediction
+tc (threadcount): 1
+number of bart draws: 500
+number of trees in bart sum: 50
+number of x columns: 11
+from x,np,p: 11, 240
+***using serial code
+*****In main of C++ for bart prediction
+tc (threadcount): 1
+number of bart draws: 500
+number of trees in bart sum: 50
+number of x columns: 11
+from x,np,p: 11, 240
+***using serial code
+  Fit time: 1.70 sec
+  Prediction time: 0.20 sec
+  Total time: 1.89 sec
+
+Testing Default configuration...
+*****In main of C++ for bart prediction
+tc (threadcount): 1
+number of bart draws: 1000
+number of trees in bart sum: 100
+number of x columns: 11
+from x,np,p: 11, 300
+***using serial code
+*****In main of C++ for bart prediction
+tc (threadcount): 1
+number of bart draws: 1000
+number of trees in bart sum: 100
+number of x columns: 11
+from x,np,p: 11, 300
+***using serial code
+  Fit time: 14.14 sec
+  Prediction time: 0.67 sec
+  Total time: 14.81 sec
+
+Testing Enhanced configuration...
+*****In main of C++ for bart prediction
+tc (threadcount): 1
+number of bart draws: 2000
+number of trees in bart sum: 150
+number of x columns: 11
+from x,np,p: 11, 450
+***using serial code
+*****In main of C++ for bart prediction
+tc (threadcount): 1
+number of bart draws: 2000
+number of trees in bart sum: 150
+number of x columns: 11
+from x,np,p: 11, 450
+***using serial code
+  Fit time: 54.26 sec
+  Prediction time: 2.19 sec
+  Total time: 56.45 sec
+
+Prediction Correlations:
+  Minimal vs Default: 0.9945
+  Minimal vs Enhanced: 0.9941
+  Default vs Enhanced: 0.9972
+
+
+ ================================================================================ 
+Sample Size: 100, Predictors: 20
+================================================================================ 
+Censoring rate: 13.0%
+Event 1 rate: 30.0%
+Event 2 rate: 57.0%
+
+Testing Minimal configuration...
+*****In main of C++ for bart prediction
+tc (threadcount): 1
+number of bart draws: 500
+number of trees in bart sum: 50
+number of x columns: 21
+from x,np,p: 21, 240
+***using serial code
+*****In main of C++ for bart prediction
+tc (threadcount): 1
+number of bart draws: 500
+number of trees in bart sum: 50
+number of x columns: 21
+from x,np,p: 21, 240
+***using serial code
+  Fit time: 1.73 sec
+  Prediction time: 0.22 sec
+  Total time: 1.95 sec
+
+Testing Default configuration...
+*****In main of C++ for bart prediction
+tc (threadcount): 1
+number of bart draws: 1000
+number of trees in bart sum: 100
+number of x columns: 21
+from x,np,p: 21, 300
+***using serial code
+*****In main of C++ for bart prediction
+tc (threadcount): 1
+number of bart draws: 1000
+number of trees in bart sum: 100
+number of x columns: 21
+from x,np,p: 21, 300
+***using serial code
+  Fit time: 14.03 sec
+  Prediction time: 0.66 sec
+  Total time: 14.69 sec
+
+Testing Enhanced configuration...
+*****In main of C++ for bart prediction
+tc (threadcount): 1
+number of bart draws: 2000
+number of trees in bart sum: 150
+number of x columns: 21
+from x,np,p: 21, 450
+***using serial code
+*****In main of C++ for bart prediction
+tc (threadcount): 1
+number of bart draws: 2000
+number of trees in bart sum: 150
+number of x columns: 21
+from x,np,p: 21, 450
+***using serial code
+  Fit time: 54.47 sec
+  Prediction time: 2.25 sec
+  Total time: 56.72 sec
+
+Prediction Correlations:
+  Minimal vs Default: 0.9876
+  Minimal vs Enhanced: 0.9855
+  Default vs Enhanced: 0.9953
+
+
+ ================================================================================ 
+Sample Size: 500, Predictors: 5
+================================================================================ 
+Censoring rate: 9.8%
+Event 1 rate: 39.4%
+Event 2 rate: 50.8%
+
+Testing Minimal configuration...
+*****In main of C++ for bart prediction
+tc (threadcount): 1
+number of bart draws: 500
+number of trees in bart sum: 50
+number of x columns: 6
+from x,np,p: 6, 1200
+***using serial code
+*****In main of C++ for bart prediction
+tc (threadcount): 1
+number of bart draws: 500
+number of trees in bart sum: 50
+number of x columns: 6
+from x,np,p: 6, 1200
+***using serial code
+  Fit time: 6.77 sec
+  Prediction time: 0.45 sec
+  Total time: 7.22 sec
+
+Testing Default configuration...
+*****In main of C++ for bart prediction
+tc (threadcount): 1
+number of bart draws: 1000
+number of trees in bart sum: 100
+number of x columns: 6
+from x,np,p: 6, 1500
+***using serial code
+*****In main of C++ for bart prediction
+tc (threadcount): 1
+number of bart draws: 1000
+number of trees in bart sum: 100
+number of x columns: 6
+from x,np,p: 6, 1500
+***using serial code
+  Fit time: 56.69 sec
+  Prediction time: 1.94 sec
+  Total time: 58.63 sec
+
+Testing Enhanced configuration...
+*****In main of C++ for bart prediction
+tc (threadcount): 1
+number of bart draws: 2000
+number of trees in bart sum: 150
+number of x columns: 6
+from x,np,p: 6, 2250
+***using serial code
+*****In main of C++ for bart prediction
+tc (threadcount): 1
+number of bart draws: 2000
+number of trees in bart sum: 150
+number of x columns: 6
+from x,np,p: 6, 2250
+***using serial code
+  Fit time: 231.19 sec
+  Prediction time: 6.70 sec
+  Total time: 237.88 sec
+
+Prediction Correlations:
+  Minimal vs Default: 0.9990
+  Minimal vs Enhanced: 0.9959
+  Default vs Enhanced: 0.9982
+
+
+ ================================================================================ 
+Sample Size: 500, Predictors: 10
+================================================================================ 
+Censoring rate: 11.2%
+Event 1 rate: 39.6%
+Event 2 rate: 49.2%
+
+Testing Minimal configuration...
+*****In main of C++ for bart prediction
+tc (threadcount): 1
+number of bart draws: 500
+number of trees in bart sum: 50
+number of x columns: 11
+from x,np,p: 11, 1200
+***using serial code
+*****In main of C++ for bart prediction
+tc (threadcount): 1
+number of bart draws: 500
+number of trees in bart sum: 50
+number of x columns: 11
+from x,np,p: 11, 1200
+***using serial code
+  Fit time: 7.11 sec
+  Prediction time: 0.46 sec
+  Total time: 7.57 sec
+
+Testing Default configuration...
+*****In main of C++ for bart prediction
+tc (threadcount): 1
+number of bart draws: 1000
+number of trees in bart sum: 100
+number of x columns: 11
+from x,np,p: 11, 1500
+***using serial code
+*****In main of C++ for bart prediction
+tc (threadcount): 1
+number of bart draws: 1000
+number of trees in bart sum: 100
+number of x columns: 11
+from x,np,p: 11, 1500
+***using serial code
+  Fit time: 58.68 sec
+  Prediction time: 1.65 sec
+  Total time: 60.33 sec
+
+Testing Enhanced configuration...
+*****In main of C++ for bart prediction
+tc (threadcount): 1
+number of bart draws: 2000
+number of trees in bart sum: 150
+number of x columns: 11
+from x,np,p: 11, 2250
+***using serial code
+*****In main of C++ for bart prediction
+tc (threadcount): 1
+number of bart draws: 2000
+number of trees in bart sum: 150
+number of x columns: 11
+from x,np,p: 11, 2250
+***using serial code
+  Fit time: 236.31 sec
+  Prediction time: 6.13 sec
+  Total time: 242.44 sec
+
+Prediction Correlations:
+  Minimal vs Default: 0.9919
+  Minimal vs Enhanced: 0.9917
+  Default vs Enhanced: 0.9993
+
+
+ ================================================================================ 
+Sample Size: 500, Predictors: 20
+================================================================================ 
+Censoring rate: 9.6%
+Event 1 rate: 41.6%
+Event 2 rate: 48.8%
+
+Testing Minimal configuration...
+*****In main of C++ for bart prediction
+tc (threadcount): 1
+number of bart draws: 500
+number of trees in bart sum: 50
+number of x columns: 21
+from x,np,p: 21, 1200
+***using serial code
+*****In main of C++ for bart prediction
+tc (threadcount): 1
+number of bart draws: 500
+number of trees in bart sum: 50
+number of x columns: 21
+from x,np,p: 21, 1200
+***using serial code
+  Fit time: 7.08 sec
+  Prediction time: 0.46 sec
+  Total time: 7.54 sec
+
+Testing Default configuration...
+*****In main of C++ for bart prediction
+tc (threadcount): 1
+number of bart draws: 1000
+number of trees in bart sum: 100
+number of x columns: 21
+from x,np,p: 21, 1500
+***using serial code
+*****In main of C++ for bart prediction
+tc (threadcount): 1
+number of bart draws: 1000
+number of trees in bart sum: 100
+number of x columns: 21
+from x,np,p: 21, 1500
+***using serial code
+  Fit time: 60.68 sec
+  Prediction time: 1.68 sec
+  Total time: 62.36 sec
+
+Testing Enhanced configuration...
+*****In main of C++ for bart prediction
+tc (threadcount): 1
+number of bart draws: 2000
+number of trees in bart sum: 150
+number of x columns: 21
+from x,np,p: 21, 2250
+***using serial code
+*****In main of C++ for bart prediction
+tc (threadcount): 1
+number of bart draws: 2000
+number of trees in bart sum: 150
+number of x columns: 21
+from x,np,p: 21, 2250
+***using serial code
+  Fit time: 241.59 sec
+  Prediction time: 6.29 sec
+  Total time: 247.88 sec
+
+Prediction Correlations:
+  Minimal vs Default: 0.9920
+  Minimal vs Enhanced: 0.9869
+  Default vs Enhanced: 0.9963
+
+
+ ================================================================================ 
+Sample Size: 1000, Predictors: 5
+================================================================================ 
+Censoring rate: 15.2%
+Event 1 rate: 39.2%
+Event 2 rate: 45.6%
+
+Testing Minimal configuration...
+*****In main of C++ for bart prediction
+tc (threadcount): 1
+number of bart draws: 500
+number of trees in bart sum: 50
+number of x columns: 6
+from x,np,p: 6, 2400
+***using serial code
+*****In main of C++ for bart prediction
+tc (threadcount): 1
+number of bart draws: 500
+number of trees in bart sum: 50
+number of x columns: 6
+from x,np,p: 6, 2400
+***using serial code
+  Fit time: 12.74 sec
+  Prediction time: 0.74 sec
+  Total time: 13.48 sec
+
+Testing Default configuration...
+*****In main of C++ for bart prediction
+tc (threadcount): 1
+number of bart draws: 1000
+number of trees in bart sum: 100
+number of x columns: 6
+from x,np,p: 6, 3000
+***using serial code
+*****In main of C++ for bart prediction
+tc (threadcount): 1
+number of bart draws: 1000
+number of trees in bart sum: 100
+number of x columns: 6
+from x,np,p: 6, 3000
+***using serial code
+  Fit time: 107.73 sec
+  Prediction time: 2.81 sec
+  Total time: 110.54 sec
+
+Testing Enhanced configuration...
+*****In main of C++ for bart prediction
+tc (threadcount): 1
+number of bart draws: 2000
+number of trees in bart sum: 150
+number of x columns: 6
+from x,np,p: 6, 4500
+***using serial code
+*****In main of C++ for bart prediction
+tc (threadcount): 1
+number of bart draws: 2000
+number of trees in bart sum: 150
+number of x columns: 6
+from x,np,p: 6, 4500
+***using serial code
+  Fit time: 445.11 sec
+  Prediction time: 15.71 sec
+  Total time: 460.83 sec
+
+Prediction Correlations:
+  Minimal vs Default: 0.9978
+  Minimal vs Enhanced: 0.9966
+  Default vs Enhanced: 0.9988
+
+
+ ================================================================================ 
+Sample Size: 1000, Predictors: 10
+================================================================================ 
+Censoring rate: 11.8%
+Event 1 rate: 44.0%
+Event 2 rate: 44.2%
+
+Testing Minimal configuration...
+*****In main of C++ for bart prediction
+tc (threadcount): 1
+number of bart draws: 500
+number of trees in bart sum: 50
+number of x columns: 11
+from x,np,p: 11, 2400
+***using serial code
+*****In main of C++ for bart prediction
+tc (threadcount): 1
+number of bart draws: 500
+number of trees in bart sum: 50
+number of x columns: 11
+from x,np,p: 11, 2400
+***using serial code
+  Fit time: 12.68 sec
+  Prediction time: 0.74 sec
+  Total time: 13.42 sec
+
+Testing Default configuration...
+*****In main of C++ for bart prediction
+tc (threadcount): 1
+number of bart draws: 1000
+number of trees in bart sum: 100
+number of x columns: 11
+from x,np,p: 11, 3000
+***using serial code
+*****In main of C++ for bart prediction
+tc (threadcount): 1
+number of bart draws: 1000
+number of trees in bart sum: 100
+number of x columns: 11
+from x,np,p: 11, 3000
+***using serial code
+  Fit time: 108.56 sec
+  Prediction time: 2.79 sec
+  Total time: 111.34 sec
+
+Testing Enhanced configuration...
+*****In main of C++ for bart prediction
+tc (threadcount): 1
+number of bart draws: 2000
+number of trees in bart sum: 150
+number of x columns: 11
+from x,np,p: 11, 4500
+***using serial code
+*****In main of C++ for bart prediction
+tc (threadcount): 1
+number of bart draws: 2000
+number of trees in bart sum: 150
+number of x columns: 11
+from x,np,p: 11, 4500
+***using serial code
+  Fit time: 465.54 sec
+  Prediction time: 16.47 sec
+  Total time: 482.01 sec
+
+Prediction Correlations:
+  Minimal vs Default: 0.9988
+  Minimal vs Enhanced: 0.9970
+  Default vs Enhanced: 0.9975
+
+
+ ================================================================================ 
+Sample Size: 1000, Predictors: 20
+================================================================================ 
+Censoring rate: 12.7%
+Event 1 rate: 40.6%
+Event 2 rate: 46.7%
+
+Testing Minimal configuration...
+*****In main of C++ for bart prediction
+tc (threadcount): 1
+number of bart draws: 500
+number of trees in bart sum: 50
+number of x columns: 21
+from x,np,p: 21, 2400
+***using serial code
+*****In main of C++ for bart prediction
+tc (threadcount): 1
+number of bart draws: 500
+number of trees in bart sum: 50
+number of x columns: 21
+from x,np,p: 21, 2400
+***using serial code
+  Fit time: 13.60 sec
+  Prediction time: 0.78 sec
+  Total time: 14.38 sec
+
+Testing Default configuration...
+*****In main of C++ for bart prediction
+tc (threadcount): 1
+number of bart draws: 1000
+number of trees in bart sum: 100
+number of x columns: 21
+from x,np,p: 21, 3000
+***using serial code
+*****In main of C++ for bart prediction
+tc (threadcount): 1
+number of bart draws: 1000
+number of trees in bart sum: 100
+number of x columns: 21
+from x,np,p: 21, 3000
+***using serial code
+  Fit time: 116.15 sec
+  Prediction time: 2.95 sec
+  Total time: 119.09 sec
+
+Testing Enhanced configuration...
+*****In main of C++ for bart prediction
+tc (threadcount): 1
+number of bart draws: 2000
+number of trees in bart sum: 150
+number of x columns: 21
+from x,np,p: 21, 4500
+***using serial code
+*****In main of C++ for bart prediction
+tc (threadcount): 1
+number of bart draws: 2000
+number of trees in bart sum: 150
+number of x columns: 21
+from x,np,p: 21, 4500
+***using serial code
+  Fit time: 479.52 sec
+  Prediction time: 16.36 sec
+  Total time: 495.89 sec
+
+Prediction Correlations:
+  Minimal vs Default: 0.9951
+  Minimal vs Enhanced: 0.9927
+  Default vs Enhanced: 0.9976
+
+
+
+ ================================================================================ 
+RESULTS SAVED TO: /Users/dakdemir/Library/CloudStorage/OneDrive-NMDP/Year2025/Github/ml4time2event/Documents_Presentations/bart_hyperparameter_results.csv 
+================================================================================ 
+
+
+ ================================================================================ 
+SUMMARY STATISTICS
+================================================================================ 
+
+SURVIVAL BART:
+-------------------------------------------------------------------------------- 
+
+Minimal Configuration:
+  Mean total time: 0.40 sec (SD: 0.26)
+  Mean fit time: 0.34 sec (SD: 0.24)
+  Mean pred time: 0.05 sec (SD: 0.02)
+
+Default Configuration:
+  Mean total time: 0.99 sec (SD: 0.66)
+  Mean fit time: 0.88 sec (SD: 0.61)
+  Mean pred time: 0.10 sec (SD: 0.06)
+
+Enhanced Configuration:
+  Mean total time: 1.97 sec (SD: 1.33)
+  Mean fit time: 1.78 sec (SD: 1.22)
+  Mean pred time: 0.20 sec (SD: 0.11)
+
+
+COMPETING RISKS BART:
+-------------------------------------------------------------------------------- 
+
+Minimal Configuration:
+  Mean total time: 7.71 sec (SD: 5.14)
+  Mean fit time: 7.23 sec (SD: 4.91)
+  Mean pred time: 0.48 sec (SD: 0.23)
+
+Default Configuration:
+  Mean total time: 62.90 sec (SD: 43.00)
+  Mean fit time: 61.15 sec (SD: 42.06)
+  Mean pred time: 1.76 sec (SD: 0.95)
+
+Enhanced Configuration:
+  Mean total time: 259.47 sec (SD: 184.03)
+  Mean fit time: 251.21 sec (SD: 177.90)
+  Mean pred time: 8.26 sec (SD: 6.22)
+
+
+Testing complete!

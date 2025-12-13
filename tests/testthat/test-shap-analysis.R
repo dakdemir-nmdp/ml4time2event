@@ -34,7 +34,7 @@ test_that("ml4t2e_shap_predict_fn: works with survival pipeline", {
 
   # Create prediction function
   pred_fn <- ml4t2e_shap_predict_fn(
-    pipeline = pipeline,
+    object = pipeline,
     time_horizon = 365  # 1-year expected time lost
   )
 
@@ -74,7 +74,7 @@ bmt_small <- stats::na.omit(bmt_df)
   )
 
   pred_fn <- ml4t2e_shap_predict_fn(
-    pipeline = pipeline,
+    object = pipeline,
     time_horizon = 100
   )
 
@@ -131,18 +131,18 @@ test_that("ml4t2e_shap_predict_fn: validates inputs correctly", {
   )
 
   expect_error(
-    ml4t2e_shap_predict_fn(pipeline = "not_a_pipeline", time_horizon = 365),
-    "created with `ml4t2e_pipeline"
+    ml4t2e_shap_predict_fn(object = "not_a_pipeline", time_horizon = 365),
+    "'object' must be a `T2EPipeline` or `t2e_fit` object."
   )
 
   # Should error with invalid time_horizon
   expect_error(
-    ml4t2e_shap_predict_fn(pipeline = pipeline, time_horizon = -1),
+    ml4t2e_shap_predict_fn(object = pipeline, time_horizon = -1),
     "time_horizon.*positive"
   )
 
   expect_error(
-    ml4t2e_shap_predict_fn(pipeline = pipeline, time_horizon = NA),
+    ml4t2e_shap_predict_fn(object = pipeline, time_horizon = NA),
     "time_horizon"
   )
 })
@@ -197,7 +197,7 @@ test_that("ml4t2e_calculate_shap: works with survival pipeline", {
 
   # Calculate SHAP values for a subset
   shap_result <- ml4t2e_calculate_shap(
-    pipeline = pipeline,
+    object = pipeline,
     data = lung_small[1:10, ],
     time_horizon = 365,
     nsim = 5  # Small nsim for speed in tests
@@ -235,7 +235,7 @@ bmt_small <- stats::na.omit(bmt_df)
   )
 
   shap_result <- ml4t2e_calculate_shap(
-    pipeline = pipeline,
+    object = pipeline,
     data = bmt_small[1:10, ],
     time_horizon = 100,
     nsim = 5
@@ -262,7 +262,7 @@ test_that("ml4t2e_calculate_shap: includes baseline prediction", {
   )
 
   shap_result <- ml4t2e_calculate_shap(
-    pipeline = pipeline,
+    object = pipeline,
     data = lung_small[1:8, ],
     time_horizon = 365,
     nsim = 5
@@ -289,7 +289,7 @@ test_that("ml4t2e_calculate_shap: includes predictions", {
   )
 
   shap_result <- ml4t2e_calculate_shap(
-    pipeline = pipeline,
+    object = pipeline,
     data = lung_small[1:8, ],
     time_horizon = 365,
     nsim = 5
@@ -316,7 +316,7 @@ test_that("ml4t2e_calculate_shap: SHAP values sum to prediction - baseline", {
   )
 
   shap_result <- ml4t2e_calculate_shap(
-    pipeline = pipeline,
+    object = pipeline,
     data = lung_small[1:5, ],
     time_horizon = 365,
     nsim = 5
@@ -345,17 +345,17 @@ test_that("ml4t2e_calculate_shap: validates inputs", {
 
   expect_error(
     ml4t2e_calculate_shap(
-      pipeline = "not_a_pipeline",
+      object = "not_a_pipeline",
       data = lung_small[1:5, ],
       time_horizon = 365
     ),
-    "created with `ml4t2e_pipeline"
+    "'object' must be a `T2EPipeline` or `t2e_fit` object."
   )
 
   # Invalid data
   expect_error(
     ml4t2e_calculate_shap(
-      pipeline = pipeline,
+      object = pipeline,
       data = "not_a_dataframe",
       time_horizon = 365
     ),
@@ -365,7 +365,7 @@ test_that("ml4t2e_calculate_shap: validates inputs", {
   # Invalid time_horizon
   expect_error(
     ml4t2e_calculate_shap(
-      pipeline = pipeline,
+      object = pipeline,
       data = lung_small[1:5, ],
       time_horizon = -100
     ),
@@ -389,7 +389,7 @@ test_that("ml4t2e_calculate_shap: respects nsim parameter", {
 
   # Should accept nsim parameter
   shap_result <- ml4t2e_calculate_shap(
-    pipeline = pipeline,
+    object = pipeline,
     data = lung_small[1:5, ],
     time_horizon = 365,
     nsim = 5
@@ -424,7 +424,7 @@ test_that("ml4t2e_shap_importance: returns a ggplot object", {
   )
 
   shap_result <- ml4t2e_calculate_shap(
-    pipeline = pipeline,
+    object = pipeline,
     data = lung_small[1:10, ],
     time_horizon = 365,
     nsim = 5
@@ -451,7 +451,7 @@ test_that("ml4t2e_shap_importance: handles max_features parameter", {
   )
 
   shap_result <- ml4t2e_calculate_shap(
-    pipeline = pipeline,
+    object = pipeline,
     data = lung_small[1:10, ],
     time_horizon = 365,
     nsim = 5
@@ -495,7 +495,7 @@ test_that("ml4t2e_shap_dependence: returns a ggplot object", {
   )
 
   shap_result <- ml4t2e_calculate_shap(
-    pipeline = pipeline,
+    object = pipeline,
     data = lung_small[1:10, ],
     time_horizon = 365,
     nsim = 5
@@ -524,7 +524,7 @@ test_that("ml4t2e_shap_dependence: validates feature parameter", {
   )
 
   shap_result <- ml4t2e_calculate_shap(
-    pipeline = pipeline,
+    object = pipeline,
     data = lung_small[1:10, ],
     time_horizon = 365,
     nsim = 5
@@ -562,7 +562,7 @@ test_that("ml4t2e_shap_waterfall: returns a ggplot object", {
   )
 
   shap_result <- ml4t2e_calculate_shap(
-    pipeline = pipeline,
+    object = pipeline,
     data = lung_small[1:10, ],
     time_horizon = 365,
     nsim = 5
@@ -588,7 +588,7 @@ test_that("ml4t2e_shap_waterfall: validates obs_id parameter", {
   )
 
   shap_result <- ml4t2e_calculate_shap(
-    pipeline = pipeline,
+    object = pipeline,
     data = lung_small[1:5, ],
     time_horizon = 365,
     nsim = 5
@@ -622,7 +622,7 @@ test_that("ml4t2e_shap_waterfall: handles max_features parameter", {
   )
 
   shap_result <- ml4t2e_calculate_shap(
-    pipeline = pipeline,
+    object = pipeline,
     data = lung_small[1:10, ],
     time_horizon = 365,
     nsim = 5

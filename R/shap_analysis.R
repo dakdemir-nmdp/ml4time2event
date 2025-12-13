@@ -261,9 +261,10 @@ ml4t2e_calculate_shap <- function(object,
     shap_obj <- tryCatch(
       {
         kernelshap::kernelshap(
-          object = pred_fn,
+          object = object,
           X = X,
           bg_X = background,
+          pred_fun = function(m, d) pred_fn(d),
           ...
         )
       },

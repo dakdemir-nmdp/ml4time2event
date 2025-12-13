@@ -20,7 +20,7 @@
       matrix_out <- cifs
       times_out <- target_times
     } else {
-      matrix_out <- cifMatInterpolaltor(
+      matrix_out <- cifMatInterpolator(
         probsMat = cifs,
         times = times,
         new_times = target_times

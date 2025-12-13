@@ -112,39 +112,58 @@ ml4t2e_validate_events <- function(obsevents) {
   ev
 }
 
-ml4t2e_cindex_at_time <- function(pred_surv, eval_time, obstimes, obsevents) {
-  events_idx <- which(obsevents == 1 & obstimes <= eval_time & !is.na(obstimes))
-  if (length(events_idx) == 0) {
+ml4t2e_cindex_at_time <- function(pred_surv, eval_time, obstimes, obsevents, G_Ti, G_t) {
+  # Define Cases and Controls
+  # Cases: Event occurred by eval_time
+  idx_cases <- which(obsevents == 1 & obstimes <= eval_time)
+
+  # Controls: Survived past eval_time
+  idx_controls <- which(obstimes > eval_time)
+
+  if (length(idx_cases) == 0 || length(idx_controls) == 0) {
     return(NA_real_)
   }
 
-  concordant <- 0
-  comparable <- 0
+  weights_cases <- 1 / G_Ti[idx_cases]
+  weights_controls <- rep(1 / G_t, length(idx_controls))
 
-  risk_scores <- 1 - pred_surv
+  # Risk scores (Higher risk = Lower survival)
+  risk <- 1 - pred_surv
 
-  for (i in events_idx) {
-    risk_i <- risk_scores[i]
-    if (!is.finite(risk_i)) next
+  risk_cases <- risk[idx_cases]
+  risk_controls <- risk[idx_controls]
 
-    for (j in seq_along(obstimes)) {
-      if (i == j) next
-      if (!is.finite(risk_scores[j])) next
-      if (obstimes[j] <= obstimes[i]) next
+  # Calculate Weighted AUC
+  # Numerator: Sum_{i in cases} Sum_{j in controls} W_i * W_j * I(Risk_i > Risk_j)
+  # Denominator: Sum_{i in cases} Sum_{j in controls} W_i * W_j
 
-      comparable <- comparable + 1
-      if (risk_i > risk_scores[j]) {
-        concordant <- concordant + 1
-      } else if (risk_i == risk_scores[j]) {
-        concordant <- concordant + 0.5
-      }
-    }
-  }
+  # Explicit double loop (O(N_cases * N_controls)) - same complexity as before roughly
+  # Vectorized in R is better but takes memory O(N*M).
+  # If N=2000, N*M = 4e6, manageable.
 
-  if (comparable == 0) {
+  numerator <- 0
+
+  # Vectorized comparison:
+  # Outer product comparison
+  # comp_mat[i, j] = 1 if risk_cases[i] > risk_controls[j]
+  #                  0.5 if tie
+  #                  0 if <
+
+  comp_mat <- outer(risk_cases, risk_controls, function(r_c, r_ctrl) {
+    ifelse(r_c > r_ctrl, 1, ifelse(r_c == r_ctrl, 0.5, 0))
+  })
+
+  # Weights matrix
+  w_mat <- outer(weights_cases, weights_controls, "*")
+
+  numerator <- sum(comp_mat * w_mat, na.rm = TRUE)
+  denominator <- sum(w_mat, na.rm = TRUE)
+
+  if (denominator == 0) {
     return(NA_real_)
   }
-  concordant / comparable
+
+  numerator / denominator
 }
 
 #' Time-Dependent Concordance Index for Survival Analysis
@@ -179,19 +198,38 @@ ml4t2e_cindex_at_time <- function(pred_surv, eval_time, obstimes, obsevents) {
 #'
 #' @keywords internal
 #'
-timedepConcordance <- function(predsurv, pred_times, obstimes, obsevents, TestMat = NULL) {
+
+timedepConcordance <- function(predsurv, pred_times, obstimes, obsevents, TestMat = NULL, cens_model = NULL) {
   alignment <- ml4t2e_align_surv_predictions(predsurv, pred_times, obstimes, context = "predsurv")
   obsevents_numeric <- ml4t2e_validate_events(obsevents)
+  obstimes_sorted <- alignment$obstimes
+
+  # Fit censoring model if needed
+  if (is.null(cens_model)) {
+    cens_model <- .fit_censoring_km(obstimes_sorted, obsevents_numeric)
+  }
+
+  # Pre-calculate G(T_i) for all subjects
+  G_Ti <- .get_censoring_probs(cens_model, obstimes_sorted)
+  G_Ti <- pmax(G_Ti, 1e-5)
 
   c_values <- vapply(
     seq_along(alignment$times),
     function(idx) {
+      t <- alignment$times[idx]
       surv_at_time <- alignment$matrix[idx, ]
+
+      # G(t) for controls
+      G_t <- .get_censoring_probs(cens_model, t)
+      G_t <- max(G_t, 1e-5)
+
       ml4t2e_cindex_at_time(
         pred_surv = surv_at_time,
-        eval_time = alignment$times[idx],
-        obstimes = alignment$obstimes,
-        obsevents = obsevents_numeric
+        eval_time = t,
+        obstimes = obstimes_sorted,
+        obsevents = obsevents_numeric,
+        G_Ti = G_Ti,
+        G_t = G_t
       )
     },
     numeric(1)
@@ -242,9 +280,68 @@ timedepConcordance <- function(predsurv, pred_times, obstimes, obsevents, TestMa
 #'
 #' @keywords internal
 #'
-BrierScore <- function(predsurv, pred_times, obstimes, obsevents,
-                       eval_times = NULL, TestMat = NULL) {
 
+# Internal helpers for IPCW
+.fit_censoring_km <- function(times, events) {
+  # Fit KM for censoring (status=0 is event)
+  # 0 = censored for survival, so status = 0 is the event of interest for censoring
+  # We suppress warnings about potential singular computations if data is small
+  suppressWarnings(survival::survfit(survival::Surv(times, events == 0) ~ 1))
+}
+
+.get_censoring_probs <- function(km_fit, times) {
+  # Predict P(C > t)
+  # Use stepfun for robust interpolation (constant survival between events)
+
+  if (length(km_fit$time) == 0) {
+    # No events/censoring? (e.g. empty fit or all 0 time?)
+    return(rep(1, length(times)))
+  }
+
+  # stepfun(x, y). y must be length(x) + 1.
+  # y[1] is value < x[1]. y[2] is value >= x[1].
+  # We want P(C > t).
+  # Before first time, prob is 1.
+  # After first time (if event), prob drops.
+
+  stats::stepfun(km_fit$time, c(1, km_fit$surv), right = FALSE)(times)
+}
+
+#' Brier Score for Survival Predictions (IPCW Corrected)
+#'
+#' Computes the Inverse Probability of Censoring Weighted (IPCW) Brier Score.
+#' Measures mean squared error between predicted survival probabilities and
+#' observed binary event status, weighted to account for censoring.
+#'
+#' **Formula**:
+#' \eqn{BS(t) = \frac{1}{N} \sum_{i=1}^N \hat{W}_i(t) (Y_i(t) - \hat{S}(t|X_i))^2}
+#'
+#' Weights \eqn{\hat{W}_i(t)} definition:
+#' - If \eqn{T_i \le t} and \eqn{\delta_i = 1} (Observed event): \eqn{1/\hat{G}(T_i-)}
+#' - If \eqn{T_i > t} (Observed survivor): \eqn{1/\hat{G}(t)}
+#' - Otherwise (Censored before \eqn{t}): \eqn{0}
+#'
+#' Where \eqn{\hat{G}} is the Kaplan-Meier estimate of the censoring distribution.
+#'
+#' @param predsurv Matrix of predicted survival probabilities (rows = times, cols = observations)
+#' @param pred_times Numeric vector of time points
+#' @param obstimes Observed times
+#' @param obsevents Binary event indicator
+#' @param eval_times Optional evaluation time points. If NULL, computed at all `pred_times`.
+#' @param TestMat Optional test matrix (currently unused)
+#' @param cens_model Optional pre-fitted censoring model (survfit object). If NULL, computed from provided data.
+#'
+#' @return List of class `ml4time2event_brier` containing Brier scores and time grid
+#'
+#' @references
+#' Graf, E., Schmoor, C., Sauerbrei, W., & Schumacher, M. (1999).
+#' "Assessment and comparison of prognostic classification schemes for survival data."
+#' *Statistics in Medicine*, 18(17‐18), 2529-2545.
+#'
+#' @keywords internal
+#'
+BrierScore <- function(predsurv, pred_times, obstimes, obsevents,
+                       eval_times = NULL, TestMat = NULL, cens_model = NULL) {
   alignment <- ml4t2e_align_surv_predictions(predsurv, pred_times, obstimes, context = "predsurv")
   if (is.null(eval_times)) {
     eval_times <- alignment$times
@@ -258,31 +355,73 @@ BrierScore <- function(predsurv, pred_times, obstimes, obsevents,
   }
 
   obsevents_numeric <- ml4t2e_validate_events(obsevents)
+  obstimes_sorted <- alignment$obstimes # Aligned obstimes
+  n_obs <- length(obstimes_sorted)
+
+  # fit or use censoring model
+  if (is.null(cens_model)) {
+    cens_model <- .fit_censoring_km(obstimes_sorted, obsevents_numeric)
+  }
+
+  # Pre-calculate G(Ti) for all subjects
+  # We use a small epsilon to avoid division by zero if G(t)=0
+  # (though usually G(t) > 0 for valid follow-up range)
+  G_Ti <- .get_censoring_probs(cens_model, obstimes_sorted)
+  G_Ti <- pmax(G_Ti, 1e-5)
+
+  # Pre-calculate G(t) for all eval_times
+  G_t_all <- .get_censoring_probs(cens_model, eval_times)
+  G_t_all <- pmax(G_t_all, 1e-5)
 
   brier_values <- vapply(
-    eval_times,
-    function(t_eval) {
+    seq_along(eval_times),
+    function(j) {
+      t_eval <- eval_times[j]
+      G_t <- G_t_all[j]
+
       pred_surv <- ml4t2e_interpolate_survival(alignment$matrix, alignment$times, t_eval)
-      valid <- is.finite(pred_surv) & is.finite(obstimes) & !is.na(obsevents_numeric)
-      if (!any(valid)) {
+
+      # Determine weights and contributions
+      # Case 1: T_i <= t, Delta_i = 1 -> Weight 1/G(Ti)
+      # Case 2: T_i > t -> Weight 1/G(t)
+      # Case 3: T_i <= t, Delta_i = 0 -> Weight 0
+
+      weights <- numeric(n_obs)
+
+      # Case 1
+      idx_event <- obstimes_sorted <= t_eval & obsevents_numeric == 1
+      weights[idx_event] <- 1 / G_Ti[idx_event]
+
+      # Case 2
+      idx_surv <- obstimes_sorted > t_eval
+      weights[idx_surv] <- 1 / G_t
+
+      # Observations outcomes Y_i(t)
+      # Y_i(t) = 1 if T_i > t (Survivor)
+      # Y_i(t) = 0 if T_i <= t (Event)
+      # (Note: Standard Brier is (Y - S)^2. If S is Prob(T>t), then Y should be I(T>t))
+
+      obs_Y <- as.numeric(idx_surv)
+
+      # Squared errors
+      sq_err <- (obs_Y - pred_surv)^2
+
+      # Weighted Mean Square Error
+      # Exclude those with 0 weight from the mean?
+      # Graf et al definition uses 1/N sum(Weights * SquaredError).
+      # So we sum and divide by N (total sample size), NOT sum of weights.
+
+      # Handle NAs in prediction
+      valid_pred <- !is.na(pred_surv)
+      if (sum(valid_pred) == 0) {
         return(NA_real_)
       }
 
-      # Only include observations at risk at time t_eval
-      # At risk if: obstimes > t_eval (still at risk) OR (obstimes <= t_eval AND obsevents == 1) (event occurred)
-      at_risk <- (obstimes[valid] > t_eval) | (obstimes[valid] <= t_eval & obsevents_numeric[valid] == 1)
-      event_by_t <- obsevents_numeric[valid] == 1 & obstimes[valid] <= t_eval & at_risk
-      surv_pred <- pred_surv[valid][at_risk]
-      
-      if (length(surv_pred) == 0) {
-        return(NA_real_)
-      }
+      # If predictions have NAs, we should theoretically ignore them.
+      # If we ignore `k` predictions, we divide by `N-k`.
 
-      scores <- ifelse(event_by_t, surv_pred^2, (1 - surv_pred)^2)
-      if (all(is.na(scores))) {
-        return(NA_real_)
-      }
-      mean(scores, na.rm = TRUE)
+      score_contrib <- weights[valid_pred] * sq_err[valid_pred]
+      mean(score_contrib)
     },
     numeric(1)
   )
@@ -333,7 +472,6 @@ BrierScore <- function(predsurv, pred_times, obstimes, obsevents,
 #'
 integratedBrier <- function(predsurv, pred_times, obstimes, obsevents,
                             eval_times = NULL, TestMat = NULL) {
-
   # Get Brier scores at all time points
   brier_obj <- BrierScore(
     predsurv = predsurv,
@@ -387,7 +525,6 @@ integratedBrier <- function(predsurv, pred_times, obstimes, obsevents,
 #' @keywords internal
 #'
 integratedC <- function(predsurv, pred_times, obstimes, obsevents, TestMat = NULL) {
-
   # Get time-dependent concordance
   cindex_obj <- timedepConcordance(
     predsurv = predsurv,
