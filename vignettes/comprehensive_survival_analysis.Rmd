@@ -1,5 +1,5 @@
 ---
-title: "Comprehensive Survival Analysis with ml4time2event"
+title: "Comprehensive Survival Analysis"
 author: "ml4time2event team"
 date: "`r Sys.Date()`"
 output:
@@ -38,6 +38,7 @@ This vignette walks through an end-to-end survival workflow that showcases the n
 library(ml4time2event)
 library(dplyr)
 library(ggplot2)
+library(survival)
 ```
 
 The NCCTG lung-cancer dataset ships with the package. We convert the event indicator to the 0/1 format expected by the new task constructors.
@@ -64,13 +65,15 @@ glimpse(lung_df)
 For the remainder of the analysis we keep a simple training / validation split.
 
 ```{r split}
-#set.seed(123)
+# set.seed(123)
 train_rows <- sample.int(nrow(lung_df), size = floor(0.7 * nrow(lung_df)))
 lung_train <- lung_df[train_rows, ]
-lung_test  <- lung_df[-train_rows, ]
+lung_test <- lung_df[-train_rows, ]
 
-sprintf("Training rows: %s  |  Validation rows: %s",
-        nrow(lung_train), nrow(lung_test))
+sprintf(
+  "Training rows: %s  |  Validation rows: %s",
+  nrow(lung_train), nrow(lung_test)
+)
 ```
 
 # 2. Build a survival task
@@ -78,8 +81,10 @@ sprintf("Training rows: %s  |  Validation rows: %s",
 Tasks capture the outcome columns, the feature set, and lightweight metadata.
 
 ```{r task}
-feature_cols <- c("age", "sex", "ph.ecog", "ph.karno", "pat.karno",
-                  "meal.cal", "wt.loss")
+feature_cols <- c(
+  "age", "sex", "ph.ecog", "ph.karno", "pat.karno",
+  "meal.cal", "wt.loss"
+)
 
 surv_task <- ml4t2e_task_surv(
   data = lung_train,
@@ -98,9 +103,10 @@ surv_task <- ml4t2e_task_surv(
 ```{r fit}
 surv_fit <- ml4t2e_fit(
   task = surv_task,
-  models = c("cox", "random_forest", "gbm", "gam", "xgboost"),
+  models = c("cox", "random_forest"),
   ensemble = "auto",
-  controls = list(times = seq(0, 1000, length.out = 75))
+  controls = list(times = seq(0, 1000, length.out = 75)),
+  keep_data = TRUE
 )
 
 surv_fit
@@ -112,7 +118,7 @@ Evaluation on the training data is one function call away.
 ml4t2e_evaluate(
   surv_fit,
   metrics = c("c_index", "ibs"),
-  include = c("ensemble", "cox", "random_forest", "gbm", "gam", "xgboost")
+  include = c("ensemble", "cox", "random_forest")
 )
 ```
 
@@ -135,13 +141,14 @@ surv_preds_val <- predict(
   newdata = lung_test,
   times = seq(0, 1000, length.out = 75),
   type = "survival",
-  include = c("ensemble", "cox", "random_forest", "gbm", "gam", "xgboost")
+  include = c("ensemble", "cox", "random_forest")
 )
 
 ml4t2e_evaluate(
   surv_preds_val,
   task = surv_task_val,
-  metrics = c("c_index", "ibs")
+  metrics = c("c_index", "ibs"),
+  include = c("ensemble", "cox", "random_forest")
 )
 ```
 
@@ -149,8 +156,8 @@ ml4t2e_evaluate(
 
 `autoplot()` works on both fitted objects and tidy prediction tibbles.
 
-```{r autoplot-fit, fig.width=7, fig.height=4}
-autoplot(surv_fit, include = c("ensemble", "cox", "random_forest", "gbm", "gam", "xgboost"))
+```{r autoplot-fit-v2, fig.width=7, fig.height=4}
+autoplot(surv_fit, include = c("ensemble", "cox", "random_forest"))
 ```
 
 ```{r autoplot-preds, fig.width=7, fig.height=4}
@@ -170,7 +177,8 @@ surv_fit_conformal <- ml4t2e_fit(
   models = c("cox", "random_forest"),
   ensemble = "auto",
   controls = list(times = seq(0, 1000, length.out = 75)),
-  conformal_calibration = 0.2
+  conformal_calibration = 0.2,
+  keep_data = TRUE
 )
 
 # Predict with 90% confidence bands (alpha = 0.1)
@@ -190,8 +198,10 @@ preds_p1 <- preds_conformal %>% filter(id == lung_test$id[1])
 ggplot(preds_p1, aes(x = time, y = surv)) +
   geom_line(color = "blue") +
   geom_ribbon(aes(ymin = lower, ymax = upper), alpha = 0.2, fill = "blue") +
-  labs(title = "Survival Curve with 90% Conformal Confidence Bands",
-       y = "Survival Probability", x = "Time") +
+  labs(
+    title = "Survival Curve with 90% Conformal Confidence Bands",
+    y = "Survival Probability", x = "Time"
+  ) +
   theme_minimal()
 ```
 
@@ -221,9 +231,9 @@ library(rsample)
 
 surv_pipeline <- ml4t2e_pipeline(
   outcome = list(type = "survival", time = "time", event = "status"),
-  models = c("cox", "random_forest", "gbm", "gam", "xgboost"),
+  models = c("cox", "random_forest", "gbm", "xgboost"),
   ensemble = "auto",
-  recipe = recipe(status ~ ., data = lung_train) |>
+  recipe = recipe(~., data = lung_train) |>
     step_impute_median(all_numeric_predictors()) |>
     step_dummy(all_nominal_predictors()),
   resampling = vfold_cv(lung_train, v = 3)

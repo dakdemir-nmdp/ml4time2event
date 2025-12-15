@@ -7,7 +7,7 @@
 .competing_risk_align_cif(prediction, target_times)
 }
 \description{
-These wrappers adapt the existing `CRModel_*` fitters into the new R6-based
+These wrappers adapt the existing \verb{CRModel_*} fitters into the new R6-based
 infrastructure without duplicating fitting logic.
 }
 \keyword{internal}

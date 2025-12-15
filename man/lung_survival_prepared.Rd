@@ -7,17 +7,17 @@
 \format{
 A data frame with 228 rows and 11 variables:
 \describe{
-  \item{time}{Follow-up time in days.}
-  \item{status}{Event indicator (1 = death, 0 = censored).}
-  \item{age}{Age in years at registration.}
-  \item{sex}{Factor indicating sex (`Male`, `Female`).}
-  \item{ph.ecog}{Eastern Cooperative Oncology Group performance score (factor).}
-  \item{ph.karno}{Karnofsky performance score assessed by physician.}
-  \item{pat.karno}{Karnofsky performance score assessed by patient.}
-  \item{meal.cal}{Calories consumed per day.}
-  \item{wt.loss}{Weight loss in the last six months (kg).}
-  \item{age_group}{Factor with age groups (`Young`, `Middle`, `Elderly`).}
-  \item{performance_good}{Indicator (1/0) for physician Karnofsky score >= 80.}
+\item{time}{Follow-up time in days.}
+\item{status}{Event indicator (1 = death, 0 = censored).}
+\item{age}{Age in years at registration.}
+\item{sex}{Factor indicating sex (\code{Male}, \code{Female}).}
+\item{ph.ecog}{Eastern Cooperative Oncology Group performance score (factor).}
+\item{ph.karno}{Karnofsky performance score assessed by physician.}
+\item{pat.karno}{Karnofsky performance score assessed by patient.}
+\item{meal.cal}{Calories consumed per day.}
+\item{wt.loss}{Weight loss in the last six months (kg).}
+\item{age_group}{Factor with age groups (\code{Young}, \code{Middle}, \code{Elderly}).}
+\item{performance_good}{Indicator (1/0) for physician Karnofsky score >= 80.}
 }
 }
 \source{
@@ -29,12 +29,12 @@ lung_survival_prepared
 \description{
 A cleaned and imputed version of the NCCTG lung cancer study used in the
 survival-analysis vignette. The dataset has missing values imputed with
-`missRanger`, categorical variables encoded as factors, and includes a few
+\code{missRanger}, categorical variables encoded as factors, and includes a few
 engineered predictors that illustrate feature creation.
 }
 \details{
 Derived from the NCCTG lung cancer dataset included with the package.
-  Missing values were imputed using `ImputeMissinRecordsData()` and engineered
-  features were added for demonstration purposes.
+Missing values were imputed using \code{ImputeMissinRecordsData()} and engineered
+features were added for demonstration purposes.
 }
 \keyword{datasets}

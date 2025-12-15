@@ -25,11 +25,13 @@ timedepConcordance(
 \item{TestMat}{Optional test matrix (currently unused)}
 }
 \value{
-List of class `ml4time2event_cindex` containing:
-  - `AppCindex$matrix`: Vector of C-index values at each time point
-  - `AppCindex$time`: Corresponding time points
-  - `time`: Time grid
-  - `call`: Original function call
+List of class \code{ml4time2event_cindex} containing:
+\itemize{
+\item \code{AppCindex$matrix}: Vector of C-index values at each time point
+\item \code{AppCindex$time}: Corresponding time points
+\item \code{time}: Time grid
+\item \code{call}: Original function call
+}
 }
 \description{
 Computes Harrell's C-index at each time point in the prediction grid.
@@ -37,16 +39,18 @@ This assesses how well predicted survival probabilities discriminate between
 pairs of observations where one had an earlier event.
 }
 \details{
-**Formula**:
+\strong{Formula}:
 At time \eqn{t}, \eqn{C(t) = \frac{\sum_{i,j} I(t_i < t_j) \cdot I(\hat{S}_i(t) > \hat{S}_j(t)) \cdot \delta_j}{\sum_{i,j} I(t_i < t_j) \cdot \delta_j}}
 
-**Interpretation**:
-- Range: 0.5 (random predictions) to 1.0 (perfect discrimination)
-- 0.5 = worse than random; 1.0 = perfect ranking
-- Values > 0.7 typically considered good discrimination
+\strong{Interpretation}:
+\itemize{
+\item Range: 0.5 (random predictions) to 1.0 (perfect discrimination)
+\item 0.5 = worse than random; 1.0 = perfect ranking
+\item Values > 0.7 typically considered good discrimination
+}
 }
 \references{
 Harrell, F. E., Lee, K. L., & Mark, D. B. (1996).
-"Multivariable prognostic models." *Statistics in Medicine*, 15(4), 361–387.
+"Multivariable prognostic models." \emph{Statistics in Medicine}, 15(4), 361–387.
 }
 \keyword{internal}

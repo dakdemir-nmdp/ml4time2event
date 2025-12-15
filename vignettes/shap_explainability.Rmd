@@ -120,7 +120,7 @@ cr_pipe <- ml4t2e_pipeline(
     status = "status",
     cause = "cause"
   ),
-  models = c("cox", "fine_gray"),
+  models = c("cox", "cr_fine_gray"),
   ensemble = "auto"
 )
 

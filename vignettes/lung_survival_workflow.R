@@ -8,6 +8,7 @@ library(dplyr)
 library(ggplot2)
 library(recipes)
 library(rsample)
+library(survival)
 
 lung <- get_lung_survival_data()
 
@@ -28,10 +29,12 @@ table(lung$status, useNA = "ifany")
 set.seed(2025)
 split <- initial_split(lung, prop = 0.75, strata = "status")
 lung_train <- training(split)
-lung_test  <- testing(split)
+lung_test <- testing(split)
 
-feature_cols <- c("age", "sex", "ph.ecog", "ph.karno", "pat.karno",
-                  "meal.cal", "wt.loss")
+feature_cols <- c(
+  "age", "sex", "ph.ecog", "ph.karno", "pat.karno",
+  "meal.cal", "wt.loss"
+)
 
 
 ## ----task-and-fit-------------------------------------------------------------
@@ -99,7 +102,7 @@ surv_pipeline <- ml4t2e_pipeline(
   outcome = list(type = "survival", time = "time", event = "status"),
   models = c("cox", "random_forest"),
   ensemble = "auto",
-  recipe = recipe(status ~ ., data = lung_train) |>
+  recipe = recipe(~., data = lung_train) |>
     step_impute_median(all_numeric_predictors()) |>
     step_dummy(all_nominal_predictors()),
   resampling = vfold_cv(lung_train, v = 3)

@@ -27,7 +27,7 @@
 \item{event_of_interest}{For CR, the cause of interest. NULL for survival.}
 }
 \value{
-A list with `scores` (matrix) and `weights` (matrix).
+A list with \code{scores} (matrix) and \code{weights} (matrix).
 }
 \description{
 Compute Conformal Scores

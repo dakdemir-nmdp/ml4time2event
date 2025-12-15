@@ -33,6 +33,19 @@ Packages install into the project-local `renv/library` directory (configured via
 
 When you change dependencies, run `renv::snapshot()` to update `renv.lock` so teammates get the same versions.
 
+## Docker Support
+
+This package includes a Dockerized environment for reproducible research and development. It uses `renv` to ensure the exact same package versions are used.
+
+ To start the RStudio Server container:
+ ```bash
+ docker-compose up --build
+ ```
+
+ Then access RStudio at [http://localhost:8787](http://localhost:8787) (user: `rstudio`, password: `ml4time2event`).
+
+ For more details, see [README_DOCKER.md](README_DOCKER.md).
+
 ## Quickstart (3–5 lines)
 
 ```r

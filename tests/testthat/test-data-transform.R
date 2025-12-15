@@ -22,7 +22,7 @@ test_df_transform <- data.frame( # Renamed and replaced data.table()
 # --- Tests for ZeroOneScalerData ---
 
 test_that("ZeroOneScalerData scales numeric columns to [0, 1]", {
-  scaled_result <- ZeroOneScalerData(test_df_transform) # Removed copy()
+  scaled_result <- suppressWarnings(ZeroOneScalerData(test_df_transform)) # Suppressing constant col warning
   scaled_data <- scaled_result$data
 
   # Check structure of result
@@ -66,7 +66,7 @@ test_that("ZeroOneScalerData scales numeric columns to [0, 1]", {
 
 test_that("ZeroOneScalerData handles data.frames", {
   test_df <- as.data.frame(test_df_transform)
-  scaled_result <- ZeroOneScalerData(test_df)
+  scaled_result <- suppressWarnings(ZeroOneScalerData(test_df))
   expect_s3_class(scaled_result$data, "data.frame") # Already checking data.frame
   expect_equal(scaled_result$data$num1, c(0, 0.25, 0.5, 0.75, 1))
 })
@@ -89,7 +89,7 @@ test_that("ZeroOneScalerData handles empty input", {
 # --- Tests for ZeroOneScalerApplierData ---
 
 # Get scaling parameters from original data
-scaling_params <- ZeroOneScalerData(test_df_transform) # Removed copy()
+scaling_params <- suppressWarnings(ZeroOneScalerData(test_df_transform)) # Removed copy()
 mins <- scaling_params$minxvec
 maxs <- scaling_params$maxxvec
 
@@ -107,7 +107,7 @@ new_data <- data.frame( # Replaced data.table()
 )
 
 test_that("ZeroOneScalerApplierData applies scaling correctly", {
-  applied_data <- ZeroOneScalerApplierData(new_data, mins, maxs) # Removed copy()
+  applied_data <- suppressWarnings(ZeroOneScalerApplierData(new_data, mins, maxs)) # Removed copy()
 
   # Check num1: (15-10)/(50-10)=0.125, (35-10)/(50-10)=0.625
   expect_equal(applied_data$num1, c(0.125, 0.625))
@@ -129,30 +129,36 @@ test_that("ZeroOneScalerApplierData applies scaling correctly", {
   expect_equal(applied_data$factor_col, new_data$factor_col)
 
   # Check column not in scaling params (should be skipped with warning)
-  expect_warning(applied_data_warn <- ZeroOneScalerApplierData(new_data, mins, maxs), # Removed copy()
-                 "not provided for numeric column 'extra_col'")
+  expect_warning(
+    applied_data_warn <- ZeroOneScalerApplierData(new_data, mins, maxs), # Removed copy()
+    "not provided for numeric column 'extra_col'"
+  )
   expect_equal(applied_data_warn$extra_col, new_data$extra_col)
 })
 
 test_that("ZeroOneScalerApplierData handles missing/NA scaling parameters", {
   mins_missing <- mins[!names(mins) %in% "num1"]
   maxs_missing <- maxs[!names(maxs) %in% "num1"]
-  expect_warning(applied_data <- ZeroOneScalerApplierData(new_data, mins_missing, maxs), # Removed copy()
-                 "not provided for numeric column 'num1'")
+  expect_warning(
+    applied_data <- ZeroOneScalerApplierData(new_data, mins_missing, maxs), # Removed copy()
+    "not provided for numeric column 'num1'"
+  )
   expect_equal(applied_data$num1, new_data$num1) # Should be unchanged
 
   mins_na <- mins
   mins_na["num1"] <- NA
-  expect_warning(applied_data_na <- ZeroOneScalerApplierData(new_data, mins_na, maxs), # Removed copy()
-                 "Missing min/max value for numeric column 'num1'")
+  expect_warning(
+    applied_data_na <- ZeroOneScalerApplierData(new_data, mins_na, maxs), # Removed copy()
+    "Missing min/max value for numeric column 'num1'"
+  )
   expect_equal(applied_data_na$num1, new_data$num1) # Should be unchanged
 })
 
 test_that("ZeroOneScalerApplierData handles empty input", {
-   # empty_dt <- data.table() # Removed data.table call
-   # expect_equal(ZeroOneScalerApplierData(empty_dt, mins, maxs), empty_dt) # Removed data.table test
-   empty_df <- data.frame()
-   expect_equal(ZeroOneScalerApplierData(empty_df, mins, maxs), empty_df)
+  # empty_dt <- data.table() # Removed data.table call
+  # expect_equal(ZeroOneScalerApplierData(empty_dt, mins, maxs), empty_dt) # Removed data.table test
+  empty_df <- data.frame()
+  expect_equal(ZeroOneScalerApplierData(empty_df, mins, maxs), empty_df)
 })
 
 
@@ -162,7 +168,7 @@ test_that("ZeroOneScalerApplierData handles empty input", {
 scaled_data_to_undo <- scaling_params$data
 
 test_that("UndoZeroOneScalerApplierData reverses scaling correctly", {
-  undone_data <- UndoZeroOneScalerApplierData(scaled_data_to_undo, mins, maxs) # Removed copy()
+  undone_data <- suppressWarnings(UndoZeroOneScalerApplierData(scaled_data_to_undo, mins, maxs)) # Removed copy()
 
   # Check numeric columns are restored (allowing for float precision issues)
   expect_equal(undone_data$num1, test_df_transform$num1)
@@ -178,22 +184,26 @@ test_that("UndoZeroOneScalerApplierData reverses scaling correctly", {
 
 test_that("UndoZeroOneScalerApplierData handles missing/NA scaling parameters", {
   mins_missing <- mins[!names(mins) %in% "num1"]
-  expect_warning(undone_data <- UndoZeroOneScalerApplierData(scaled_data_to_undo, mins_missing, maxs), # Removed copy()
-                 "not provided for numeric column 'num1'")
+  expect_warning(
+    undone_data <- UndoZeroOneScalerApplierData(scaled_data_to_undo, mins_missing, maxs), # Removed copy()
+    "not provided for numeric column 'num1'"
+  )
   expect_equal(undone_data$num1, scaled_data_to_undo$num1) # Should be unchanged (still scaled)
 
   maxs_na <- maxs
   maxs_na["num2"] <- NA
-  expect_warning(undone_data_na <- UndoZeroOneScalerApplierData(scaled_data_to_undo, mins, maxs_na), # Removed copy()
-                 "Missing min/max value for numeric column 'num2'")
+  expect_warning(
+    undone_data_na <- UndoZeroOneScalerApplierData(scaled_data_to_undo, mins, maxs_na), # Removed copy()
+    "Missing min/max value for numeric column 'num2'"
+  )
   expect_equal(undone_data_na$num2, scaled_data_to_undo$num2) # Should be unchanged
 })
 
 test_that("UndoZeroOneScalerApplierData handles empty input", {
-   # empty_dt <- data.table() # Removed data.table call
-   # expect_equal(UndoZeroOneScalerApplierData(empty_dt, mins, maxs), empty_dt) # Removed data.table test
-   empty_df <- data.frame()
-   expect_equal(UndoZeroOneScalerApplierData(empty_df, mins, maxs), empty_df)
+  # empty_dt <- data.table() # Removed data.table call
+  # expect_equal(UndoZeroOneScalerApplierData(empty_dt, mins, maxs), empty_dt) # Removed data.table test
+  empty_df <- data.frame()
+  expect_equal(UndoZeroOneScalerApplierData(empty_df, mins, maxs), empty_df)
 })
 
 
@@ -202,7 +212,7 @@ test_that("UndoZeroOneScalerApplierData handles empty input", {
 test_df_categorize <- data.frame( # Replaced data.table()
   id = 1:20,
   numeric_wide = seq(1, 100, length.out = 20), # Wide range
-  numeric_narrow = rnorm(20, 5, 0.5),        # Narrow range
+  numeric_narrow = rnorm(20, 5, 0.5), # Narrow range
   numeric_skewed = c(rep(1, 15), 10, 20, 30, 40, 50), # Skewed
   numeric_few_unique = rep(c(1, 5, 10), length.out = 20), # Only 3 unique
   numeric_with_na = c(1:5, NA, 7:10, NA, 12:20),
@@ -283,7 +293,7 @@ test_that("NumVarstCatsData handles duplicated quantiles", {
   categorized_data <- NumVarstCatsData(df_dup_quant, numgroups = 4, min_unique_vals = 3) # Removed copy()
   expect_s3_class(categorized_data$x, "factor")
   # Expect fewer than 4 levels due to duplicate quantiles being treated as single breaks
-  expect_equal(length(levels(categorized_data$x)), 3) 
+  expect_equal(length(levels(categorized_data$x)), 3)
   # Based on unique quantiles: 1, 1.5, 4, 10 -> Breaks: 1, 1.5, 4, 10 -> Levels: [1, 1.5), [1.5, 4), [4, 10]
   expect_equal(levels(categorized_data$x), c("[1, 1.5)", "[1.5, 4)", "[4, 10]"))
 })
@@ -294,16 +304,18 @@ test_that("NumVarstCatsData requires numgroups or cuts", {
 })
 
 test_that("NumVarstCatsData warns if both numgroups and cuts provided", {
-   expect_warning(NumVarstCatsData(test_df_categorize, numgroups = 4, cuts = c(25, 75)),
-                  "'cuts' provided, 'numgroups' will be ignored")
-   # Check that cuts were actually used
-   categorized_data <- suppressWarnings(NumVarstCatsData(test_df_categorize, numgroups = 4, cuts = c(25, 75))) # Removed copy()
-   expect_length(levels(categorized_data$numeric_wide), 3) # Cuts c(25, 75) -> 3 levels
+  expect_warning(
+    NumVarstCatsData(test_df_categorize, numgroups = 4, cuts = c(25, 75)),
+    "'cuts' provided, 'numgroups' will be ignored"
+  )
+  # Check that cuts were actually used
+  categorized_data <- suppressWarnings(NumVarstCatsData(test_df_categorize, numgroups = 4, cuts = c(25, 75))) # Removed copy()
+  expect_length(levels(categorized_data$numeric_wide), 3) # Cuts c(25, 75) -> 3 levels
 })
 
 test_that("NumVarstCatsData handles empty input", {
-   # empty_dt <- data.table() # Removed data.table call
-   # expect_equal(NumVarstCatsData(empty_dt, numgroups = 4), empty_dt) # Removed data.table test
-   empty_df <- data.frame()
-   expect_equal(NumVarstCatsData(empty_df, cuts = c(10, 20)), empty_df)
+  # empty_dt <- data.table() # Removed data.table call
+  # expect_equal(NumVarstCatsData(empty_dt, numgroups = 4), empty_dt) # Removed data.table test
+  empty_df <- data.frame()
+  expect_equal(NumVarstCatsData(empty_df, cuts = c(10, 20)), empty_df)
 })

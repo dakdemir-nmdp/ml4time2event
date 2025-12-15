@@ -20,21 +20,21 @@ ml4t2e_calculate_shap(
 time lost calculations.}
 
 \item{background}{Optional background data frame; defaults to a sample from
-`data`.}
+\code{data}.}
 
-\item{nsim}{Number of Monte Carlo simulations passed to `fastshap::explain()`
+\item{nsim}{Number of Monte Carlo simulations passed to \code{fastshap::explain()}
 when available.}
 
 \item{...}{Additional arguments forwarded to the underlying SHAP engine.}
 
-\item{pipeline}{A fitted pipeline produced by `ml4t2e_fit_pipeline()`.}
+\item{pipeline}{A fitted pipeline produced by \code{ml4t2e_fit_pipeline()}.}
 }
 \value{
-An object of class `ml4t2e_shap` containing SHAP values, baseline
-  prediction, raw predictions, and feature values.
+An object of class \code{ml4t2e_shap} containing SHAP values, baseline
+prediction, raw predictions, and feature values.
 }
 \description{
-Generates expected-time-lost SHAP values for a fitted `ml4time2event`
+Generates expected-time-lost SHAP values for a fitted \code{ml4time2event}
 pipeline by wrapping the tidy survival predictions in a prediction function
-suitable for `fastshap` or `kernelshap`.
+suitable for \code{fastshap} or \code{kernelshap}.
 }

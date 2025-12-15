@@ -26,6 +26,7 @@ This vignette demonstrates testing all available survival models in the `ml4time
 library(ml4time2event)
 library(dplyr)
 library(ggplot2)
+library(survival)
 ```
 
 Load the lung cancer dataset and create a small subset for testing:
@@ -76,12 +77,14 @@ Fit all available survival models (excluding GBM which has issues with small dat
 
 ```{r fit_models}
 models_to_fit <- survival_models$engine
+models_to_fit <- setdiff(models_to_fit, "gbm") # Exclude GBM explicitly
 
 # Fit all survival models
 fitted_models <- ml4t2e_fit(
   task = task,
   models = models_to_fit,
-  seed = 42
+  seed = 42,
+  keep_data = TRUE
 )
 
 # Check the fitted models
@@ -121,7 +124,7 @@ Create a simple visualization of survival curves for a few models:
 # Plot survival curves for first few models
 plot_data <- predictions %>%
   filter(model %in% c("cox", "random_forest", "xgboost")) %>%
-  filter(id == 1)  # Focus on one individual
+  filter(id == 1) # Focus on one individual
 
 ggplot(plot_data, aes(x = time, y = surv, color = model)) +
   geom_line() +

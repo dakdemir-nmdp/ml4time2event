@@ -34,9 +34,11 @@ Averages time-dependent concordance across evaluation times.
 Provides a single summary measure of discrimination over follow-up.
 }
 \details{
-**Interpretation**:
-- Mean of C-index values across time points
-- Range: 0.5 (random) to 1.0 (perfect)
-- Accounts for competing events in all comparisons
+\strong{Interpretation}:
+\itemize{
+\item Mean of C-index values across time points
+\item Range: 0.5 (random) to 1.0 (perfect)
+\item Accounts for competing events in all comparisons
+}
 }
 \keyword{internal}

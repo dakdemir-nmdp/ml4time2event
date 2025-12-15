@@ -3,6 +3,7 @@ knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
 library(ml4time2event)
 library(dplyr)
 library(ggplot2)
+library(survival)
 
 lung <- get_lung_survival_data()
 
@@ -14,10 +15,12 @@ if (max(lung$status, na.rm = TRUE) > 1) {
 set.seed(2025)
 train_rows <- sample.int(nrow(lung), size = floor(0.7 * nrow(lung)))
 lung_train <- lung[train_rows, ]
-lung_test  <- lung[-train_rows, ]
+lung_test <- lung[-train_rows, ]
 
-feature_cols <- c("age", "sex", "ph.ecog", "ph.karno", "pat.karno",
-                  "meal.cal", "wt.loss")
+feature_cols <- c(
+  "age", "sex", "ph.ecog", "ph.karno", "pat.karno",
+  "meal.cal", "wt.loss"
+)
 
 surv_task <- ml4t2e_task_surv(
   data = lung_train,

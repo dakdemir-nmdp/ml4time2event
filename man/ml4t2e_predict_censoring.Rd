@@ -7,7 +7,7 @@
 ml4t2e_predict_censoring(model, times)
 }
 \arguments{
-\item{model}{A `survfit` object (censoring model).}
+\item{model}{A \code{survfit} object (censoring model).}
 
 \item{times}{Numeric vector of times to predict.}
 }

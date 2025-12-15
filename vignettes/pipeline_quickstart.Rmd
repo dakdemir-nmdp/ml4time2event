@@ -17,19 +17,20 @@ library(ml4time2event)
 library(dplyr)
 library(recipes)
 library(rsample)
+library(survival)
 ```
 
 ## Survival pipelines
 
 ```{r}
-lung <- get_lung_survival_data() |> 
+lung <- get_lung_survival_data() |>
   mutate(status = if_else(status == 2, 1L, status))
 
 surv_pipe <- ml4t2e_pipeline(
   outcome = list(type = "survival", time = "time", event = "status"),
   models = c("cox", "gbm"),
   ensemble = "auto",
-  recipe = recipe(~ ., data = lung) |>
+  recipe = recipe(~., data = lung) |>
     step_impute_median(all_numeric_predictors()),
   resampling = vfold_cv(lung, v = 3)
 )
@@ -67,7 +68,7 @@ cr_pipe <- ml4t2e_pipeline(
     status = "status",
     cause = "cause"
   ),
-  models = c("cox", "fine_gray"),
+  models = c("cox", "cr_fine_gray"),
   ensemble = "auto"
 )
 

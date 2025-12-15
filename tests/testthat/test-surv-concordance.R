@@ -19,7 +19,7 @@ beta <- 3.0
 x1 <- rnorm(n_obs)
 lp <- beta * x1
 time <- rexp(n_obs, rate = exp(lp - mean(lp) + log(0.1)))
-  censor_time <- rexp(n_obs, rate = 0.01)  # Low censoring
+censor_time <- rexp(n_obs, rate = 0.01) # Low censoring
 event <- as.integer(time <= censor_time)
 observed_time <- pmin(time, censor_time)
 
@@ -50,6 +50,7 @@ test_that("Survival concordance index is > 0.5 for models with predictive power"
 
   # Fit a Cox model (should have good concordance since x1 is predictive)
   surv_fit <- ml4t2e_fit(
+    keep_data = TRUE,
     task = surv_task,
     models = "cox",
     controls = list(times = seq(0, max(train_data$time), length.out = 10))
@@ -105,6 +106,7 @@ test_that("Survival concordance index handles multiple models", {
 
   # Fit multiple models
   surv_fit <- ml4t2e_fit(
+    keep_data = TRUE,
     task = surv_task,
     models = c("cox", "random_forest"),
     controls = list(times = seq(0, max(train_data$time), length.out = 10))

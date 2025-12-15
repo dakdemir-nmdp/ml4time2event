@@ -23,7 +23,6 @@ T2EPipeline <- R6::R6Class(
     features = NULL,
     training_metrics = NULL,
     resampling_results = NULL,
-
     initialize = function(outcome,
                           models = c("cox", "gbm"),
                           ensemble = "auto",
@@ -39,7 +38,6 @@ T2EPipeline <- R6::R6Class(
       self$resampling <- resampling
       self$metrics <- metrics
     },
-
     fit = function(data) {
       if (inherits(data, "t2e_task")) {
         processed <- .pipeline_prepare_from_task(data, self$recipe)
@@ -62,7 +60,8 @@ T2EPipeline <- R6::R6Class(
         task = self$task,
         models = self$models,
         ensemble = self$ensemble,
-        controls = self$controls
+        controls = self$controls,
+        keep_data = TRUE
       )
 
       metric_set <- self$metrics
@@ -90,7 +89,6 @@ T2EPipeline <- R6::R6Class(
 
       invisible(self)
     },
-
     predict = function(newdata = NULL, ...) {
       if (is.null(self$fit_object)) {
         rlang::abort("Pipeline must be fitted before calling `predict()`.")
@@ -104,7 +102,6 @@ T2EPipeline <- R6::R6Class(
       )
       predict(self$fit_object, newdata = processed, ...)
     },
-
     evaluate = function(newdata = NULL,
                         metrics = NULL,
                         include = "all") {
@@ -136,7 +133,6 @@ T2EPipeline <- R6::R6Class(
       preds <- predict(self$fit_object, newdata = processed, include = include)
       ml4t2e_evaluate(preds, task = eval_task, metrics = metric_set, include = include)
     },
-
     summary = function() {
       list(
         outcome = self$outcome,
@@ -147,7 +143,6 @@ T2EPipeline <- R6::R6Class(
         resampling_results = self$resampling_results
       )
     },
-
     print = function(...) {
       cat("ml4time2event Pipeline\n")
       cat("======================\n")
@@ -311,8 +306,10 @@ ml4t2e_pipeline <- function(outcome,
   if (!is.null(outcome$time)) {
     time_val <- processed[[outcome$time]]
     if (!is.numeric(time_val)) {
-      warning("DEBUG: time column is not numeric. Class: ", class(time_val), 
-              " Values: ", paste(head(time_val), collapse=", "))
+      warning(
+        "DEBUG: time column is not numeric. Class: ", class(time_val),
+        " Values: ", paste(head(time_val), collapse = ", ")
+      )
     }
   }
 

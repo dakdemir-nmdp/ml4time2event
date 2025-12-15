@@ -11,12 +11,11 @@ ml4t2e_weighted_quantile(x, w, alpha)
 
 \item{w}{Numeric vector of weights.}
 
-\item{alpha}{Significance level (e.g. 0.1 for 90% coverage).}
+\item{alpha}{Significance level (e.g. 0.1 for 90 percent coverage).}
 }
 \value{
-The weighted (1-alpha) quantile.
+Numeric value representing the weighted (1-alpha) quantile.
 }
 \description{
 Computes the weighted quantile of a distribution.
 }
-\keyword{internal}

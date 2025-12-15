@@ -7,7 +7,7 @@
 ml4t2e_shap_waterfall(shap_result, obs_id, max_features = NULL)
 }
 \arguments{
-\item{shap_result}{Object returned by `ml4t2e_calculate_shap()`.}
+\item{shap_result}{Object returned by \code{ml4t2e_calculate_shap()}.}
 
 \item{obs_id}{Row index of the observation to plot.}
 
@@ -15,7 +15,7 @@ ml4t2e_shap_waterfall(shap_result, obs_id, max_features = NULL)
 display; remaining contributions are grouped as "Other".}
 }
 \value{
-A `ggplot` object.
+A \code{ggplot} object.
 }
 \description{
 Displays how individual feature contributions accumulate from the baseline

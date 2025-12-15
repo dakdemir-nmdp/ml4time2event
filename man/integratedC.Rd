@@ -25,9 +25,11 @@ Averages time-dependent C-index values over the time grid.
 Provides a summary measure of discrimination across follow-up.
 }
 \details{
-**Interpretation**:
-- Average of all C-index values at supplied time points
-- Single summary value (unlike time-dependent C-index)
-- Range: 0.5 to 1.0
+\strong{Interpretation}:
+\itemize{
+\item Average of all C-index values at supplied time points
+\item Single summary value (unlike time-dependent C-index)
+\item Range: 0.5 to 1.0
+}
 }
 \keyword{internal}

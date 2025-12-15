@@ -1,7 +1,7 @@
-#' Parametric survival regression (R6 implementation)
+#' Parametric Survival Model (R6)
 #'
-#' Leverages `SurvModel_SurvReg()` to provide a parametric engine that fits into
-#' the unified `ml4time2event` interface.
+#' Fits a parametric survival model (survreg) using `survival` package.
+#' Currently supports 'exponential' distribution.
 #'
 #' @keywords internal
 #' @noRd
@@ -12,125 +12,128 @@ SurvRegSurvivalModel <- R6::R6Class(
     model = NULL,
     time_grid = NULL,
     task = NULL,
-
+    feature_names = NULL,
+    varprof = NULL,
     fit = function(task, time_grid, ...) {
       super$fit(task = task, ...)
-      args <- c(
-        list(
-          data = as.data.frame(task$data),
-          expvars = task$features,
-          timevar = task$time_col,
-          eventvar = task$event_col
-        ),
-        private$spec_args()
-      )
-      self$model <- do.call(SurvModel_SurvReg, args)
-      self$time_grid <- time_grid
       self$task <- task
+      self$time_grid <- time_grid
+
+      data <- as.data.frame(task$data)
+      self$varprof <- VariableProfile(data, task$features)
+
+      spec <- self$spec
+      dist <- spec$dist %||% "exponential"
+
+      # Prepare Formula
+      # We fit on all features. (Removing legacy forward selection)
+      # Handle potential failure if features > N or collinearity?
+      # Standard survreg behavior.
+
+      timevar <- task$time_col
+      eventvar <- task$event_col
+      expvars <- task$features
+
+      # Ensure event is numeric
+      data[[eventvar]] <- as.numeric(data[[eventvar]] == 1)
+
+      formula_str <- paste("survival::Surv(", timevar, ",", eventvar, ") ~", paste(expvars, collapse = "+"))
+      formula <- stats::as.formula(formula_str)
+
+      fit_obj <- tryCatch(
+        {
+          survival::survreg(formula, data = data, dist = dist, x = TRUE, y = TRUE)
+        },
+        error = function(e) {
+          rlang::abort(glue::glue("survreg fit failed: {e$message}"))
+        }
+      )
+
+      self$model <- fit_obj
+
+      # Store feature names (from model matrix or terms)
+      self$feature_names <- expvars
+
       invisible(self)
     },
-
     predict_survival = function(newdata, times, set = "test", ...) {
       private$ensure_fitted()
+
+      # Prepare newdata
       complete_data <- .ensure_prediction_data(newdata, self$task)
-      feature_frame <- as.data.frame(complete_data[, self$task$features, drop = FALSE])
-      complete_idx <- stats::complete.cases(feature_frame)
-      ids <- complete_data[[self$task$id_col]]
-      model_name <- self$spec$engine %||% "survreg"
 
-      if (is.null(times)) {
-        target_times <- self$time_grid
-      } else {
-        target_times <- sort(unique(as.numeric(times)))
-      }
-      if (length(target_times) == 0) {
-        rlang::abort("`times` must be numeric and non-empty.")
-      }
+      # Predict LP
+      # predict.survreg(obj, type="lp") returns X * beta + intercept + scale?
+      # type="lp" is "linear predictor".
+      # For survreg, lp usually refers to the location parameter mu?
+      # mu = X*beta.
+      # Scale is sigma.
+      # dist="exponential": scale=1 (fixed).
+      # T ~ Exp(lambda). S(t) = exp(-lambda t).
+      # survreg parameterizes usually as log(T) = X beta + sigma W.
+      # For exponential: W ~ ExtremeValue. sigma=1.
+      # log(T) = X beta + W.
+      # lambda = exp(-X beta).
+      # S(t) = exp( - exp(-X beta) * t ).
+      # Let's verify legacy code:
+      # rate = exp(-lp). surv = exp(-rate * t).
+      # So lp = X beta.
+      # rate = exp(-lp) -> lambda = exp(-X beta).
+      # Matches log(T) = -log(lambda) + W?
+      # If mean log time matches lp.
 
-      preds_complete <- NULL
-      if (any(complete_idx)) {
-        newdata_complete <- feature_frame[complete_idx, , drop = FALSE]
-        id_complete <- ids[complete_idx]
-        pred <- Predict_SurvModel_SurvReg(
-          modelout = self$model,
-          newdata = newdata_complete,
-          new_times = target_times
-        )
-        preds_complete <- new_survival_prediction(
-          id = rep(id_complete, each = length(target_times)),
-          time = rep(target_times, times = length(id_complete)),
-          surv = as.vector(pred$Probs),
-          model = rep(model_name, length(id_complete) * length(target_times)),
-          ensemble = FALSE,
-          set = set
-        )
+      lp <- predict(self$model, newdata = complete_data, type = "lp")
+
+      # Dist check
+      dist <- self$model$dist
+      if (dist != "exponential") {
+        # Legacy only supported exponential
+        rlang::warn("Only 'exponential' distribution is currently supported for prediction.")
+        # Return NA?
       }
 
-      preds_missing <- NULL
-      if (!all(complete_idx)) {
-        missing_ids <- ids[!complete_idx]
-        rlang::warn(glue::glue(
-          "Omitting {length(missing_ids)} rows with missing predictors for engine '{model_name}'."
-        ))
-        preds_missing <- new_survival_prediction(
-          id = rep(missing_ids, each = length(target_times)),
-          time = rep(target_times, times = length(missing_ids)),
-          surv = rep(NA_real_, length(missing_ids) * length(target_times)),
-          model = rep(model_name, length(missing_ids) * length(target_times)),
-          ensemble = FALSE,
-          set = set
-        )
-      }
+      n_obs <- nrow(complete_data)
+      req_times <- if (is.null(times)) self$time_grid else sort(unique(as.numeric(times)))
 
-      pieces <- list(preds_complete, preds_missing)
-      pieces <- pieces[!vapply(pieces, is.null, logical(1))]
-      if (length(pieces) == 0) {
-        return(new_survival_prediction(
-          id = integer(0),
-          time = numeric(0),
-          surv = numeric(0),
-          model = character(0),
-          ensemble = logical(0),
-          set = character(0)
-        ))
-      }
-      dplyr::bind_rows(pieces)
-    },
+      # Calc probabilities
+      # S(t) = exp( - exp(-lp) * t )
 
-    predict_risk = function(newdata, times = NULL, set = "test", ...) {
-      private$ensure_fitted()
-      if (is.null(times)) {
-        times <- self$time_grid
-      }
-      surv_tbl <- self$predict_survival(newdata = newdata, times = times, set = set, ...)
-      if (nrow(surv_tbl) == 0) {
-        return(new_risk_prediction(
-          id = integer(0),
-          risk = numeric(0),
-          model = character(0),
-          time = numeric(0),
-          ensemble = logical(0),
-          set = character(0)
-        ))
-      }
-      last_time <- max(times)
-      last_slice <- surv_tbl[surv_tbl$time == last_time, , drop = FALSE]
-      new_risk_prediction(
-        id = last_slice$id,
-        risk = 1 - last_slice$surv,
-        model = last_slice$model,
-        time = last_time,
-        ensemble = last_slice$ensemble,
-        set = last_slice$set
+      rate <- exp(-lp)
+      # Matrix: rows=obs, cols=times (outer)
+      # outer(rate, req_times) -> rate[i] * t[j]
+      hazard_cum <- outer(rate, req_times)
+      surv_probs <- exp(-hazard_cum)
+
+      # Flatten
+      id_col <- complete_data[[self$task$id_col]]
+
+      new_survival_prediction(
+        id = rep(id_col, each = length(req_times)),
+        time = rep(req_times, times = length(id_col)),
+        surv = as.vector(t(surv_probs)), # Transpose because we want time cycling fast?
+        # outer: [obs, times]. as.vector -> obs1_t1, obs2_t1... NO.
+        # outer fills col-major. cols are times.
+        # So [obs1_t1, obs1_t2... (col1), obs2_t1...(col1)...] -> NO.
+        # Matrix is [obs, times].
+        # as.vector flattens column by column.
+        # So t1 for all obs, then t2 for all obs.
+        # new_survival_prediction expects: id1_t1, id1_t2, ... id2_t1...
+        # So we need to transpose to [times, obs] then flatten?
+        # Or transpose to [obs, times] but we want row-major?
+        # R is column major.
+        # If we want id1_t1, id1_t2... we equivalent to row-major of [obs, times].
+        # So transpose [obs, times] -> [times, obs]. Flatten [times, obs] -> t1_id1, t2_id1... Correct.
+
+        model = rep("survreg", length(id_col) * length(req_times)),
+        ensemble = FALSE,
+        set = set
       )
     },
-
     model_info = function() {
       info <- super$model_info()
-      info$label <- "Parametric survival regression"
+      info$label <- "Parametric Survival (Exponential)"
       info
     },
-
     required_packages = function() {
       c("survival")
     }
@@ -138,14 +141,8 @@ SurvRegSurvivalModel <- R6::R6Class(
   private = list(
     ensure_fitted = function() {
       if (!isTRUE(self$fitted)) {
-        rlang::abort("Model must be fitted before predictions can be generated.")
+        rlang::abort("Model not fitted")
       }
-    },
-
-    spec_args = function() {
-      spec <- self$spec %||% list()
-      spec[c("engine", "package", "outcome")] <- NULL
-      spec
     }
   )
 )

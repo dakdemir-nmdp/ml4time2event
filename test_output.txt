@@ -1,0 +1,82 @@
+ℹ Loading ml4time2event
+
+══ Testing test-shap-etl-validation.R ══════════════════════════════════════════
+
+[ FAIL 0 | WARN 0 | SKIP 0 | PASS 0 ]
+[ FAIL 0 | WARN 0 | SKIP 0 | PASS 1 ]
+[ FAIL 0 | WARN 0 | SKIP 0 | PASS 2 ]
+[ FAIL 0 | WARN 0 | SKIP 0 | PASS 3 ]
+[ FAIL 1 | WARN 0 | SKIP 0 | PASS 3 ]
+[ FAIL 1 | WARN 0 | SKIP 0 | PASS 4 ]
+[ FAIL 1 | WARN 0 | SKIP 0 | PASS 5 ]
+[ FAIL 1 | WARN 0 | SKIP 0 | PASS 6 ]
+[ FAIL 1 | WARN 0 | SKIP 0 | PASS 7 ]
+[ FAIL 1 | WARN 0 | SKIP 0 | PASS 8 ]
+[ FAIL 1 | WARN 0 | SKIP 0 | PASS 9 ]
+[ FAIL 1 | WARN 0 | SKIP 0 | PASS 10 ]
+[ FAIL 1 | WARN 0 | SKIP 0 | PASS 11 ]
+[ FAIL 1 | WARN 0 | SKIP 0 | PASS 12 ]
+[ FAIL 1 | WARN 0 | SKIP 0 | PASS 13 ]
+[ FAIL 1 | WARN 0 | SKIP 0 | PASS 14 ]
+[ FAIL 1 | WARN 0 | SKIP 0 | PASS 15 ]
+[ FAIL 1 | WARN 0 | SKIP 0 | PASS 16 ]
+[ FAIL 1 | WARN 0 | SKIP 0 | PASS 17 ]
+[ FAIL 2 | WARN 0 | SKIP 0 | PASS 17 ]
+[ FAIL 2 | WARN 0 | SKIP 0 | PASS 18 ]
+[ FAIL 2 | WARN 1 | SKIP 0 | PASS 18 ]
+[ FAIL 2 | WARN 2 | SKIP 0 | PASS 18 ]  |                                                                              |                                                                      |   0%  |                                                                              |====                                                                  |   5%  |                                                                              |=======                                                               |  10%  |                                                                              |==========                                                            |  15%  |                                                                              |==============                                                        |  20%  |                                                                              |==================                                                    |  25%  |                                                                              |=====================                                                 |  30%  |                                                                              |========================                                              |  35%  |                                                                              |============================                                          |  40%  |                                                                              |================================                                      |  45%  |                                                                              |===================================                                   |  50%  |                                                                              |======================================                                |  55%  |                                                                              |==========================================                            |  60%  |                                                                              |==============================================                        |  65%  |                                                                              |=================================================                     |  70%  |                                                                              |====================================================                  |  75%  |                                                                              |========================================================              |  80%  |                                                                              |============================================================          |  85%  |                                                                              |===============================================================       |  90%  |                                                                              |==================================================================    |  95%  |                                                                              |======================================================================| 100%
+
+[ FAIL 2 | WARN 2 | SKIP 0 | PASS 19 ]
+[ FAIL 2 | WARN 2 | SKIP 0 | PASS 20 ]
+[ FAIL 2 | WARN 2 | SKIP 0 | PASS 21 ]  |                                                                              |                                                                      |   0%  |                                                                              |=======                                                               |  10%  |                                                                              |==============                                                        |  20%  |                                                                              |=====================                                                 |  30%  |                                                                              |============================                                          |  40%  |                                                                              |===================================                                   |  50%  |                                                                              |==========================================                            |  60%  |                                                                              |=================================================                     |  70%  |                                                                              |========================================================              |  80%  |                                                                              |===============================================================       |  90%  |                                                                              |======================================================================| 100%
+
+[ FAIL 2 | WARN 2 | SKIP 0 | PASS 22 ]
+[ FAIL 2 | WARN 2 | SKIP 0 | PASS 23 ]
+[ FAIL 2 | WARN 2 | SKIP 0 | PASS 24 ]
+[ FAIL 2 | WARN 2 | SKIP 0 | PASS 25 ]
+[ FAIL 2 | WARN 2 | SKIP 0 | PASS 26 ]
+
+── Failure ('test-shap-etl-validation.R:116:3'): CR CIF values are bounded by [0, 1] ──
+all(cif_mat <= 1 + 1e-08, na.rm = TRUE) is not TRUE
+
+`actual`:   FALSE
+`expected`: TRUE 
+
+── Failure ('test-shap-etl-validation.R:238:3'): Manual ETL calculation matches prediction function ──
+rel_error < 0.01 is not TRUE
+
+`actual`:   FALSE
+`expected`: TRUE 
+ETL mismatch: fn= 97.7588457029603 manual= 107.095212085893 rel_error= 0.0871781865975112
+
+── Warning ('test-shap-etl-validation.R:308:3'): Age SHAP values have expected sign for CR models ──
+Loglik converged before variable  3,4,5 ; coefficient may be infinite. 
+Backtrace:
+     ▆
+  1. └─ml4time2event::ml4t2e_fit_pipeline(...) at test-shap-etl-validation.R:308:3
+  2.   └─pipeline$fit(data_prepped) at ml4time2event/R/pipeline_wrappers.R:147:3
+  3.     └─ml4time2event::ml4t2e_fit(...) at ml4time2event/R/pipeline_simple.R:61:7
+  4.       └─instance$fit(task = train_task, time_grid = time_grid) at ml4time2event/R/core_fit.R:143:5
+  5.         ├─base::tryCatch(...) at ml4time2event/R/model_competing_risk_cox.R:66:17
+  6.         │ └─base (local) tryCatchList(expr, classes, parentenv, handlers)
+  7.         │   └─base (local) tryCatchOne(expr, names, parentenv, handlers[[1L]])
+  8.         │     └─base (local) doTryCatch(return(expr), name, parentenv, handler)
+  9.         └─survival::coxph(form, data = subset_data, x = TRUE) at ml4time2event/R/model_competing_risk_cox.R:68:25
+ 10.           └─survival::coxph.fit(...)
+
+── Warning ('test-shap-etl-validation.R:308:3'): Age SHAP values have expected sign for CR models ──
+Loglik converged before variable  4 ; coefficient may be infinite. 
+Backtrace:
+     ▆
+  1. └─ml4time2event::ml4t2e_fit_pipeline(...) at test-shap-etl-validation.R:308:3
+  2.   └─pipeline$fit(data_prepped) at ml4time2event/R/pipeline_wrappers.R:147:3
+  3.     └─ml4time2event::ml4t2e_fit(...) at ml4time2event/R/pipeline_simple.R:61:7
+  4.       └─instance$fit(task = train_task, time_grid = time_grid) at ml4time2event/R/core_fit.R:143:5
+  5.         ├─base::tryCatch(...) at ml4time2event/R/model_competing_risk_cox.R:66:17
+  6.         │ └─base (local) tryCatchList(expr, classes, parentenv, handlers)
+  7.         │   └─base (local) tryCatchOne(expr, names, parentenv, handlers[[1L]])
+  8.         │     └─base (local) doTryCatch(return(expr), name, parentenv, handler)
+  9.         └─survival::coxph(form, data = subset_data, x = TRUE) at ml4time2event/R/model_competing_risk_cox.R:68:25
+ 10.           └─survival::coxph.fit(...)
+
+[ FAIL 2 | WARN 2 | SKIP 0 | PASS 26 ]

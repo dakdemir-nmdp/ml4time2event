@@ -12,18 +12,16 @@ License: file LICENSE
 Encoding: UTF-8
 LazyData: true
 RoxygenNote: 7.3.3
+Roxygen: list(markdown = TRUE)
 VignetteBuilder: knitr
 Imports:
     dplyr,
     energy,
     glue,
     ggplot2,
-    gtsummary,
-    haven,
     magrittr,
     methods,
     missRanger,
-    openxlsx,
     pbapply,
     pracma,
     R6,
@@ -45,6 +43,8 @@ Suggests:
     forcats,
     gbm,
     glmnet,
+    gtsummary,
+    haven,
     here,
     kernelshap,
     knitr,
@@ -52,6 +52,7 @@ Suggests:
     mlr3,
     mlr3learners,
     nnet,
+    openxlsx,
     pacman,
     partykit,
     pseudo,

@@ -7,14 +7,14 @@
 ml4t2e_shap_dependence(shap_result, feature, color_by = NULL)
 }
 \arguments{
-\item{shap_result}{Object returned by `ml4t2e_calculate_shap()`.}
+\item{shap_result}{Object returned by \code{ml4t2e_calculate_shap()}.}
 
 \item{feature}{Feature name whose SHAP dependence should be visualised.}
 
 \item{color_by}{Optional second feature used to colour the points.}
 }
 \value{
-A `ggplot` object.
+A \code{ggplot} object.
 }
 \description{
 Creates a scatter plot that relates SHAP values for a single feature to its

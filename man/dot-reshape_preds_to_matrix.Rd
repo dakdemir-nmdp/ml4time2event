@@ -4,7 +4,7 @@
 \alias{.reshape_preds_to_matrix}
 \title{Reshape Predictions to Matrix}
 \usage{
-.reshape_preds_to_matrix(preds, data, time_grid, type, id_col = NULL)
+.reshape_preds_to_matrix(preds, data, time_grid, val_col, id_col = NULL)
 }
 \arguments{
 \item{preds}{Tidy prediction data frame.}

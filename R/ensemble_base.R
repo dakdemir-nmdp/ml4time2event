@@ -21,14 +21,17 @@ EnsemblerBase <- R6::R6Class(
     time_grid = NULL,
     cause_map = NULL,
     controls = NULL,
-
+    weights = NULL,
     initialize = function(models,
                           model_names,
                           outcome_type,
                           strategy,
                           time_grid,
                           controls = list(),
-                          cause_map = NULL) {
+                          cause_map = NULL,
+                          sl_predictions = NULL,
+                          sl_actual = NULL,
+                          sl_weights = NULL) {
       self$models <- models
       self$model_names <- model_names
       self$outcome_type <- outcome_type
@@ -36,6 +39,22 @@ EnsemblerBase <- R6::R6Class(
       self$time_grid <- time_grid
       self$cause_map <- cause_map
       self$controls <- controls %||% list()
+
+      if (identical(self$strategy, "stack")) {
+        if (!is.null(sl_predictions) && !is.null(sl_actual)) {
+          # Use default MSE loss for now, can be parameterized via controls
+          loss <- self$controls$sl_loss %||% "mse"
+          self$weights <- optimizeSuperLearnerWeights(
+            predictions_list = sl_predictions,
+            actual_surv = sl_actual,
+            loss_type = loss,
+            weights_matrix = sl_weights
+          )
+        } else {
+          rlang::warn("Stacking requested but no training predictions provided. Falling back to simple averaging.")
+          self$strategy <- "simple"
+        }
+      }
     }
   ),
   private = list(
@@ -46,7 +65,6 @@ EnsemblerBase <- R6::R6Class(
         ))
       }
     },
-
     fallback_to_simple = function() {
       rlang::warn("Stacked ensembling is not yet implemented; using simple averaging instead.")
       self$strategy <- "simple"
@@ -68,13 +86,54 @@ SurvivalEnsembler <- R6::R6Class(
       names(pred_list) <- self$model_names
 
       if (identical(self$strategy, "stack")) {
-        private$fallback_to_simple()
-      }
-      private$ensure_strategy_available("simple", "survival")
+        # Convert tidy preds to matrices
+        mat_list <- list()
+        valid_models <- names(pred_list)
+        for (m in valid_models) {
+          p <- pred_list[[m]]
+          if (nrow(p) > 0) {
+            # Pivot to wide matrix
+            wide <- ml4t2e_reshape_preds_to_matrix(p, newdata, target_times, "surv")
+            mat_list[[m]] <- wide
+          }
+        }
 
+        # Apply weighted averaging
+        w_probs <- survprobMatWeightedAveraging(mat_list, self$weights)
+
+        # Convert back to tidy
+        # Reuse internal helper logic but for matrix
+        # Create output dataframe manually
+        # Row-major matching of wide matrix:
+        # Rows = Obs, Cols = Times.
+        # Vectorize: c(Mat) -> Time 1 (all obs), Time 2 (all obs)...
+        # But tidy format is usually: Obs 1 (all times), Obs 2.
+        # Let's align carefully.
+
+        # wide matrix cols are times. rows are obs.
+        # as.vector(t(w_probs)) -> Obs 1 (t1..tk), Obs 2...
+
+        n_obs <- nrow(newdata)
+        n_times <- length(target_times)
+
+        # Ensure ID column exists
+        ids <- if ("id" %in% names(newdata)) newdata$id else seq_len(n_obs)
+
+        flat_surv <- as.vector(t(w_probs))
+
+        return(new_survival_prediction(
+          id = rep(ids, each = n_times),
+          time = rep(target_times, times = n_obs),
+          surv = flat_surv,
+          model = rep("ensemble", length(flat_surv)),
+          ensemble = TRUE,
+          set = set
+        ))
+      }
+
+      private$ensure_strategy_available("simple", "survival")
       .ensemble_average_survival(pred_list, set_label = set)
     },
-
     predict_risk = function(newdata, times = NULL, set = "test") {
       surv_tbl <- self$predict_survival(newdata = newdata, times = times, set = set)
       if (nrow(surv_tbl) == 0) {
@@ -115,10 +174,61 @@ CompetingRiskEnsembler <- R6::R6Class(
       names(pred_list) <- self$model_names
 
       if (identical(self$strategy, "stack")) {
-        private$fallback_to_simple()
-      }
-      private$ensure_strategy_available("simple", "competing-risk")
+        # CR Stacking: Weighted average of CIFs
+        # Need to do this PER CAUSE?
+        # Current optimizeSuperLearnerWeights is single-outcome.
+        # For CR, "sl_training_predictions" and "sl_actual" passed to initialize
+        # should probably be a list per cause?
+        # Or we learn one set of weights for the primary cause?
+        # For simplicity in this iteration: Shared weights or Primary Cause weights.
 
+        # However, `EnsembleBase` gets one `sl_predictions` list.
+        # If CR, `sl_predictions` should probably be for the cause of interest?
+        # Or list of lists?
+        # Let's assume common weights for all causes for now to keep it feasible.
+
+        # Logic:
+        # For each cause, extract matrix, avg, combine.
+
+        causes <- as.character(self$cause_map$code)
+        res_list <- list()
+
+        for (cause_val in causes) {
+          # Extract matrix for this cause from each model
+          mat_list <- list()
+          for (m in self$model_names) {
+            p <- pred_list[[m]]
+            p_c <- p[p$cause == cause_val, ]
+            if (nrow(p_c) > 0) {
+              wide <- ml4t2e_reshape_preds_to_matrix(p_c, newdata, target_times, "cif")
+              mat_list[[m]] <- wide
+            }
+          }
+
+          # Average
+          w_cif <- cifMatWeightedAveraging(mat_list, self$weights, type = "CumHaz") # Default
+
+          # Convert to tidy
+          n_obs <- nrow(newdata)
+          n_times <- length(target_times)
+          ids <- if ("id" %in% names(newdata)) newdata$id else seq_len(n_obs)
+
+          flat_cif <- as.vector(t(w_cif))
+
+          res_list[[cause_val]] <- new_cif_prediction(
+            id = rep(ids, each = n_times),
+            time = rep(target_times, times = n_obs),
+            cause = rep(cause_val, length(flat_cif)),
+            cif = flat_cif,
+            model = rep("ensemble", length(flat_cif)),
+            ensemble = TRUE,
+            set = set
+          )
+        }
+        return(dplyr::bind_rows(res_list))
+      }
+
+      private$ensure_strategy_available("simple", "competing-risk")
       .ensemble_average_cif(pred_list, set_label = set)
     }
   )

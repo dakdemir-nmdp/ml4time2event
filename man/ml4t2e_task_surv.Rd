@@ -23,13 +23,13 @@ ml4t2e_task_surv(
 \item{features}{Optional character vector of predictor columns. Defaults to
 all non-outcome columns.}
 
-\item{id}{Optional column containing subject identifiers. If `NULL`, a
+\item{id}{Optional column containing subject identifiers. If \code{NULL}, a
 sequential identifier is created.}
 
 \item{time_units}{Optional description of the time scale (e.g., "days").}
 }
 \value{
-An object of class `t2e_task_surv` (inherits from `t2e_task`).
+An object of class \code{t2e_task_surv} (inherits from \code{t2e_task}).
 }
 \description{
 This constructor standardises the inputs needed to fit survival models and

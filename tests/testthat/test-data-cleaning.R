@@ -130,22 +130,22 @@ test_that("RemoveMissinVarsData handles data with no variables exceeding thresho
 })
 
 test_that("RemoveMissinVarsData handles threshold = 0", {
-    test_df <- test_df_orig
-    # Threshold 0 should remove any column with NAs
-    df_cleaned_zero_thresh <- RemoveMissinVarsData(test_df, maxprop = 0)
-    expect_false("all_na" %in% colnames(df_cleaned_zero_thresh))
-    expect_false("near_all_na" %in% colnames(df_cleaned_zero_thresh))
-    expect_false("some_na" %in% colnames(df_cleaned_zero_thresh))
-    expect_equal(ncol(df_cleaned_zero_thresh), ncol(test_df) - 3)
+  test_df <- test_df_orig
+  # Threshold 0 should remove any column with NAs
+  df_cleaned_zero_thresh <- RemoveMissinVarsData(test_df, maxprop = 0)
+  expect_false("all_na" %in% colnames(df_cleaned_zero_thresh))
+  expect_false("near_all_na" %in% colnames(df_cleaned_zero_thresh))
+  expect_false("some_na" %in% colnames(df_cleaned_zero_thresh))
+  expect_equal(ncol(df_cleaned_zero_thresh), ncol(test_df) - 3)
 })
 
 test_that("RemoveMissinVarsData handles threshold = 1", {
-    test_df <- test_df_orig
-    # Threshold 1 should keep all columns (including 100% NA)
-    df_cleaned_one_thresh <- RemoveMissinVarsData(test_df, maxprop = 1)
-    expect_true("all_na" %in% colnames(df_cleaned_one_thresh))
-    expect_true("near_all_na" %in% colnames(df_cleaned_one_thresh))
-    expect_equal(ncol(df_cleaned_one_thresh), ncol(test_df))
+  test_df <- test_df_orig
+  # Threshold 1 should keep all columns (including 100% NA)
+  df_cleaned_one_thresh <- RemoveMissinVarsData(test_df, maxprop = 1)
+  expect_true("all_na" %in% colnames(df_cleaned_one_thresh))
+  expect_true("near_all_na" %in% colnames(df_cleaned_one_thresh))
+  expect_equal(ncol(df_cleaned_one_thresh), ncol(test_df))
 })
 
 
@@ -245,8 +245,8 @@ test_that("droplevelsoffactorsData handles data with no factors", {
 })
 
 test_that("droplevelsoffactorsData handles factors with all levels used", {
-   test_df <- test_df_orig
-   expect_equal(droplevelsoffactorsData(test_df), test_df)
+  test_df <- test_df_orig
+  expect_equal(droplevelsoffactorsData(test_df), test_df)
 })
 
 test_that("droplevelsoffactorsData handles empty input", {
@@ -331,9 +331,9 @@ test_that("RemoveMissinRecordsData removes rows exceeding NA threshold", {
     id = 1:5,
     col1 = c(1, 2, 3, 4, 5),
     col2 = c("A", "B", NA, "D", "E"), # 1 NA
-    col3 = c(NA, NA, NA, 10, 20),    # 3 NAs
-    col4 = c(TRUE, FALSE, TRUE, FALSE, NA),        # 1 NA - Use TRUE/FALSE
-    col5 = c(100, NA, NA, NA, NA),    # 4 NAs
+    col3 = c(NA, NA, NA, 10, 20), # 3 NAs
+    col4 = c(TRUE, FALSE, TRUE, FALSE, NA), # 1 NA - Use TRUE/FALSE
+    col5 = c(100, NA, NA, NA, NA), # 4 NAs
     stringsAsFactors = FALSE
   )
   # Row 1: 1/5 = 20% NA
@@ -354,7 +354,7 @@ test_that("RemoveMissinRecordsData removes rows exceeding NA threshold", {
   expect_false(any(c(2, 3, 5) %in% df_cleaned_30$id))
   expect_true(all(c(1, 4) %in% df_cleaned_30$id))
 
-   # Test with threshold 0.1 (10%) - should remove all rows (none have <= 10% NAs)
+  # Test with threshold 0.1 (10%) - should remove all rows (none have <= 10% NAs)
   df_cleaned_10 <- RemoveMissinRecordsData(df_miss_rows, maxprop = 0.1)
   expect_equal(nrow(df_cleaned_10), 0)
 })
@@ -368,7 +368,7 @@ test_that("RemoveMissinRecordsData handles data where all rows exceed threshold"
   df_all_bad <- data.frame(id = 1:2, col1 = c(NA, NA), col2 = c(1, NA), stringsAsFactors = FALSE)
   # Row 1: 1/3 ≈ 33% NA, Row 2: 2/3 ≈ 67% NA
   df_cleaned <- RemoveMissinRecordsData(df_all_bad, maxprop = 0.4)
-  expect_equal(nrow(df_cleaned), 1)  # Row 1 has 33% <= 40%
+  expect_equal(nrow(df_cleaned), 1) # Row 1 has 33% <= 40%
   expect_equal(colnames(df_cleaned), colnames(df_all_bad)) # Should keep columns
 })
 
@@ -432,11 +432,11 @@ test_that("RemoveRareBinaryVarsData replaces rare level in binary vars with NA",
   df_rare_bin <- data.frame(
     id = 1:100,
     factor_bin = factor(c(rep("Yes", 98), rep("No", 2))), # No is rare (2%)
-    numeric_bin = c(rep(1, 99), 0),                     # 0 is rare (1%)
+    numeric_bin = c(rep(1, 99), 0), # 0 is rare (1%)
     logical_bin = c(rep(TRUE, 97), FALSE, FALSE, FALSE), # FALSE is rare (3%)
-    factor_ok = factor(rep(c("X", "Y"), each = 50)),     # Not rare
-    numeric_multi = c(1, 2, 3, 1:97),                   # Not binary
-    char_bin = c(rep("A", 99), "B"),                      # Character, not handled
+    factor_ok = factor(rep(c("X", "Y"), each = 50)), # Not rare
+    numeric_multi = c(1, 2, 3, 1:97), # Not binary
+    char_bin = c(rep("A", 99), "B"), # Character, not handled
     stringsAsFactors = FALSE
   )
 
@@ -477,12 +477,12 @@ test_that("RemoveRareBinaryVarsData handles binary vars with no rare levels", {
 
 test_that("RemoveRareBinaryVarsData handles non-binary variables", {
   df_non_bin <- data.frame(
-      id = 1:5,
-      factor_multi = factor(c("A", "B", "C", "A", "B")),
-      numeric_cont = 1:5,
-      stringsAsFactors = FALSE
+    id = 1:5,
+    factor_multi = factor(c("A", "B", "C", "A", "B")),
+    numeric_cont = 1:5,
+    stringsAsFactors = FALSE
   )
-   expect_equal(RemoveRareBinaryVarsData(df_non_bin, minfreq = 0.1), df_non_bin)
+  expect_equal(RemoveRareBinaryVarsData(df_non_bin, minfreq = 0.1), df_non_bin)
 })
 
 test_that("RemoveRareBinaryVarsData handles empty input", {
@@ -712,7 +712,7 @@ test_data_new_levels <- data.frame(
 test_data_wrong_type <- data.frame(
   id = 11:12,
   age = c("33", "44"), # Character instead of numeric
-  sex = c("M", "F"),   # Character instead of factor
+  sex = c("M", "F"), # Character instead of factor
   group = factor(c("A", "B")),
   value = rnorm(2),
   stringsAsFactors = FALSE
@@ -773,10 +773,14 @@ test_that("MakeTestDataConfWithTrainData handles type mismatches (optional behav
 
 test_that("MakeTestDataConfWithTrainData handles empty input", {
   empty_df <- data.frame()
-  expect_equal(MakeTestDataConfWithTrainData(train_data, empty_df),
-               train_data[0, , drop = FALSE]) # Should return empty df with train columns/types
-  expect_equal(MakeTestDataConfWithTrainData(empty_df, test_data_ok),
-               empty_df) # Should return empty df if train is empty
+  expect_equal(
+    MakeTestDataConfWithTrainData(train_data, empty_df),
+    train_data[0, , drop = FALSE]
+  ) # Should return empty df with train columns/types
+  expect_equal(
+    MakeTestDataConfWithTrainData(empty_df, test_data_ok),
+    empty_df
+  ) # Should return empty df if train is empty
   expect_equal(MakeTestDataConfWithTrainData(empty_df, empty_df), empty_df)
 })
 
@@ -804,10 +808,10 @@ if (!requireNamespace("missRanger", quietly = TRUE)) {
             mode_val <- names(counts)[which.max(counts)]
             x[is.na(x)] <- mode_val
           } else { # Handle all NA case for factors/chars
-             x[is.na(x)] <- "Unknown" # Or some placeholder
+            x[is.na(x)] <- "Unknown" # Or some placeholder
           }
         }
-         data_imputed[[j]] <- x
+        data_imputed[[j]] <- x
       }
     }
     return(data_imputed)
@@ -818,24 +822,27 @@ if (!requireNamespace("missRanger", quietly = TRUE)) {
   ImputeMissinRecordsData_original <- ImputeMissinRecordsData # Store original
   # Redefine ImputeMissinRecordsData to use the mock internally for testing purposes
   ImputeMissinRecordsData <- function(data, dontuse = NULL, ...) {
-     original_colnames <- colnames(data)
-     cols_to_impute <- setdiff(original_colnames, dontuse)
-     if (length(cols_to_impute) == 0) return(data)
-     data_to_impute <- data[, cols_to_impute, drop = FALSE]
-     # Basic checks as in original function
-     all_na <- sapply(data_to_impute, function(x) all(is.na(x)))
-     if(any(all_na)) data_to_impute <- data_to_impute[, !all_na, drop = FALSE]
-     if (ncol(data_to_impute) == 0) return(data)
+    original_colnames <- colnames(data)
+    cols_to_impute <- setdiff(original_colnames, dontuse)
+    if (length(cols_to_impute) == 0) {
+      return(data)
+    }
+    data_to_impute <- data[, cols_to_impute, drop = FALSE]
+    # Basic checks as in original function
+    all_na <- sapply(data_to_impute, function(x) all(is.na(x)))
+    if (any(all_na)) data_to_impute <- data_to_impute[, !all_na, drop = FALSE]
+    if (ncol(data_to_impute) == 0) {
+      return(data)
+    }
 
-     imputed_subset <- missRanger(data_to_impute, ...) # Call the mock
-     data_out <- data
-     data_out[, colnames(imputed_subset)] <- imputed_subset
-     return(data_out)
+    imputed_subset <- missRanger(data_to_impute, ...) # Call the mock
+    data_out <- data
+    data_out[, colnames(imputed_subset)] <- imputed_subset
+    return(data_out)
   }
-
 } else {
-   # If missRanger is installed, load it
-   library(missRanger)
+  # If missRanger is installed, load it
+  library(missRanger)
 }
 
 
@@ -851,7 +858,7 @@ test_that("ImputeMissinRecordsData imputes NAs", {
     all_na_col = rep(NA_real_, 6), # Should be ignored by missRanger or handled
     stringsAsFactors = FALSE
   )
-  df_imputed <- ImputeMissinRecordsData(df_impute) # Removed copy()
+  df_imputed <- suppressWarnings(ImputeMissinRecordsData(df_impute)) # Removed copy()
 
   # Check no NAs remain in imputed columns (except potentially all_na_col if missRanger ignores it)
   expect_false(any(is.na(df_imputed$num1)))
@@ -870,11 +877,11 @@ test_that("ImputeMissinRecordsData imputes NAs", {
 })
 
 test_that("ImputeMissinRecordsData respects dontuse argument", {
-   skip_if_not_installed("missRanger")
-   df_impute <- data.frame( # Replaced data.table()
-    id = 1:20,  # Increased to 20 rows for better imputation
+  skip_if_not_installed("missRanger")
+  df_impute <- data.frame( # Replaced data.table()
+    id = 1:20, # Increased to 20 rows for better imputation
     num1 = c(1, 2, NA, 4, 5, 6, 7, 8, 9, 10, 11, 12, NA, 14, 15, 16, 17, 18, 19, 20),
-    num2 = c(NA, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40),  # Added second column to impute
+    num2 = c(NA, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40), # Added second column to impute
     num_dontuse = c(10, NA, 30, 40, NA, 60, 70, 80, 90, 100, 110, 120, NA, 140, 150, 160, 170, 180, 190, 200),
     cat_dontuse = factor(c("A", "B", "A", NA, "B", "A", "C", "A", "B", "C", "A", "B", NA, "C", "A", "B", "C", "A", "B", "C")),
     stringsAsFactors = FALSE
@@ -894,17 +901,17 @@ test_that("ImputeMissinRecordsData respects dontuse argument", {
 })
 
 test_that("ImputeMissinRecordsData handles data with no NAs", {
-   skip_if_not_installed("missRanger")
-   df_no_na <- data.frame(id = 1:3, num = 1:3, cat = letters[1:3], stringsAsFactors = FALSE) # Replaced data.table()
-   expect_equal(ImputeMissinRecordsData(df_no_na), df_no_na) # Removed copy()
+  skip_if_not_installed("missRanger")
+  df_no_na <- data.frame(id = 1:3, num = 1:3, cat = letters[1:3], stringsAsFactors = FALSE) # Replaced data.table()
+  expect_equal(ImputeMissinRecordsData(df_no_na), df_no_na) # Removed copy()
 })
 
 test_that("ImputeMissinRecordsData handles empty input", {
-   skip_if_not_installed("missRanger")
-   # empty_dt <- data.table() # Removed data.table call
-   # expect_equal(ImputeMissinRecordsData(empty_dt), empty_dt) # Removed data.table test
-   empty_df <- data.frame()
-   expect_equal(ImputeMissinRecordsData(empty_df), empty_df)
+  skip_if_not_installed("missRanger")
+  # empty_dt <- data.table() # Removed data.table call
+  # expect_equal(ImputeMissinRecordsData(empty_dt), empty_dt) # Removed data.table test
+  empty_df <- data.frame()
+  expect_equal(suppressWarnings(ImputeMissinRecordsData(empty_df)), empty_df)
 })
 
 # Restore original function if it was mocked

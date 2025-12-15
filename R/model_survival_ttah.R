@@ -1,7 +1,8 @@
-#' TTAH survival model (R6 implementation)
+#' TTAH Survival Model (R6)
 #'
-#' Integrates the time-to-event additive hazards (TTAH) engine with the new R6
-#' architecture by wrapping `SurvModel_TTAH()`.
+#' Fits a discrete-time hazard model with time-varying coefficients and
+#' latent feature interactions (Time-to-Event Additive Hazards?).
+#' Uses ridge-penalized logistic regression on person-time data.
 #'
 #' @keywords internal
 #' @noRd
@@ -12,140 +13,227 @@ TtahSurvivalModel <- R6::R6Class(
     model = NULL,
     time_grid = NULL,
     task = NULL,
-
+    varprof = NULL,
+    factor_levels = NULL,
+    basis_specs = NULL,
+    latent_projection = NULL,
     fit = function(task, time_grid, ...) {
       super$fit(task = task, ...)
-      args <- c(
-        list(
-          data = as.data.frame(task$data),
-          expvars = task$features,
-          timevar = task$time_col,
-          eventvar = task$event_col
-        ),
-        private$spec_args()
-      )
-      self$model <- do.call(SurvModel_TTAH, args)
-      self$time_grid <- time_grid
       self$task <- task
+      self$time_grid <- time_grid
+
+      data <- as.data.frame(task$data)
+      expvars <- task$features
+      timevar <- task$time_col
+      eventvar <- task$event_col
+
+      # Params
+      spec <- self$spec
+      n_time <- spec$n_time %||% 50
+      spline_knots <- spec$spline_knots %||% 5
+      latent_dim <- spec$latent_dim %||% 8
+      time_basis_df <- spec$time_basis_df %||% 4
+      lambda <- spec$lambda %||% 1e-3
+
+      # 1. Profile and Prep
+      self$varprof <- VariableProfile(data, expvars)
+
+      self$factor_levels <- list()
+      for (v in expvars) {
+        if (is.factor(data[[v]]) || is.character(data[[v]])) {
+          self$factor_levels[[v]] <- levels(as.factor(data[[v]]))
+        }
+      }
+
+      obs_times <- data[[timevar]]
+      obs_events <- as.numeric(data[[eventvar]] == 1)
+
+      # Grid - Filter positive values if time_grid provided
+      tg_pass <- if (!is.null(time_grid)) time_grid[time_grid > 0] else NULL
+      if (!is.null(tg_pass) && length(tg_pass) == 0) tg_pass <- NULL
+
+      grid <- ttah_build_time_grid(obs_times, time_grid = tg_pass, n_time = n_time)
+
+      # Features
+      prep <- ttah_prepare_features(
+        data = data[, expvars, drop = FALSE],
+        expvars = expvars,
+        factor_levels = self$factor_levels,
+        basis_specs = NULL,
+        spline_knots = spline_knots
+      )
+      phi <- prep$phi
+      self$basis_specs <- prep$basis_specs
+      self$factor_levels <- prep$factor_levels # Updated with any new knowledge?
+
+      # Latent
+      self$latent_projection <- ttah_compute_latent_projection(phi, latent_dim = latent_dim)
+      phi_latent <- if (ncol(self$latent_projection) > 0) {
+        tmp <- phi %*% self$latent_projection
+        colnames(tmp) <- colnames(self$latent_projection)
+        tmp
+      } else {
+        NULL
+      }
+
+      # Time Basis
+      time_basis <- ttah_time_basis(grid, df = time_basis_df)
+      time_basis_matrix <- time_basis$matrix
+      if (ncol(time_basis_matrix) > 0) {
+        colnames(time_basis_matrix) <- paste0("time_basis", seq_len(ncol(time_basis_matrix)))
+      }
+      time_basis_names <- colnames(time_basis_matrix)
+
+      # Long Design
+      interval_index <- ttah_assign_intervals(obs_times, grid)
+
+      long_design <- ttah_build_long_design(
+        phi = phi,
+        phi_latent = phi_latent,
+        time_basis = time_basis_matrix,
+        interval_index = interval_index,
+        event = obs_events
+      )
+
+      X <- cbind(Intercept = 1, long_design$X)
+
+      fit_res <- ttah_ridge_glm(
+        X = X,
+        y = long_design$y,
+        lambda = lambda
+      )
+
+      # Extract coefs
+      coef <- fit_res$coefficients
+      coef[is.na(coef)] <- 0
+
+      offset <- 1
+      coef_add <- coef[offset + seq_len(ncol(phi))]
+      offset <- offset + ncol(phi)
+
+      coef_time <- coef[offset + seq_len(ncol(time_basis_matrix))]
+      offset <- offset + ncol(time_basis_matrix)
+
+      latent_coef <- numeric(0)
+      if (ncol(self$latent_projection) > 0) {
+        latent_len <- ncol(self$latent_projection) * ncol(time_basis_matrix)
+        if (latent_len > 0) {
+          latent_coef <- coef[offset + seq_len(latent_len)]
+        }
+      }
+
+      self$model <- list(
+        intercept = coef[1],
+        coef_add = coef_add,
+        coef_time = coef_time,
+        coef_inter = latent_coef,
+        feature_names = colnames(phi),
+        time_basis_names = time_basis_names,
+        time_basis_specs = time_basis$specs,
+        grid = grid
+      )
+
       invisible(self)
     },
-
     predict_survival = function(newdata, times, set = "test", ...) {
       private$ensure_fitted()
       complete_data <- .ensure_prediction_data(newdata, self$task)
-      feature_frame <- as.data.frame(complete_data[, self$task$features, drop = FALSE])
-      complete_idx <- stats::complete.cases(feature_frame)
-      ids <- complete_data[[self$task$id_col]]
-      model_name <- self$spec$engine %||% "ttah"
+      expvars <- self$task$features
 
-      if (is.null(times)) {
-        target_times <- self$time_grid
+      # 1. Factor Alignment
+      for (v in expvars) {
+        if (v %in% names(self$factor_levels)) {
+          complete_data[[v]] <- factor(complete_data[[v]], levels = self$factor_levels[[v]])
+        }
+      }
+
+      # 2. Features
+      prep_new <- ttah_prepare_features(
+        data = complete_data,
+        expvars = expvars,
+        factor_levels = self$factor_levels,
+        basis_specs = self$basis_specs
+      )
+      phi_new <- prep_new$phi
+      # Ensure cols match
+      phi_new <- phi_new[, self$model$feature_names, drop = FALSE]
+
+      # 3. Latent
+      latent_dim <- if (is.null(self$latent_projection)) 0 else ncol(self$latent_projection)
+      phi_latent_new <- if (latent_dim > 0) {
+        phi_new %*% self$latent_projection
       } else {
-        target_times <- sort(unique(as.numeric(times)))
-      }
-      if (length(target_times) == 0) {
-        rlang::abort("`times` must be numeric and non-empty.")
+        NULL
       }
 
-      preds_complete <- NULL
-      if (any(complete_idx)) {
-        newdata_complete <- feature_frame[complete_idx, , drop = FALSE]
-        id_complete <- ids[complete_idx]
-        pred <- Predict_SurvModel_TTAH(
-          modelout = self$model,
-          newdata = newdata_complete,
-          new_times = target_times
-        )
-        preds_complete <- new_survival_prediction(
-          id = rep(id_complete, each = length(target_times)),
-          time = rep(target_times, times = length(id_complete)),
-          surv = as.vector(pred$Probs),
-          model = rep(model_name, length(id_complete) * length(target_times)),
-          ensemble = FALSE,
-          set = set
-        )
+      # 4. Time Basis (on Model Grid)
+      time_grid <- self$model$grid
+      time_basis <- ttah_eval_time_basis(time_grid, self$model$time_basis_specs)
+
+      n_obs <- nrow(phi_new)
+      K <- length(time_grid)
+
+      # 5. Compute Linear Predictor (Eta)
+      # Eta is K x N (Time x Obs). Wait, code below constructs K x N.
+
+      # Intercept
+      eta_matrix <- matrix(self$model$intercept, nrow = K, ncol = n_obs)
+
+      # Main Effects (Phi * Beta_add). N x 1 -> 1 x N. Add to all times.
+      main_eff <- as.vector(phi_new %*% self$model$coef_add)
+      eta_matrix <- eta_matrix + matrix(main_eff, nrow = K, ncol = n_obs, byrow = TRUE)
+
+      # Time Effects (TimeBasis * Beta_time). K x 1. Add to all Obs.
+      time_lin <- drop(time_basis %*% self$model$coef_time)
+      eta_matrix <- eta_matrix + matrix(time_lin, nrow = K, ncol = n_obs, byrow = FALSE)
+
+      # Interaction (Latent_i * Theta * TimeBasis_k)
+      if (!is.null(phi_latent_new) && length(self$model$coef_inter) > 0) {
+        # Reshape Coef_inter
+        theta <- matrix(self$model$coef_inter, nrow = ncol(phi_latent_new), ncol = ncol(time_basis))
+        # (N x d) * (d x dt) * (dt x K)^T
+        # N x K
+        interaction <- phi_latent_new %*% theta %*% t(time_basis)
+        eta_matrix <- eta_matrix + t(interaction)
       }
 
-      preds_missing <- NULL
-      if (!all(complete_idx)) {
-        missing_ids <- ids[!complete_idx]
-        rlang::warn(glue::glue(
-          "Omitting {length(missing_ids)} rows with missing predictors for engine '{model_name}'."
-        ))
-        preds_missing <- new_survival_prediction(
-          id = rep(missing_ids, each = length(target_times)),
-          time = rep(target_times, times = length(missing_ids)),
-          surv = rep(NA_real_, length(missing_ids) * length(target_times)),
-          model = rep(model_name, length(missing_ids) * length(target_times)),
-          ensemble = FALSE,
-          set = set
-        )
-      }
+      # 6. Hazard & Survival
+      hazard_matrix <- ttah_sigmoid(eta_matrix)
+      survival_body <- apply(1 - hazard_matrix, 2, cumprod)
+      if (!is.matrix(survival_body)) survival_body <- matrix(survival_body, ncol = n_obs)
 
-      pieces <- list(preds_complete, preds_missing)
-      pieces <- pieces[!vapply(pieces, is.null, logical(1))]
-      if (length(pieces) == 0) {
-        return(new_survival_prediction(
-          id = integer(0),
-          time = numeric(0),
-          surv = numeric(0),
-          model = character(0),
-          ensemble = logical(0),
-          set = character(0)
-        ))
-      }
-      dplyr::bind_rows(pieces)
-    },
+      Probs <- rbind(rep(1, n_obs), survival_body) # times: 0, t1, t2...
+      Times <- c(0, time_grid)
 
-    predict_risk = function(newdata, times = NULL, set = "test", ...) {
-      private$ensure_fitted()
-      if (is.null(times)) {
-        times <- self$time_grid
-      }
-      surv_tbl <- self$predict_survival(newdata = newdata, times = times, set = set, ...)
-      if (nrow(surv_tbl) == 0) {
-        return(new_risk_prediction(
-          id = integer(0),
-          risk = numeric(0),
-          model = character(0),
-          time = numeric(0),
-          ensemble = logical(0),
-          set = character(0)
-        ))
-      }
-      last_time <- max(times)
-      last_slice <- surv_tbl[surv_tbl$time == last_time, , drop = FALSE]
-      new_risk_prediction(
-        id = last_slice$id,
-        risk = 1 - last_slice$surv,
-        model = last_slice$model,
-        time = last_time,
-        ensemble = last_slice$ensemble,
-        set = last_slice$set
+      req_times <- if (is.null(times)) self$time_grid else sort(unique(as.numeric(times)))
+
+      # Interpolate
+      interp_probs <- survprobMatInterpolator(Probs, Times, req_times)
+
+      id_col <- complete_data[[self$task$id_col]]
+      flat_surv <- as.vector(interp_probs)
+
+      new_survival_prediction(
+        id = rep(id_col, each = length(req_times)),
+        time = rep(req_times, times = length(id_col)),
+        surv = flat_surv,
+        model = rep("ttah", length(flat_surv)),
+        ensemble = FALSE,
+        set = set
       )
     },
-
     model_info = function() {
       info <- super$model_info()
-      info$label <- "TTAH survival"
+      info$label <- "TTAH Survival"
       info
     },
-
     required_packages = function() {
       character()
-    }
+    } # Uses ttah_utils (internal)
   ),
   private = list(
     ensure_fitted = function() {
-      if (!isTRUE(self$fitted)) {
-        rlang::abort("Model must be fitted before predictions can be generated.")
-      }
-    },
-
-    spec_args = function() {
-      spec <- self$spec %||% list()
-      spec[c("engine", "package", "outcome")] <- NULL
-      spec
+      if (!isTRUE(self$fitted)) rlang::abort("Model not fitted")
     }
   )
 )
@@ -157,6 +245,6 @@ TtahSurvivalModel <- R6::R6Class(
     TtahSurvivalModel$new(spec = modifyList(list(engine = "ttah"), spec))
   },
   packages = character(),
-  tags = c("semiparametric"),
-  label = "TTAH survival"
+  tags = c("semiparametric", "discrete-time"),
+  label = "TTAH Survival"
 )

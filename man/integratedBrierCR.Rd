@@ -34,7 +34,7 @@ Integrates cause-specific Brier scores over time using trapezoidal rule.
 Provides a single summary measure of calibration and discrimination.
 }
 \details{
-**Formula**:
+\strong{Formula}:
 \eqn{IBS_j = \frac{1}{t_{max} - t_{min}} \int_0^{t_{max}} BS_j(t) dt}
 }
 \keyword{internal}

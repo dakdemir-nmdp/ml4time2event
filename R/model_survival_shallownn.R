@@ -1,7 +1,7 @@
-#' Shallow neural network survival model (R6 implementation)
+#' Shallow Neural Network Survival Model (R6)
 #'
-#' Wraps the custom `SurvModel_ShallowNN()` helper to integrate the neural
-#' network engine into the R6-based workflow.
+#' Fits a shallow neural network with a Cox partial likelihood loss.
+#' Uses shared neural network core functions from nn_core.R for efficiency.
 #'
 #' @keywords internal
 #' @noRd
@@ -12,144 +12,121 @@ ShallowNNSurvivalModel <- R6::R6Class(
     model = NULL,
     time_grid = NULL,
     task = NULL,
-
+    varprof = NULL,
     fit = function(task, time_grid, ...) {
       super$fit(task = task, ...)
-      args <- c(
-        list(
-          data = as.data.frame(task$data),
-          expvars = task$features,
-          timevar = task$time_col,
-          eventvar = task$event_col
-        ),
-        private$spec_args()
-      )
-      self$model <- do.call(SurvModel_ShallowNN, args)
-      self$time_grid <- time_grid
       self$task <- task
+      self$time_grid <- time_grid
+
+      # Extract specifications
+      spec <- self$spec
+      size <- spec$size %||% 5
+      decay <- spec$decay %||% 0.01
+      maxit <- spec$maxit %||% 1000
+
+      # Get data
+      data <- as.data.frame(task$data)
+      expvars <- task$features
+      timevar <- task$time_col
+      eventvar <- task$event_col
+
+      # Variable profiling for diagnostics
+      self$varprof <- VariableProfile(data, expvars)
+
+      # Prepare data: handle factors, scaling, create model matrix
+      prepared <- .nn_prepare_data(data, expvars)
+
+      # Binary event indicator
+      event <- as.numeric(data[[eventvar]] == 1)
+      time <- data[[timevar]]
+
+      # Fit using shared Cox loss optimization
+      fit_result <- .nn_fit_cox_loss(
+        X_train = prepared$X,
+        event = event,
+        time = time,
+        n_features = prepared$n_features,
+        size = size,
+        decay = decay,
+        maxit = maxit
+      )
+
+      # Check convergence
+      if (fit_result$convergence != 0) {
+        rlang::warn(glue::glue(
+          "Neural network optimization did not converge fully (code {fit_result$convergence}). ",
+          "Consider increasing maxit or adjusting decay parameter."
+        ))
+      }
+
+      # Compute baseline hazard (vectorized for efficiency)
+      res_final <- .nn_forward_pass(fit_result$sorted_data$X, fit_result$weights)
+      risks <- exp(res_final$output)
+
+      baseline_hazard <- .nn_compute_baseline_hazard_vectorized(
+        risks = risks,
+        time_sorted = fit_result$sorted_data$time,
+        event_sorted = fit_result$sorted_data$event
+      )
+
+      # Store model
+      self$model <- list(
+        weights = fit_result$weights,
+        baseline_hazard = baseline_hazard,
+        scaling_params = prepared$scaling_params,
+        factor_levels = prepared$factor_levels,
+        size = size
+      )
+
       invisible(self)
     },
-
     predict_survival = function(newdata, times, set = "test", ...) {
       private$ensure_fitted()
       complete_data <- .ensure_prediction_data(newdata, self$task)
-      feature_frame <- as.data.frame(complete_data[, self$task$features, drop = FALSE])
-      complete_idx <- stats::complete.cases(feature_frame)
-      ids <- complete_data[[self$task$id_col]]
-      model_name <- self$spec$engine %||% "shallownn"
 
-      if (is.null(times)) {
-        target_times <- self$time_grid
-      } else {
-        target_times <- sort(unique(as.numeric(times)))
-      }
-      if (length(target_times) == 0) {
-        rlang::abort("`times` must be numeric and non-empty.")
-      }
-
-      preds_complete <- NULL
-      if (any(complete_idx)) {
-        newdata_complete <- feature_frame[complete_idx, , drop = FALSE]
-        id_complete <- ids[complete_idx]
-        pred <- Predict_SurvModel_ShallowNN(
-          modelout = self$model,
-          newdata = newdata_complete,
-          new_times = target_times
-        )
-        preds_complete <- new_survival_prediction(
-          id = rep(id_complete, each = length(target_times)),
-          time = rep(target_times, times = length(id_complete)),
-          surv = as.vector(pred$Probs),
-          model = rep(model_name, length(id_complete) * length(target_times)),
-          ensemble = FALSE,
-          set = set
-        )
-      }
-
-      preds_missing <- NULL
-      if (!all(complete_idx)) {
-        missing_ids <- ids[!complete_idx]
-        rlang::warn(glue::glue(
-          "Omitting {length(missing_ids)} rows with missing predictors for engine '{model_name}'."
-        ))
-        preds_missing <- new_survival_prediction(
-          id = rep(missing_ids, each = length(target_times)),
-          time = rep(target_times, times = length(missing_ids)),
-          surv = rep(NA_real_, length(missing_ids) * length(target_times)),
-          model = rep(model_name, length(missing_ids) * length(target_times)),
-          ensemble = FALSE,
-          set = set
-        )
-      }
-
-      pieces <- list(preds_complete, preds_missing)
-      pieces <- pieces[!vapply(pieces, is.null, logical(1))]
-      if (length(pieces) == 0) {
-        return(new_survival_prediction(
-          id = integer(0),
-          time = numeric(0),
-          surv = numeric(0),
-          model = character(0),
-          ensemble = logical(0),
-          set = character(0)
-        ))
-      }
-      dplyr::bind_rows(pieces)
-    },
-
-    predict_risk = function(newdata, times = NULL, set = "test", ...) {
-      private$ensure_fitted()
-      if (is.null(times)) {
-        times <- self$time_grid
-      }
-      surv_tbl <- self$predict_survival(newdata = newdata, times = times, set = set, ...)
-      if (nrow(surv_tbl) == 0) {
-        return(new_risk_prediction(
-          id = integer(0),
-          risk = numeric(0),
-          model = character(0),
-          time = numeric(0),
-          ensemble = logical(0),
-          set = character(0)
-        ))
-      }
-      last_time <- max(times)
-      last_slice <- surv_tbl[surv_tbl$time == last_time, , drop = FALSE]
-      new_risk_prediction(
-        id = last_slice$id,
-        risk = 1 - last_slice$surv,
-        model = last_slice$model,
-        time = last_time,
-        ensemble = last_slice$ensemble,
-        set = last_slice$set
+      # Use shared prediction function
+      .nn_predict_survival(
+        model = self$model,
+        newdata = complete_data,
+        times = times,
+        task = self$task,
+        expvars = self$task$features,
+        time_grid = self$time_grid,
+        set = set
       )
     },
-
     model_info = function() {
       info <- super$model_info()
-      info$label <- "Shallow neural network"
+      info$label <- "Shallow Neural Network (Survival)"
+      info$parameters <- list(
+        hidden_units = self$model$size %||% "unknown",
+        converged = TRUE # Would need to store this from fit
+      )
       info
     },
-
     required_packages = function() {
-      character()
+      character() # Base R only
     }
   ),
   private = list(
     ensure_fitted = function() {
       if (!isTRUE(self$fitted)) {
-        rlang::abort("Model must be fitted before predictions can be generated.")
+        rlang::abort(
+          "Cannot predict: ShallowNN model has not been fitted yet.",
+          class = "unfitted_model_error"
+        )
       }
-    },
-
-    spec_args = function() {
-      spec <- self$spec %||% list()
-      spec[c("engine", "package", "outcome")] <- NULL
-      spec
+      if (is.null(self$model$weights)) {
+        rlang::abort(
+          "Cannot predict: Model weights are missing.",
+          class = "invalid_model_state_error"
+        )
+      }
     }
   )
 )
 
+# Register model
 .register_time_to_event_model(
   engine = "shallownn",
   outcome = "survival",
@@ -157,6 +134,6 @@ ShallowNNSurvivalModel <- R6::R6Class(
     ShallowNNSurvivalModel$new(spec = modifyList(list(engine = "shallownn"), spec))
   },
   packages = character(),
-  tags = c("neural-network"),
-  label = "Shallow neural network"
+  tags = c("neural-network", "cox-loss", "nonparametric"),
+  label = "Shallow Neural Network (Survival)"
 )

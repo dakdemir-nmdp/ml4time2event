@@ -7,14 +7,14 @@
 \method{autoplot}{t2e_leaderboard}(object, metric = NULL, ...)
 }
 \arguments{
-\item{object}{A `t2e_leaderboard` object.}
+\item{object}{A \code{t2e_leaderboard} object.}
 
 \item{metric}{The metric to plot. Defaults to the first metric available.}
 
 \item{...}{Additional arguments passed to methods.}
 }
 \value{
-A `ggplot` object.
+A \code{ggplot} object.
 }
 \description{
 Plot model leaderboard

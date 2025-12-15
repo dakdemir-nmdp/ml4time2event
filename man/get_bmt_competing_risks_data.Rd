@@ -7,11 +7,11 @@
 get_bmt_competing_risks_data()
 }
 \value{
-A tibble containing outcome columns (`ftime`, `status`) along with
-  categorical predictors used in the examples.
+A tibble containing outcome columns (\code{ftime}, \code{status}) along with
+categorical predictors used in the examples.
 }
 \description{
 Loads the BMT competing-risks example used in vignettes. If the packaged data
 object is not available the helper rebuilds it from the CSV stored in
-`inst/extdata`.
+\code{inst/extdata}.
 }

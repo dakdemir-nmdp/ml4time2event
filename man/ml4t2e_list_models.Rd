@@ -7,12 +7,12 @@
 ml4t2e_list_models(outcome = c("survival", "competing_risk", "all"))
 }
 \arguments{
-\item{outcome}{Filter by outcome type. `"survival"` and `"competing_risk"` are
-accepted. Use `"all"` to list everything.}
+\item{outcome}{Filter by outcome type. \code{"survival"} and \code{"competing_risk"} are
+accepted. Use \code{"all"} to list everything.}
 }
 \value{
-A data frame with columns `engine`, `outcome`, `label`, `packages`,
-  and `tags`.
+A data frame with columns \code{engine}, \code{outcome}, \code{label}, \code{packages},
+and \code{tags}.
 }
 \description{
 List available model engines

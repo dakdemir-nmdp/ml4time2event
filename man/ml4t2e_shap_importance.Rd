@@ -11,16 +11,16 @@ ml4t2e_shap_importance(
 )
 }
 \arguments{
-\item{shap_result}{Object returned by `ml4t2e_calculate_shap()`.}
+\item{shap_result}{Object returned by \code{ml4t2e_calculate_shap()}.}
 
 \item{max_features}{Optional integer limiting the number of features shown.}
 
-\item{plot_type}{One of `"beeswarm"` or `"bar"` indicating the plot style.}
+\item{plot_type}{One of \code{"beeswarm"} or \code{"bar"} indicating the plot style.}
 }
 \value{
-A `ggplot` object.
+A \code{ggplot} object.
 }
 \description{
 Visualises the magnitude and distribution of SHAP values for the supplied
-`ml4t2e_shap` result using either a beeswarm or bar chart.
+\code{ml4t2e_shap} result using either a beeswarm or bar chart.
 }

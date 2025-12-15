@@ -15,12 +15,12 @@
 
 \item{obsevents}{Binary event indicator}
 
-\item{eval_times}{Optional evaluation time points. If NULL, computed at all `pred_times`.}
+\item{eval_times}{Optional evaluation time points. If NULL, computed at all \code{pred_times}.}
 
 \item{TestMat}{Optional test matrix (currently unused)}
 }
 \value{
-List of class `ml4time2event_brier` containing Brier scores and time grid
+List of class \code{ml4time2event_brier} containing Brier scores and time grid
 }
 \description{
 Computes mean squared error between predicted survival probabilities and
@@ -28,19 +28,21 @@ observed binary event status at specified time points. Lower values indicate
 better calibration.
 }
 \details{
-**Formula**:
+\strong{Formula}:
 \eqn{BS(t) = E[(S(t|X) - Y(t))^2]}
 
 where \eqn{S(t|X)} is predicted survival probability and \eqn{Y(t)} is binary
 event status at time \eqn{t}.
 
-**Interpretation**:
-- Range: 0 (perfect calibration) to 1 (worst)
-- Combines discrimination and calibration
-- 0.25 at all times = baseline for completely random predictions
+\strong{Interpretation}:
+\itemize{
+\item Range: 0 (perfect calibration) to 1 (worst)
+\item Combines discrimination and calibration
+\item 0.25 at all times = baseline for completely random predictions
+}
 }
 \references{
 Brier, G. W. (1950). "Verification of forecasts expressed in terms of
-probability." *Monthly Weather Review*, 78(1), 1–3.
+probability." \emph{Monthly Weather Review}, 78(1), 1–3.
 }
 \keyword{internal}

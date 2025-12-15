@@ -7,7 +7,7 @@
 \method{autoplot}{t2e_explain}(object, what = c("importance"), ...)
 }
 \arguments{
-\item{object}{A `t2e_explain` object.}
+\item{object}{A \code{t2e_explain} object.}
 
 \item{what}{What to plot (currently only "importance" is supported).}
 

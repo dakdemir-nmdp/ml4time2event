@@ -11,45 +11,67 @@ ml4t2e_fit(
   recipe = NULL,
   resampling = NULL,
   seed = NULL,
+  keep_data = FALSE,
   controls = list(),
   conformal_calibration = NULL
 )
 }
 \arguments{
-\item{task}{An object created with `ml4t2e_task_surv()` or `ml4t2e_task_cr()`.}
+\item{task}{An object created with \code{ml4t2e_task_surv()} or \code{ml4t2e_task_cr()}.}
 
 \item{models}{Character vector of engine names to fit. Use
-`ml4t2e_list_models()` to discover available options.}
+\code{ml4t2e_list_models()} to discover available options.
+Common engines include:
+\itemize{
+\item Survival: \code{"cox"}, \code{"random_forest"}, \code{"gbm"}, \code{"xgboost"}, \code{"shallownn"}, \code{"ttah"}, \code{"survreg"}.
+\item Competing Risk: \code{"cox"}, \code{"fine_gray"}, \code{"cr_random_forest"}, \code{"cr_xgboost"}, \code{"cr_shallownn"}, \code{"cr_ttah"}.
+}}
 
 \item{ensemble}{Character or logical; controls ensembling strategy:
-  - `FALSE` or `"none"`: No ensembling; returns individual model predictions only.
-  - `"simple"`: Unweighted average of predictions across models. **Currently the only implemented strategy.**
-  - `"auto"`, `TRUE`: Alias for `"simple"` (stacking not yet implemented; falls back with warning).
-  - `"stack"`: Planned for future release; currently falls back to `"simple"` with a warning.
+\itemize{
+\item \code{FALSE} or \code{"none"}: No ensembling; returns individual model predictions only.
+\item \code{"simple"}: Unweighted average of predictions across models.
+\item \code{"auto"}, \code{TRUE}: Alias for \code{"simple"} (stacking not yet implemented; falls back with warning).
+\item \code{"stack"}: Uses blending (data splitting) to learn ensemble weights via Super Learner optimization.
+}
 
-  Default: `FALSE`.
+Default: \code{FALSE}.
 
-  **Note**: When ensemble is enabled, model predictions are combined before metrics calculation.
-  All specified models are still trained.}
+\strong{Note}: When \code{ensemble = "stack"}, a portion of the data (default 20\%) is held out
+for meta-learner training.}
 
-\item{recipe}{Optional `recipes` recipe for preprocessing. Not yet supported
+\item{recipe}{Optional \code{recipes} recipe for preprocessing. Not yet supported
 in this refactor; placeholder for future work.}
 
-\item{resampling}{Optional resampling specification from `rsample`.}
+\item{resampling}{Optional resampling specification from \code{rsample}.}
 
 \item{seed}{Optional integer seed for reproducibility.}
 
+\item{keep_data}{Logical; if \code{TRUE}, retains the training data in the returned
+object. Default is \code{FALSE} to save memory.
+\strong{Warning}: If \code{FALSE}, you must provide \code{newdata} to \code{predict()} and
+\code{task} to \code{ml4t2e_evaluate()}.}
+
 \item{controls}{Named list of engine-specific parameter lists. Use entries
-like `controls = list(cox = list(penalized = TRUE))`. Can also include
-global controls like `time_limit` (in seconds) to stop training after a
+like \code{controls = list(cox = list(penalized = TRUE))}. Can also include
+global controls like \code{time_limit} (in seconds) to stop training after a
 certain duration.}
 
 \item{conformal_calibration}{Optional numeric value between 0 and 1. If provided,
-specifies the fraction of data to use for conformal calibration.}
+specifies the fraction of data to use for conformal calibration (and stacking).}
 }
 \value{
-An object of class `t2e_fit`.
+An object of class \code{t2e_fit}.
 }
 \description{
 Fit time-to-event models via a unified interface
+}
+\examples{
+\dontrun{
+lung_df <- survival::lung
+lung_df$status <- lung_df$status - 1 # 0=censored, 1=event
+task <- ml4t2e_task_surv(lung_df, time = "time", event = "status", features = c("age", "sex"))
+fit <- ml4t2e_fit(task, models = c("cox", "random_forest"), keep_data = TRUE)
+predict(fit, newdata = lung_df[1:5, ], times = c(100, 200, 300))
+}
 }

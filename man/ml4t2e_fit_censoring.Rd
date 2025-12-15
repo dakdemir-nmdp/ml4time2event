@@ -14,7 +14,7 @@ ml4t2e_fit_censoring(data, time_col, event_col)
 \item{event_col}{Character, name of event column.}
 }
 \value{
-A `survfit` object.
+A \code{survfit} object.
 }
 \description{
 Fits a Kaplan-Meier estimator for the censoring distribution.

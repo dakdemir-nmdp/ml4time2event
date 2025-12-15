@@ -1,27 +1,26 @@
-VariableProfile<-function(data, expvars){
-  varprofile<-vector(mode="list", length=length(expvars))
-  names(varprofile)<-expvars
-  for (vari in expvars){
+VariableProfile <- function(data, expvars) {
+  varprofile <- vector(mode = "list", length = length(expvars))
+  names(varprofile) <- expvars
+  for (vari in expvars) {
     if (vari %in% colnames(data)) { # Check if variable exists in data
-        col_data <- data[[vari]] # Use [[ ]] for safer column access
-        if (is.factor(col_data)){
-            varprofile[[vari]]<-table(col_data, useNA = "ifany") # Include NAs in table
-        } else if (is.numeric(col_data)){
-            varprofile[[vari]]<-c(min=min(col_data, na.rm = TRUE), max=max(col_data, na.rm = TRUE)) # Add names
-        } else if (is.character(col_data)){
-            varprofile[[vari]]<-table(col_data, useNA = "ifany") # Include NAs
-        } else {
-            varprofile[[vari]] <- paste("Unsupported type:", class(col_data))
-        }
+      col_data <- data[[vari]] # Use [[ ]] for safer column access
+      if (is.factor(col_data)) {
+        varprofile[[vari]] <- table(col_data, useNA = "ifany") # Include NAs in table
+      } else if (is.numeric(col_data)) {
+        varprofile[[vari]] <- c(min = min(col_data, na.rm = TRUE), max = max(col_data, na.rm = TRUE)) # Add names
+      } else if (is.character(col_data)) {
+        varprofile[[vari]] <- table(col_data, useNA = "ifany") # Include NAs
+      } else {
+        varprofile[[vari]] <- paste("Unsupported type:", class(col_data))
+      }
     } else {
-        varprofile[[vari]] <- "Variable not found in data"
+      varprofile[[vari]] <- "Variable not found in data"
     }
   }
   varprofile
 }
 
 format_model_name <- function(model_names, model_type = "survival") {
-
   # Define mapping for survival models
   surv_mapping <- c(
     RF_Model = "Random Forest",
@@ -105,7 +104,7 @@ listrules <- function(x, i = NULL) {
     if (i == 1) {
       return("")
     }
-    
+
     # For any other node (terminal or internal), extract the rule
     rule <- .extract_rule_for_node(x, i)
     return(rule)
@@ -115,35 +114,103 @@ listrules <- function(x, i = NULL) {
 # Helper function to extract rule for a specific node
 .extract_rule_for_node <- function(x, node_id) {
   # Try to use partykit's internal function if available
-  tryCatch({
-    # Use the internal partykit function to get rules
-    all_rules <- partykit:::.list.rules.party(x)
-    # Get terminal nodes
-    terminal_nodes <- partykit::nodeids(x, terminal = TRUE)
-    
-    if (node_id %in% terminal_nodes) {
-      # For terminal nodes, return the corresponding rule
-      node_index <- which(terminal_nodes == node_id)
-      if (node_index <= length(all_rules)) {
-        return(all_rules[node_index])
+  tryCatch(
+    {
+      # Use the internal partykit function to get rules
+      all_rules <- partykit:::.list.rules.party(x)
+      # Get terminal nodes
+      terminal_nodes <- partykit::nodeids(x, terminal = TRUE)
+
+      if (node_id %in% terminal_nodes) {
+        # For terminal nodes, return the corresponding rule
+        node_index <- which(terminal_nodes == node_id)
+        if (node_index <= length(all_rules)) {
+          return(all_rules[node_index])
+        }
+      } else {
+        # For internal nodes, we need to construct the path rule
+        # This is a simplified implementation
+        if (node_id == 1) {
+          return("") # Root node has no rule
+        }
+        # For other internal nodes, return a placeholder
+        # A full implementation would trace the path from root to this node
+        return(paste("Internal node", node_id, "path"))
       }
-    } else {
-      # For internal nodes, we need to construct the path rule
-      # This is a simplified implementation
-      if (node_id == 1) {
-        return("")  # Root node has no rule
-      }
-      # For other internal nodes, return a placeholder
-      # A full implementation would trace the path from root to this node
-      return(paste("Internal node", node_id, "path"))
+
+      return("")
+    },
+    error = function(e) {
+      # Fallback if internal function is not available
+      return(paste("Rule for node", node_id))
     }
-    
-    return("")
-  }, error = function(e) {
-    # Fallback if internal function is not available
-    return(paste("Rule for node", node_id))
-  })
+  )
 }
 `%||%` <- function(x, y) {
   if (!is.null(x)) x else y
+}
+
+#' Reshape Predictions to Matrix
+#'
+#' Optimized helper to convert tidy predictions to matrix for score computation.
+#'
+#' @param preds Tidy prediction data frame.
+#' @param data Data frame (to align rows).
+#' @param time_grid Numeric vector of times.
+#' @param val_col Character, name of value column ("surv" or "cif").
+#' @param id_col Optional character, name of ID column.
+#'
+#' @return Matrix (n x m).
+#' @keywords internal
+ml4t2e_reshape_preds_to_matrix <- function(preds, data, time_grid, val_col, id_col = NULL) {
+  # Optimize using pivot_wider
+  if (is.null(id_col)) {
+    # If no ID column, we assume row order if reliable, but safer to add a temp id
+    data_ids <- seq_len(nrow(data))
+    # We must ensure preds has a corresponding id or we can't map
+    if (!"id" %in% names(preds)) {
+      stop("preds must have an 'id' column")
+    }
+  } else {
+    data_ids <- data[[id_col]]
+  }
+
+  # Ensure preds has numeric time for column ordering
+  preds$time <- as.numeric(preds$time)
+
+  # Pivot
+  # We select only needed columns to avoid issues
+  wide_df <- preds[, c("id", "time", val_col)] %>%
+    tidyr::pivot_wider(names_from = "time", values_from = dplyr::all_of(val_col))
+
+  # Ensure columns cover time_grid and are ordered
+  target_cols <- as.character(time_grid)
+
+  # Check if all times are present
+  missing_times <- setdiff(target_cols, names(wide_df))
+  if (length(missing_times) > 0) {
+    for (mt in missing_times) {
+      wide_df[[mt]] <- NA
+    }
+  }
+
+  # Reorder columns to match time_grid
+  wide_df <- wide_df[, c("id", target_cols)]
+
+  # Reorder rows to match data_ids
+  order_df <- data.frame(id = data_ids, stringsAsFactors = FALSE)
+
+  # Ensure types match for join
+  if (class(order_df$id) != class(wide_df$id)) {
+    if (is.numeric(order_df$id)) {
+      wide_df$id <- as.numeric(wide_df$id)
+    } else {
+      wide_df$id <- as.character(wide_df$id)
+    }
+  }
+
+  final_df <- dplyr::left_join(order_df, wide_df, by = "id")
+
+  # Convert to matrix
+  as.matrix(final_df[, target_cols])
 }

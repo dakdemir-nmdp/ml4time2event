@@ -1,16 +1,17 @@
+# ==============================================================================
+# Test Suite for Random Forest Survival Model
+# Using unified ml4t2e_fit API
+# ==============================================================================
+
 library(testthat)
-# library(here) # Removed
-# library(data.table) # Removed
-library(randomForestSRC) # Required for the functions being tested
-library(survival) # For Surv object
+library(survival)
 
-# Assuming the functions are available in the environment
-# source(here("R/models/surv_random_forest.R"))  # Removed - functions loaded via package
+context("Testing Random Forest Survival Model via ml4t2e_fit")
 
-context("Testing surv_random_forest functions")
+# ==============================================================================
+# Test Data Setup
+# ==============================================================================
 
-# --- Test Data Setup ---
-# Create a simple survival dataset
 set.seed(789)
 n_obs_surv <- 50
 surv_data <- data.frame(
@@ -23,124 +24,69 @@ surv_data <- data.frame(
 )
 time_var <- "time"
 event_var <- "status"
-expvars <- c("x1", "x2", "x3")
 train_indices_surv <- 1:40
 test_indices_surv <- 41:50
 train_data_surv <- surv_data[train_indices_surv, ]
 test_data_surv <- surv_data[test_indices_surv, ]
-time_points_surv <- quantile(train_data_surv$time[train_data_surv$status == 1], c(0.25, 0.5, 0.75))
 
+train_task <- ml4t2e_task_surv(train_data_surv, time = time_var, event = event_var)
+test_task <- ml4t2e_task_surv(test_data_surv, time = time_var, event = event_var)
 
-# --- Tests for SurvModel_RF ---
+# ==============================================================================
+# Tests via ml4t2e_fit
+# ==============================================================================
 
-test_that("SurvModel_RF runs and returns expected structure", {
+test_that("ml4t2e_fit fits Random Forest model", {
   skip_if_not_installed("randomForestSRC")
 
-  model_rf <- SurvModel_RF(
-    data = train_data_surv,
-    expvars = expvars,
-    timevar = time_var,
-    eventvar = event_var,
-    ntree = 10  # Use fewer trees for faster testing
+  fit <- ml4t2e_fit(keep_data = TRUE, 
+    task = train_task,
+    models = "random_forest",
+    ensemble = "none",
+    controls = list(random_forest = list(ntree = 10)) # Faster tests
   )
 
-  # Check output structure
-  expect_type(model_rf, "list")
-  expect_named(model_rf, c("model", "times", "varprof", "expvars"))
-  expect_s3_class(model_rf$model, "rfsrc")
-  expect_type(model_rf$times, "double")
-  expect_type(model_rf$varprof, "list")
-  expect_type(model_rf$expvars, "character")
+  expect_s3_class(fit, "t2e_fit")
+  expect_true("random_forest" %in% fit$model_names)
+
+  # Check internal model structure
+  rf_obj <- fit$models$random_forest
+  expect_true(inherits(rf_obj, "RandomForestSurvivalModel"))
+  expect_s3_class(rf_obj$model, "rfsrc")
+  expect_equal(rf_obj$model$ntree, 10)
 })
 
-test_that("SurvModel_RF handles additional parameters", {
+test_that("Random Forest predictions format", {
   skip_if_not_installed("randomForestSRC")
 
-  # Test with different ntree
-  model_rf_params <- SurvModel_RF(
-    data = train_data_surv,
-    expvars = expvars,
-    timevar = time_var,
-    eventvar = event_var,
-    ntree = 10
+  fit <- ml4t2e_fit(keep_data = TRUE, 
+    task = train_task,
+    models = "random_forest",
+    ensemble = "none",
+    controls = list(random_forest = list(ntree = 10))
   )
 
-  expect_s3_class(model_rf_params$model, "rfsrc")
-  expect_equal(model_rf_params$model$ntree, 10)
+  times <- c(1, 5, 10)
+  preds <- predict(fit, newdata = test_data_surv, times = times, type = "survival")
+
+  expect_s3_class(preds, "t2e_pred")
+  expect_true(all(c("id", "time", "surv", "model") %in% names(preds)))
+  expect_equal(nrow(preds), nrow(test_data_surv) * length(times))
+
+  # Check values
+  expect_true(all(preds$surv >= 0 & preds$surv <= 1))
 })
 
-test_that("SurvModel_RF requires correct inputs", {
-  skip_if_not_installed("randomForestSRC")
-  expect_error(SurvModel_RF(expvars = expvars, timevar = time_var, eventvar = event_var), "argument \"data\" is missing")
-  expect_error(SurvModel_RF(data = train_data_surv, timevar = time_var, eventvar = event_var), "argument \"expvars\" is missing")
-  expect_error(SurvModel_RF(data = train_data_surv, expvars = expvars, eventvar = event_var), "argument \"timevar\" is missing")
-  expect_error(SurvModel_RF(data = train_data_surv, expvars = expvars, timevar = time_var), "argument \"eventvar\" is missing")
-})
-
-
-# --- Tests for Predict_SurvModel_RF ---
-
-test_that("Predict_SurvModel_RF returns predictions in correct format", {
+test_that("Random Forest handles factor variables without manual intervention", {
   skip_if_not_installed("randomForestSRC")
 
-  model_rf <- SurvModel_RF(
-    data = train_data_surv,
-    expvars = expvars,
-    timevar = time_var,
-    eventvar = event_var,
-    ntree = 10
-  )
-  predictions <- Predict_SurvModel_RF(
-    modelout = model_rf,
-    newdata = test_data_surv
+  # x2 is a factor
+  fit <- ml4t2e_fit(keep_data = TRUE, 
+    task = train_task,
+    models = "random_forest",
+    ensemble = "none",
+    controls = list(random_forest = list(ntree = 10))
   )
 
-  # Check output structure
-  expect_type(predictions, "list")
-  expect_named(predictions, c("Probs", "Times"))
-  expect_true(is.matrix(predictions$Probs))
-  expect_type(predictions$Times, "double")
-
-  # Check dimensions
-  expect_equal(nrow(predictions$Probs), length(predictions$Times))
-  expect_equal(ncol(predictions$Probs), nrow(test_data_surv))
-
-  # Check values are probabilities (between 0 and 1)
-  expect_true(all(predictions$Probs >= 0 & predictions$Probs <= 1, na.rm = TRUE))
-})
-
-test_that("Predict_SurvModel_RF handles custom times", {
-  skip_if_not_installed("randomForestSRC")
-
-  model_rf <- SurvModel_RF(
-    data = train_data_surv,
-    expvars = expvars,
-    timevar = time_var,
-    eventvar = event_var,
-    ntree = 10
-  )
-  # Note: The current implementation doesn't support custom times - it uses all times from the model
-  # This test just verifies the function runs and returns the expected structure
-  predictions <- Predict_SurvModel_RF(
-    modelout = model_rf,
-    newdata = test_data_surv
-  )
-
-  expect_type(predictions, "list")
-  expect_named(predictions, c("Probs", "Times"))
-  expect_true(is.matrix(predictions$Probs))
-  expect_type(predictions$Times, "double")
-})
-
-test_that("Predict_SurvModel_RF requires correct inputs", {
-  skip_if_not_installed("randomForestSRC")
-  model_rf <- SurvModel_RF(
-    data = train_data_surv,
-    expvars = expvars,
-    timevar = time_var,
-    eventvar = event_var,
-    ntree = 10
-  )
-  expect_error(Predict_SurvModel_RF(newdata = test_data_surv), "argument \"modelout\" is missing")
-  expect_error(Predict_SurvModel_RF(modelout = model_rf), "argument \"newdata\" is missing")
+  expect_no_error(predict(fit, newdata = test_data_surv, times = 5))
 })

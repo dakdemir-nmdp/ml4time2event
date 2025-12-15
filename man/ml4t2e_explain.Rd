@@ -4,15 +4,15 @@
 \alias{ml4t2e_explain}
 \title{Explain model predictions via permutation importance}
 \arguments{
-\item{fit}{A `t2e_fit` object.}
+\item{fit}{A \code{t2e_fit} object.}
 
-\item{newdata}{Optional data frame. If `NULL`, training data stored in the
+\item{newdata}{Optional data frame. If \code{NULL}, training data stored in the
 task is used.}
 
-\item{method}{Explanation method. Only `"permutation"` is currently
-implemented; `"auto"` maps to `"permutation"`.}
+\item{method}{Explanation method. Only \code{"permutation"} is currently
+implemented; \code{"auto"} maps to \code{"permutation"}.}
 
-\item{include}{Models to include (same semantics as `predict()`).}
+\item{include}{Models to include (same semantics as \code{predict()}).}
 
 \item{times}{Optional time grid used for predictions (defaults to fit's grid).}
 
@@ -20,8 +20,8 @@ implemented; `"auto"` maps to `"permutation"`.}
 importance).}
 }
 \value{
-A tibble with columns `model`, `feature`, `importance`, and
-  `metric`.
+A tibble with columns \code{model}, \code{feature}, \code{importance}, and
+\code{metric}.
 }
 \description{
 Explain model predictions via permutation importance

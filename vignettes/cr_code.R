@@ -2,6 +2,7 @@ knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
 
 library(ml4time2event)
 library(dplyr)
+library(ggplot2)
 
 bmt <- get_bmt_competing_risks_data() |>
   mutate(
@@ -12,7 +13,7 @@ bmt <- get_bmt_competing_risks_data() |>
 set.seed(2025)
 train_rows <- sample.int(nrow(bmt), size = floor(0.7 * nrow(bmt)))
 bmt_train <- bmt[train_rows, ]
-bmt_test  <- bmt[-train_rows, ]
+bmt_test <- bmt[-train_rows, ]
 
 feature_cols <- c("sex", "d", "phase", "age", "source")
 
@@ -27,7 +28,7 @@ cr_task <- ml4t2e_task_cr(
 
 cr_fit <- ml4t2e_fit(
   task = cr_task,
-  models = c("cox", "fine_gray", "cr_random_forest"),
+  models = c("cox", "cr_fine_gray", "cr_random_forest"),
   ensemble = "auto",
   controls = list(times = seq(0, 120, length.out = 50))
 )
@@ -35,7 +36,7 @@ cr_fit <- ml4t2e_fit(
 ml4t2e_evaluate(
   cr_fit,
   metrics = c("c_index", "ibs"),
-  include = c("ensemble", "cox", "fine_gray", "cr_random_forest")
+  include = c("ensemble", "cox", "cr_fine_gray", "cr_random_forest")
 )
 
 cr_task_val <- ml4t2e_task_cr(
@@ -52,7 +53,7 @@ cr_preds <- predict(
   newdata = bmt_test,
   times = seq(0, 120, length.out = 50),
   type = "cif",
-  include = c("ensemble", "cox", "fine_gray", "cr_random_forest")
+  include = c("ensemble", "cox", "cr_fine_gray", "cr_random_forest")
 )
 
 ml4t2e_evaluate(

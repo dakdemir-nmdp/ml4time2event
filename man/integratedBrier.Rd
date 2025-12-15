@@ -22,7 +22,7 @@ integratedBrier(
 
 \item{obsevents}{Binary event indicator}
 
-\item{eval_times}{Optional evaluation times. If NULL, uses `pred_times`.}
+\item{eval_times}{Optional evaluation times. If NULL, uses \code{pred_times}.}
 
 \item{TestMat}{Optional test matrix (currently unused)}
 }
@@ -34,19 +34,21 @@ Integrates Brier scores over the time range using trapezoidal rule.
 Provides a single summary measure of prediction error across all time points.
 }
 \details{
-**Formula**:
+\strong{Formula}:
 \eqn{IBS = \frac{1}{t_{max} - t_{min}} \int_0^{t_{max}} BS(t) dt}
 
 Computed numerically via trapezoidal rule over the time grid.
 
-**Interpretation**:
-- Range: 0 (perfect) to 1 (worst)
-- Combines calibration across entire follow-up
-- Weights later times equally (unlike summary C-index)
+\strong{Interpretation}:
+\itemize{
+\item Range: 0 (perfect) to 1 (worst)
+\item Combines calibration across entire follow-up
+\item Weights later times equally (unlike summary C-index)
+}
 }
 \references{
 Mogensen, U. B., Ishwaran, H., & Gerds, T. A. (2012).
 "Evaluating random forests for survival analysis using prediction error curves."
-*Journal of Statistical Software*, 50(11), 1–23.
+\emph{Journal of Statistical Software}, 50(11), 1–23.
 }
 \keyword{internal}

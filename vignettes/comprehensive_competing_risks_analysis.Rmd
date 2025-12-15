@@ -49,10 +49,12 @@ Create a simple hold-out split for validation.
 set.seed(123)
 train_rows <- sample.int(nrow(bmt_df), size = floor(0.7 * nrow(bmt_df)))
 bmt_train <- bmt_df[train_rows, ]
-bmt_test  <- bmt_df[-train_rows, ]
+bmt_test <- bmt_df[-train_rows, ]
 
-sprintf("Training rows: %s  |  Validation rows: %s",
-        nrow(bmt_train), nrow(bmt_test))
+sprintf(
+  "Training rows: %s  |  Validation rows: %s",
+  nrow(bmt_train), nrow(bmt_test)
+)
 ```
 
 # 2. Build a competing-risk task
@@ -79,9 +81,10 @@ ml4t2e_list_models("competing_risk")
 
 cr_fit <- ml4t2e_fit(
   task = cr_task,
-  models = c("cox", "fine_gray", "cr_random_forest"),
+  models = c("cox", "cr_fine_gray", "cr_random_forest", "cr_shallownn", "cr_ttah"),
   ensemble = "auto",
-  controls = list(times = seq(0, 120, length.out = 60))
+  controls = list(times = seq(0, 120, length.out = 60)),
+  keep_data = TRUE
 )
 
 cr_fit
@@ -93,7 +96,7 @@ Training metrics are again a single function call away.
 ml4t2e_evaluate(
   cr_fit,
   metrics = c("c_index", "ibs"),
-  include = c("ensemble", "cox", "fine_gray", "cr_random_forest")
+  include = c("ensemble", "cox", "cr_fine_gray", "cr_random_forest", "cr_shallownn", "cr_ttah")
 )
 ```
 
@@ -114,7 +117,7 @@ cr_preds_val <- predict(
   newdata = bmt_test,
   times = seq(0, 120, length.out = 60),
   type = "cif",
-  include = c("ensemble", "cox", "fine_gray", "cr_random_forest")
+  include = c("ensemble", "cox", "fine_gray", "cr_random_forest", "cr_shallownn", "cr_ttah")
 )
 
 ml4t2e_evaluate(
@@ -129,7 +132,7 @@ ml4t2e_evaluate(
 `autoplot()` aggregates model-specific CIFs across individuals and separates them by cause.
 
 ```{r autoplot-fit, fig.width=7, fig.height=4}
-autoplot(cr_fit, include = c("ensemble", "cox", "cr_random_forest"))
+autoplot(cr_fit, include = c("ensemble", "cox", "cr_random_forest", "cr_shallownn", "cr_ttah"))
 ```
 
 ```{r autoplot-preds, fig.width=7, fig.height=4}
@@ -151,7 +154,7 @@ cr_pipeline <- ml4t2e_pipeline(
     status = "status",
     cause = "cause"
   ),
-  models = c("cox", "fine_gray", "cr_random_forest"),
+  models = c("cox", "cr_fine_gray", "cr_random_forest", "cr_shallownn", "cr_ttah"),
   ensemble = "auto",
   recipe = recipe(status ~ ., data = bmt_train) |>
     step_impute_median(all_numeric_predictors()) |>

@@ -23,14 +23,14 @@ BrierScore(
 
 \item{obsevents}{Binary event indicator}
 
-\item{eval_times}{Optional evaluation time points. If NULL, computed at all `pred_times`.}
+\item{eval_times}{Optional evaluation time points. If NULL, computed at all \code{pred_times}.}
 
 \item{TestMat}{Optional test matrix (currently unused)}
 
 \item{cens_model}{Optional pre-fitted censoring model (survfit object). If NULL, computed from provided data.}
 }
 \value{
-List of class `ml4time2event_brier` containing Brier scores and time grid
+List of class \code{ml4time2event_brier} containing Brier scores and time grid
 }
 \description{
 Computes the Inverse Probability of Censoring Weighted (IPCW) Brier Score.
@@ -38,19 +38,21 @@ Measures mean squared error between predicted survival probabilities and
 observed binary event status, weighted to account for censoring.
 }
 \details{
-**Formula**:
+\strong{Formula}:
 \eqn{BS(t) = \frac{1}{N} \sum_{i=1}^N \hat{W}_i(t) (Y_i(t) - \hat{S}(t|X_i))^2}
 
 Weights \eqn{\hat{W}_i(t)} definition:
-- If \eqn{T_i \le t} and \eqn{\delta_i = 1} (Observed event): \eqn{1/\hat{G}(T_i-)}
-- If \eqn{T_i > t} (Observed survivor): \eqn{1/\hat{G}(t)}
-- Otherwise (Censored before \eqn{t}): \eqn{0}
+\itemize{
+\item If \eqn{T_i \le t} and \eqn{\delta_i = 1} (Observed event): \eqn{1/\hat{G}(T_i-)}
+\item If \eqn{T_i > t} (Observed survivor): \eqn{1/\hat{G}(t)}
+\item Otherwise (Censored before \eqn{t}): \eqn{0}
+}
 
 Where \eqn{\hat{G}} is the Kaplan-Meier estimate of the censoring distribution.
 }
 \references{
 Graf, E., Schmoor, C., Sauerbrei, W., & Schumacher, M. (1999).
 "Assessment and comparison of prognostic classification schemes for survival data."
-*Statistics in Medicine*, 18(17‐18), 2529-2545.
+\emph{Statistics in Medicine}, 18(17‐18), 2529-2545.
 }
 \keyword{internal}

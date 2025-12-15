@@ -46,7 +46,7 @@ test_that("cifInterpolator interpolates correctly (linear)", {
   # t=7 -> linear(5,0.4) to (8,0.5) -> 0.4 + (0.5-0.4)/(8-5)*(7-5) = 0.4 + 0.0667 = 0.4667
   # t=8 -> 0.5
   # t=9 -> 0.5 (yright)
-  expected_probs <- c(0, 0.1, 0.2, 0.3, 0.35, 0.4, 0.4 + 1/30, 0.4 + 2/30, 0.5, 0.5)
+  expected_probs <- c(0, 0.1, 0.2, 0.3, 0.35, 0.4, 0.4 + 1 / 30, 0.4 + 2 / 30, 0.5, 0.5)
   expect_equal(interpolated_probs, expected_probs, tolerance = 1e-6)
 })
 
@@ -61,25 +61,25 @@ test_that("cifInterpolator handles unsorted input", {
   times_unsorted <- c(5, 1, 8, 3)
   probs_unsorted <- c(0.4, 0.1, 0.5, 0.3) # Corresponds to 1=0.1, 3=0.3, 5=0.4, 8=0.5
   interpolated_probs <- cifInterpolator(new_times_single_cif, probs_unsorted, times_unsorted)
-  expected_probs <- c(0, 0.1, 0.2, 0.3, 0.35, 0.4, 0.4 + 1/30, 0.4 + 2/30, 0.5, 0.5)
+  expected_probs <- c(0, 0.1, 0.2, 0.3, 0.35, 0.4, 0.4 + 1 / 30, 0.4 + 2 / 30, 0.5, 0.5)
   expect_equal(interpolated_probs, expected_probs, tolerance = 1e-6)
 })
 
 test_that("cifInterpolator handles single time/prob input", {
-   # Linear interpolation needs at least two points implicitly (t=0, p=0)
-   interpolated <- cifInterpolator(c(0, 2.5, 5, 7.5), 0.6, 5)
-   # Interpolates between (0,0) and (5, 0.6). yright=0.6
-   # t=0 -> 0
-   # t=2.5 -> 0.3
-   # t=5 -> 0.6
-   # t=7.5 -> 0.6
-   expect_equal(interpolated, c(0, 0.3, 0.6, 0.6))
+  # Linear interpolation needs at least two points implicitly (t=0, p=0)
+  interpolated <- cifInterpolator(c(0, 2.5, 5, 7.5), 0.6, 5)
+  # Interpolates between (0,0) and (5, 0.6). yright=0.6
+  # t=0 -> 0
+  # t=2.5 -> 0.3
+  # t=5 -> 0.6
+  # t=7.5 -> 0.6
+  expect_equal(interpolated, c(0, 0.3, 0.6, 0.6))
 })
 
 test_that("cifInterpolator handles NA in probs (uses max of non-NA for yright)", {
-   probs_na <- c(0.1, NA, 0.4, 0.5)
-   interpolated <- cifInterpolator(c(9, 10), probs_na, times_single_cif)
-   expect_equal(interpolated, c(0.5, 0.5)) # yright should be max(0.1, 0.4, 0.5) = 0.5
+  probs_na <- c(0.1, NA, 0.4, 0.5)
+  interpolated <- cifInterpolator(c(9, 10), probs_na, times_single_cif)
+  expect_equal(interpolated, c(0.5, 0.5)) # yright should be max(0.1, 0.4, 0.5) = 0.5
 })
 
 
@@ -97,14 +97,14 @@ test_that("cifMatInterpolator interpolates matrix correctly", {
   # t=0->0; t=1->linear(0,0 to 2,0.1)=0.05; t=2->0.1; t=3->linear(2,0.1 to 5,0.3)=0.1+0.2/3*1=0.1667;
   # t=4->0.1+0.2/3*2=0.2333; t=5->0.3; t=8->linear(5,0.3 to 10,0.5)=0.3+0.2/5*3=0.42;
   # t=10->0.5; t=12->0.5(yright)
-  expected_subj1 <- c(0, 0.05, 0.1, 0.1 + 1/15, 0.1 + 2/15, 0.3, 0.3 + 3/25, 0.5, 0.5)
+  expected_subj1 <- c(0, 0.05, 0.1, 0.1 + 1 / 15, 0.1 + 2 / 15, 0.3, 0.3 + 3 / 25, 0.5, 0.5)
   expect_equal(interpolated_mat[, 1], expected_subj1, tolerance = 1e-6)
 
   # Check interpolation for subject 2 (probs: 0.2@t=2, 0.4@t=5, 0.7@t=10)
   # t=0->0; t=1->linear(0,0 to 2,0.2)=0.1; t=2->0.2; t=3->linear(2,0.2 to 5,0.4)=0.2+0.2/3*1=0.2667;
   # t=4->0.2+0.2/3*2=0.3333; t=5->0.4; t=8->linear(5,0.4 to 10,0.7)=0.4+0.3/5*3=0.58;
   # t=10->0.7; t=12->0.7(yright)
-  expected_subj2 <- c(0, 0.1, 0.2, 0.2 + 1/15, 0.2 + 2/15, 0.4, 0.4 + 9/50, 0.7, 0.7)
+  expected_subj2 <- c(0, 0.1, 0.2, 0.2 + 1 / 15, 0.2 + 2 / 15, 0.4, 0.4 + 9 / 50, 0.7, 0.7)
   expect_equal(interpolated_mat[, 2], expected_subj2, tolerance = 1e-6)
 })
 
@@ -117,8 +117,8 @@ test_that("cifMatInterpolator handles time 0 correctly", {
   times_with_zero <- c(0, times_mat_cif)
   cif_with_zero <- rbind(rep(0, ncol(cif_mat1)), cif_mat1)
   interpolated_mat_zero <- cifMatInterpolator(cif_with_zero, times_with_zero, new_times_mat_cif)
-  expected_subj1 <- c(0, 0.05, 0.1, 0.1 + 1/15, 0.1 + 2/15, 0.3, 0.3 + 3/25, 0.5, 0.5)
-  expected_subj2 <- c(0, 0.1, 0.2, 0.2 + 1/15, 0.2 + 2/15, 0.4, 0.4 + 9/50, 0.7, 0.7)
+  expected_subj1 <- c(0, 0.05, 0.1, 0.1 + 1 / 15, 0.1 + 2 / 15, 0.3, 0.3 + 3 / 25, 0.5, 0.5)
+  expected_subj2 <- c(0, 0.1, 0.2, 0.2 + 1 / 15, 0.2 + 2 / 15, 0.4, 0.4 + 9 / 50, 0.7, 0.7)
   expect_equal(interpolated_mat_zero[, 1], expected_subj1, tolerance = 1e-6)
   expect_equal(interpolated_mat_zero[, 2], expected_subj2, tolerance = 1e-6)
 })
@@ -134,16 +134,16 @@ test_that("cifMatInterpolator enforces monotonicity", {
   # Re-calc: t=1->0.05; t=3->0.1667; t=6->0.29; t=11->0.25(yright)
   # cummax: 0.05, 0.1667, 0.29, 0.29
   # Corrected: 0.05, 0.1667, 0.29, 0.29
-  expect_equal(as.vector(interpolated_mat), c(0.05, 0.1666667, 0.29, 0.29), tolerance=1e-6)
+  expect_equal(as.vector(interpolated_mat), c(0.05, 0.1666667, 0.29, 0.29), tolerance = 1e-6)
 })
 
 test_that("cifMatInterpolator handles single new time", {
-   interpolated_mat <- cifMatInterpolator(cif_mat1, times_mat_cif, new_times = 4)
-   expect_true(is.matrix(interpolated_mat))
-   expect_equal(nrow(interpolated_mat), 1)
-   expect_equal(ncol(interpolated_mat), ncol(cif_mat1))
-   # Expected at t=4: Subj1=0.2333, Subj2=0.3333
-   expect_equal(as.vector(interpolated_mat), c(0.1 + 2/15, 0.2 + 2/15), tolerance=1e-6)
+  interpolated_mat <- cifMatInterpolator(cif_mat1, times_mat_cif, new_times = 4)
+  expect_true(is.matrix(interpolated_mat))
+  expect_equal(nrow(interpolated_mat), 1)
+  expect_equal(ncol(interpolated_mat), ncol(cif_mat1))
+  # Expected at t=4: Subj1=0.2333, Subj2=0.3333
+  expect_equal(as.vector(interpolated_mat), c(0.1 + 2 / 15, 0.2 + 2 / 15), tolerance = 1e-6)
 })
 
 
@@ -151,8 +151,10 @@ test_that("cifMatInterpolator handles single new time", {
 
 test_that("cifMatListAveraging averages correctly on CumHaz scale", {
   # Use interpolated matrices (new_times x observations)
-  list_mats <- list(cifMatInterpolator(cif_mat1, times_mat_cif, new_times_mat_cif),
-                    cifMatInterpolator(cif_mat2, times_mat_cif, new_times_mat_cif))
+  list_mats <- list(
+    cifMatInterpolator(cif_mat1, times_mat_cif, new_times_mat_cif),
+    cifMatInterpolator(cif_mat2, times_mat_cif, new_times_mat_cif)
+  )
 
   averaged_mat <- cifMatListAveraging(list_mats, type = "CumHaz")
 
@@ -170,13 +172,14 @@ test_that("cifMatListAveraging averages correctly on CumHaz scale", {
   time8_idx <- which(new_times_mat_cif == 8)
   val1 <- list_mats[[1]][time8_idx, subj1_idx]
   val2 <- list_mats[[2]][time8_idx, subj1_idx]
-  expect_equal(averaged_mat[time8_idx, subj1_idx], 1 - exp(-mean(c(-log(1-val1), -log(1-val2)))), tolerance = 1e-6)
-
+  expect_equal(averaged_mat[time8_idx, subj1_idx], 1 - exp(-mean(c(-log(1 - val1), -log(1 - val2)))), tolerance = 1e-6)
 })
 
 test_that("cifMatListAveraging averages correctly on prob scale", {
-  list_mats <- list(cifMatInterpolator(cif_mat1, times_mat_cif, new_times_mat_cif),
-                    cifMatInterpolator(cif_mat2, times_mat_cif, new_times_mat_cif))
+  list_mats <- list(
+    cifMatInterpolator(cif_mat1, times_mat_cif, new_times_mat_cif),
+    cifMatInterpolator(cif_mat2, times_mat_cif, new_times_mat_cif)
+  )
 
   averaged_mat <- cifMatListAveraging(list_mats, type = "prob")
 
@@ -208,35 +211,77 @@ test_that("cifMatListAveraging handles empty list", {
 })
 
 test_that("cifMatListAveraging handles inconsistent dimensions", {
-  mat_wrong_dim <- matrix(1:6, nrow=3) # Different rows
-  list_inconsistent <- list(cifMatInterpolator(cif_mat1, times_mat_cif, new_times_mat_cif),
-                            mat_wrong_dim)
-  
-  # Update the test to match new behavior: 
+  mat_wrong_dim <- matrix(1:6, nrow = 3) # Different rows
+  list_inconsistent <- list(
+    cifMatInterpolator(cif_mat1, times_mat_cif, new_times_mat_cif),
+    mat_wrong_dim
+  )
+
+  # Update the test to match new behavior:
   # The function now gives an error rather than a warning when dimensions don't match
   expect_error(cifMatListAveraging(list_inconsistent), "must have the same dimensions")
 })
 
 test_that("cifMatListAveraging handles NAs (na.rm=TRUE behavior)", {
-   mat1 <- matrix(c(0.1, 0.3, NA, 0.4), nrow=2) # times x obs, [1,2] = NA
-   mat2 <- matrix(c(0.2, NA, NA, 0.5), nrow=2)  # [1,2] = NA, [2,1] = NA
-   mat3 <- matrix(c(NA, NA, NA, 0.6), nrow=2)   # [1,1] = NA, [1,2] = NA, [2,1] = NA
-   list_na <- list(mat1, mat2, mat3)
+  mat1 <- matrix(c(0.1, 0.3, NA, 0.4), nrow = 2) # times x obs, [1,2] = NA
+  mat2 <- matrix(c(0.2, NA, NA, 0.5), nrow = 2) # [1,2] = NA, [2,1] = NA
+  mat3 <- matrix(c(NA, NA, NA, 0.6), nrow = 2) # [1,1] = NA, [1,2] = NA, [2,1] = NA
+  list_na <- list(mat1, mat2, mat3)
 
-   # CumHaz
-   averaged_ch <- cifMatListAveraging(list_na, type="CumHaz", na.rm=TRUE) # Ensure na.rm is passed
-   # [1, 1]: 1-exp(-mean(c(-log(1-0.1), -log(1-0.2)))) = 0.1514719
-   expect_equal(averaged_ch[1,1], 1 - exp(-mean(c(-log(0.9), -log(0.8)))))
-   # [1, 2]: All inputs are NA (NA, NA, NA) -> should be NA
-   expect_true(is.na(averaged_ch[1,2]))
-   # [2, 1]: 1-exp(-mean(c(-log(1-0.3)))) = 0.3 (only mat1[2,1]=0.3 is non-NA)
-   expect_equal(averaged_ch[2,1], 1 - exp(-mean(c(-log(0.7)))))
-   # [2, 2]: 1-exp(-mean(c(-log(1-0.4), -log(1-0.5), -log(1-0.6)))) = 0.5067576
-   expect_equal(averaged_ch[2,2], 1 - exp(-mean(c(-log(0.6), -log(0.5), -log(0.4)))))
+  # CumHaz
+  averaged_ch <- cifMatListAveraging(list_na, type = "CumHaz", na.rm = TRUE) # Ensure na.rm is passed
+  # [1, 1]: 1-exp(-mean(c(-log(1-0.1), -log(1-0.2)))) = 0.1514719
+  expect_equal(averaged_ch[1, 1], 1 - exp(-mean(c(-log(0.9), -log(0.8)))))
+  # [1, 2]: All inputs are NA (NA, NA, NA) -> should be NA
+  expect_true(is.na(averaged_ch[1, 2]))
+  # [2, 1]: 1-exp(-mean(c(-log(1-0.3)))) = 0.3 (only mat1[2,1]=0.3 is non-NA)
+  expect_equal(averaged_ch[2, 1], 1 - exp(-mean(c(-log(0.7)))))
+  # [2, 2]: 1-exp(-mean(c(-log(1-0.4), -log(1-0.5), -log(1-0.6)))) = 0.5067576
+  expect_equal(averaged_ch[2, 2], 1 - exp(-mean(c(-log(0.6), -log(0.5), -log(0.4)))))
 
-   # Prob
-   averaged_p <- cifMatListAveraging(list_na, type="prob", na.rm=TRUE) # Ensure na.rm is passed
-   expect_equal(averaged_p[1,1], mean(c(0.1, 0.2), na.rm=TRUE))  # mean(0.1, 0.2) = 0.15
-   expect_true(is.na(averaged_p[1,2])) # mean(NA, NA, NA) with na.rm=TRUE gives NaN, should be NA
-   expect_equal(averaged_p[2,1], mean(c(0.3), na.rm=TRUE))       # only 0.3 is non-NA = 0.3
+  # Prob
+  averaged_p <- cifMatListAveraging(list_na, type = "prob", na.rm = TRUE) # Ensure na.rm is passed
+  expect_equal(averaged_p[1, 1], mean(c(0.1, 0.2), na.rm = TRUE)) # mean(0.1, 0.2) = 0.15
+  expect_true(is.na(averaged_p[1, 2])) # mean(NA, NA, NA) with na.rm=TRUE gives NaN, should be NA
+  expect_equal(averaged_p[2, 1], mean(c(0.3), na.rm = TRUE)) # only 0.3 is non-NA = 0.3
+})
+
+test_that("cifMatInterpolator handles transposed matrices correctly", {
+  # Create synthetic probability matrix and times
+  n_times <- 5
+  n_subj <- 10
+
+  # Create matrix with rows=observations, cols=times (transposed relative to expectation)
+  probsMat <- matrix(runif(n_subj * n_times), nrow = n_subj, ncol = n_times)
+  times <- seq(1, 10, length.out = n_times)
+  # Test with transposed matrix - should now error
+  expect_error(
+    cifMatInterpolator(probsMat, times, c(2, 4, 6, 8)),
+    regexp = "rows=times and cols=observations"
+  )
+})
+
+test_that("cifMatInterpolator handles NA values correctly (Propagates NA or handles them)", {
+  n_times <- 5
+  n_subj <- 10
+
+  # Create matrix with rows=times, cols=observations
+  probsMat <- matrix(runif(n_subj * n_times), nrow = n_times, ncol = n_subj)
+
+  # Insert some NA values
+  probsMat[3, 2] <- NA
+  probsMat[, 5] <- NA # Entire observation across times NA
+
+  times <- seq(1, 10, length.out = n_times)
+
+  # Should handle NA values appropriately
+  result <- cifMatInterpolator(probsMat, times, c(2, 4, 6, 8))
+
+  # Test structure
+  expect_true(is.matrix(result))
+  expect_equal(nrow(result), 4) # 4 new time points
+  expect_equal(ncol(result), n_subj)
+
+  # Row with all NAs should have all NAs in result
+  expect_true(all(is.na(result[, 5])))
 })

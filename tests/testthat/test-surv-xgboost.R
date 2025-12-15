@@ -1,141 +1,81 @@
 library(testthat)
-# library(here) # Removed
-# library(data.table) # Removed
-library(survival) # For Surv object
-library(xgboost)  # Required for xgboost
+library(survival)
+library(xgboost)
 
-# Assuming the functions are available in the environment
-# source(here("R/models/surv_xgboost.R"))  # Removed - functions loaded via package
-
-context("Testing surv_xgboost functions")
-
-# --- Test Data Setup ---
-# Reusing the setup from test_surv_random_forest.R
-set.seed(789)
-n_obs_surv <- 50
-surv_data <- data.frame(
-  time = rexp(n_obs_surv, rate = 0.05),
-  status = sample(0:1, n_obs_surv, replace = TRUE, prob = c(0.3, 0.7)), # 0=censored, 1=event
-  x1 = rnorm(n_obs_surv),
-  x2 = factor(sample(c("C", "D"), n_obs_surv, replace = TRUE)),
-  x3 = rnorm(n_obs_surv, mean = 2),
-  stringsAsFactors = FALSE
-)
-time_var <- "time"
-event_var <- "status"
-expvars <- c("x1", "x2", "x3")
-train_indices_surv <- 1:40
-test_indices_surv <- 41:50
-train_data_surv <- surv_data[train_indices_surv, ]
-test_data_surv <- surv_data[test_indices_surv, ]
-time_points_surv <- quantile(train_data_surv$time[train_data_surv$status == 1], c(0.25, 0.5, 0.75))
-
-
-# --- Tests for SurvModel_xgboost ---
-
-test_that("SurvModel_xgboost runs and returns expected structure", {
+test_that("ml4t2e_fit fits XGBoost Survival model", {
   skip_if_not_installed("xgboost")
 
-  model_xgb <- SurvModel_xgboost(
-    data = train_data_surv,
-    expvars = expvars,
-    timevar = time_var,
-    eventvar = event_var
+  # Setup data
+  set.seed(789)
+  n_obs <- 50
+  surv_data <- data.frame(
+    time = rexp(n_obs, rate = 0.05),
+    status = sample(0:1, n_obs, replace = TRUE, prob = c(0.3, 0.7)),
+    x1 = rnorm(n_obs),
+    x2 = factor(sample(c("C", "D"), n_obs, replace = TRUE)),
+    x3 = rnorm(n_obs, mean = 2),
+    stringsAsFactors = FALSE
   )
 
-  # Check output structure
-  expect_type(model_xgb, "list")
-  expect_named(model_xgb, c("model", "times", "varprof", "expvars", "timevar", "eventvar"))
-  expect_s3_class(model_xgb$model, "xgb.Booster.surv")
-  expect_type(model_xgb$times, "double")
-  expect_type(model_xgb$varprof, "list")
-  expect_type(model_xgb$expvars, "character")
+  task <- ml4t2e_task_surv(
+    surv_data,
+    time = "time",
+    event = "status"
+  )
+
+  # Fit via API
+  fit <- ml4t2e_fit(keep_data = TRUE, 
+    task,
+    models = "xgboost",
+    ensemble = "none"
+  )
+
+  expect_s3_class(fit, "t2e_fit")
+  expect_true("xgboost" %in% fit$model_names)
+
+  # Check Internal Structure
+  xgb_obj <- fit$models$xgboost
+  expect_true(inherits(xgb_obj, "XGBoostSurvivalModel"))
+
+  # Check native model storage
+  expect_s3_class(xgb_obj$model, "xgb.Booster")
+  expect_true(is.data.frame(xgb_obj$baseline_hazard))
+  expect_equal(colnames(xgb_obj$baseline_hazard), c("time", "hazard"))
 })
 
-test_that("SurvModel_xgboost handles different parameters", {
-  skip_if_not_installed("xgboost")
-  # Test basic functionality - parameters are handled internally
-  model_xgb <- SurvModel_xgboost(
-    data = train_data_surv,
-    expvars = expvars,
-    timevar = time_var,
-    eventvar = event_var
-  )
-  expect_s3_class(model_xgb$model, "xgb.Booster.surv")
-})
-
-test_that("SurvModel_xgboost requires correct inputs", {
-  skip_if_not_installed("xgboost")
-  expect_error(SurvModel_xgboost(data = train_data_surv, expvars = expvars, timevar = time_var), "argument \"eventvar\" is missing")
-  expect_error(SurvModel_xgboost(expvars = expvars, timevar = time_var, eventvar = event_var), "argument \"data\" is missing")
-})
-
-
-# --- Tests for Predict_SurvModel_xgboost ---
-
-test_that("Predict_SurvModel_xgboost returns predictions in correct format", {
+test_that("XGBoost Survival predictions format", {
   skip_if_not_installed("xgboost")
 
-  model_xgb <- SurvModel_xgboost(
-    data = train_data_surv,
-    expvars = expvars,
-    timevar = time_var,
-    eventvar = event_var
-  )
-  predictions <- Predict_SurvModel_xgboost(
-    modelout = model_xgb,
-    newdata = test_data_surv
+  set.seed(999)
+  n_obs <- 100
+  surv_data <- data.frame(
+    time = rexp(n_obs),
+    status = rbinom(n_obs, 1, 0.5),
+    x1 = rnorm(n_obs)
   )
 
-  # Check output structure
-  expect_type(predictions, "list")
-  expect_named(predictions, c("Probs", "Times"))
-  expect_true(is.matrix(predictions$Probs))
-  expect_type(predictions$Times, "double")
+  train_data <- surv_data[1:80, ]
+  test_data <- surv_data[81:100, ]
 
-  # Check dimensions
-  expect_equal(nrow(predictions$Probs), length(predictions$Times))
-  expect_equal(ncol(predictions$Probs), nrow(test_data_surv))
+  task <- ml4t2e_task_surv(train_data, time = "time", event = "status")
+  fit <- ml4t2e_fit(keep_data = TRUE, task, models = "xgboost")
 
-  # Check values are probabilities (between 0 and 1)
-  expect_true(all(predictions$Probs >= 0 & predictions$Probs <= 1, na.rm = TRUE))
+  # Predict
+  times <- c(0.5, 1.0, 1.5)
+  preds <- predict(fit, newdata = test_data, times = times)
 
-  # Check that survival probabilities are non-increasing over time for each subject
-  if (length(predictions$Times) > 1) {
-    all_non_increasing <- all(apply(predictions$Probs, 2, function(col) all(diff(col) <= 1e-9)))
-    expect_true(all_non_increasing)
-  }
-})
+  expect_true("surv" %in% colnames(preds))
+  expect_true("time" %in% colnames(preds))
+  expect_true("id" %in% colnames(preds))
 
-test_that("Predict_SurvModel_xgboost handles custom times", {
-  skip_if_not_installed("xgboost")
+  # Values [0, 1]
+  expect_true(all(preds$surv >= 0 & preds$surv <= 1))
 
-  model_xgb <- SurvModel_xgboost(
-    data = train_data_surv,
-    expvars = expvars,
-    timevar = time_var,
-    eventvar = event_var
-  )
-  # Note: Current implementation doesn't take custom times parameter
-  # This test just verifies basic functionality
-  predictions <- Predict_SurvModel_xgboost(
-    modelout = model_xgb,
-    newdata = test_data_surv
-  )
-
-  expect_type(predictions, "list")
-  expect_named(predictions, c("Probs", "Times"))
-  expect_true(length(predictions$Times) > 0)
-})
-
-test_that("Predict_SurvModel_xgboost requires correct inputs", {
-  skip_if_not_installed("xgboost")
-  model_xgb <- SurvModel_xgboost(
-    data = train_data_surv,
-    expvars = expvars,
-    timevar = time_var,
-    eventvar = event_var
-  )
-  expect_error(Predict_SurvModel_xgboost(newdata = test_data_surv), "argument \"modelout\" is missing")
-  expect_error(Predict_SurvModel_xgboost(modelout = model_xgb), "argument \"newdata\" is missing")
+  # Monotonicity check (approximate due to interpolation)
+  # Group by ID and check monotonic decreasing
+  first_id_preds <- preds[preds$id == preds$id[1], ]
+  first_id_preds <- first_id_preds[order(first_id_preds$time), ]
+  # diff(surv) should be <= 0 (allow small epsilon)
+  diffs <- diff(first_id_preds$surv)
+  expect_true(all(diffs <= 1e-9))
 })

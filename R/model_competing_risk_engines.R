@@ -53,7 +53,6 @@
       task = NULL,
       cause_codes = NULL,
       model_per_cause = FALSE,
-
       fit = function(task, time_grid, ...) {
         super$fit(task = task, ...)
 
@@ -116,7 +115,6 @@
         self$task <- task
         invisible(self)
       },
-
       predict_cif = function(newdata, times, set = "test", ...) {
         private$ensure_fitted()
         model_name <- self$spec$engine
@@ -221,7 +219,6 @@
         result <- .cif_enforce_bounds(result)
         result
       },
-
       model_info = function() {
         info <- super$model_info()
         if (is.null(label)) {
@@ -231,7 +228,6 @@
         }
         info
       },
-
       required_packages = function() {
         packages
       }
@@ -244,19 +240,16 @@
         "cr_random_forest",
         "cr_bart"
       ),
-
       ensure_fitted = function() {
         if (!isTRUE(self$fitted)) {
           rlang::abort("Model must be fitted before predictions can be generated.")
         }
       },
-
       spec_args = function() {
         spec <- self$spec %||% list()
         spec[c("engine", "package", "outcome")] <- NULL
         spec
       },
-
       get_model_for_cause = function(cause_label, cause_code) {
         if (!isTRUE(self$model_per_cause)) {
           return(self$model)
@@ -329,93 +322,3 @@
 
   dplyr::bind_rows(out)
 }
-
-.register_competing_risk_engine(
-  engine = "cox",
-  fit_fun_name = "CRModel_Cox",
-  predict_fun_name = "Predict_CRModel_Cox",
-  packages = "survival",
-  label = "Cause-specific Cox",
-  tags = c("cox", "competing-risk")
-)
-
-.register_competing_risk_engine(
-  engine = "fine_gray",
-  fit_fun_name = "CRModel_FineGray",
-  predict_fun_name = "Predict_CRModel_FineGray",
-  packages = "fastcmprsk",
-  label = "Fine-Gray",
-  tags = c("semi-parametric")
-)
-
-.register_competing_risk_engine(
-  engine = "cr_bart",
-  fit_fun_name = "CRModel_BART",
-  predict_fun_name = "Predict_CRModel_BART",
-  packages = "BART",
-  label = "BART competing risk",
-  tags = c("bart")
-)
-
-.register_competing_risk_engine(
-  engine = "cr_gam",
-  fit_fun_name = "CRModel_GAM",
-  predict_fun_name = "Predict_CRModel_GAM",
-  packages = "mgcv",
-  label = "GAM competing risk",
-  tags = c("smooth", "semiparametric")
-)
-
-.register_competing_risk_engine(
-  engine = "cr_rulefit",
-  fit_fun_name = "CRModel_rulefit",
-  predict_fun_name = "Predict_CRModel_rulefit",
-  packages = c("rpart", "partykit", "glmnet", "survival"),
-  label = "RuleFit competing risk",
-  tags = c("rules", "tree-based")
-)
-
-.register_competing_risk_engine(
-  engine = "cr_random_forest",
-  fit_fun_name = "CRModel_RF",
-  predict_fun_name = "Predict_CRModel_RF",
-  packages = "randomForestSRC",
-  label = "Random forest competing risk",
-  tags = c("tree-based", "ensemble")
-)
-
-.register_competing_risk_engine(
-  engine = "cr_survreg",
-  fit_fun_name = "CRModel_SurvReg",
-  predict_fun_name = "Predict_CRModel_SurvReg",
-  packages = "survival",
-  label = "Parametric competing risk",
-  tags = c("parametric")
-)
-
-.register_competing_risk_engine(
-  engine = "cr_shallownn",
-  fit_fun_name = "CRModel_ShallowNN",
-  predict_fun_name = "Predict_CRModel_ShallowNN",
-  packages = character(),
-  label = "Shallow NN competing risk",
-  tags = c("neural-network")
-)
-
-.register_competing_risk_engine(
-  engine = "cr_ttah",
-  fit_fun_name = "CRModel_TTAH",
-  predict_fun_name = "Predict_CRModel_TTAH",
-  packages = character(),
-  label = "TTAH competing risk",
-  tags = c("semiparametric")
-)
-
-.register_competing_risk_engine(
-  engine = "cr_xgboost",
-  fit_fun_name = "CRModel_xgboost",
-  predict_fun_name = "Predict_CRModel_xgboost",
-  packages = "xgboost",
-  label = "XGBoost competing risk",
-  tags = c("tree-based", "gradient-boosting")
-)

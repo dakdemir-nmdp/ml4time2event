@@ -16,23 +16,25 @@ ml4t2e_pipeline(
 }
 \arguments{
 \item{outcome}{Named list describing the analysis outcome:
-- Survival: `list(type = "survival", time = "time", event = "status", id = NULL, features = NULL, time_units = NULL)`
-- Competing risk: `list(type = "competing_risk", time = "time", status = "status", cause = "cause", id = NULL, features = NULL, time_units = NULL)`}
+\itemize{
+\item Survival: \code{list(type = "survival", time = "time", event = "status", id = NULL, features = NULL, time_units = NULL)}
+\item Competing risk: \code{list(type = "competing_risk", time = "time", status = "status", cause = "cause", id = NULL, features = NULL, time_units = NULL)}
+}}
 
 \item{models}{Character vector of model engines to fit.}
 
-\item{ensemble}{Ensemble strategy passed to `ml4t2e_fit()`.}
+\item{ensemble}{Ensemble strategy passed to \code{ml4t2e_fit()}.}
 
 \item{controls}{Optional named list of per-engine control settings.}
 
-\item{recipe}{Optional `recipes::recipe` (or function returning one) used for preprocessing.}
+\item{recipe}{Optional \code{recipes::recipe} (or function returning one) used for preprocessing.}
 
-\item{resampling}{Optional `rsample` resampling object (e.g., `vfold_cv`).}
+\item{resampling}{Optional \code{rsample} resampling object (e.g., \code{vfold_cv}).}
 
 \item{metrics}{Optional character vector of metric names for evaluation.}
 }
 \value{
-An unfitted pipeline object. Call `$fit(data)` to train.
+An unfitted pipeline object. Call \verb{$fit(data)} to train.
 }
 \description{
 Create a flexible pipeline builder

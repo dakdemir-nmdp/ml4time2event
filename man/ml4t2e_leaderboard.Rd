@@ -7,17 +7,19 @@
 ml4t2e_leaderboard(object, metric = NULL)
 }
 \arguments{
-\item{object}{A fitted `ml4t2e_pipeline` object.}
+\item{object}{A fitted \code{ml4t2e_pipeline} object.}
 
 \item{metric}{Optional character string to filter by a specific metric (e.g. "c_index").}
 }
 \value{
-A `t2e_leaderboard` object (a tibble) with columns:
-  - `model`: Model engine name.
-  - `metric`: Metric name.
-  - `mean`: Average score across folds (or single training score).
-  - `sd`: Standard deviation across folds (NA for training metrics).
-  - `n`: Number of folds/repeats.
+A \code{t2e_leaderboard} object (a tibble) with columns:
+\itemize{
+\item \code{model}: Model engine name.
+\item \code{metric}: Metric name.
+\item \code{mean}: Average score across folds (or single training score).
+\item \code{sd}: Standard deviation across folds (NA for training metrics).
+\item \code{n}: Number of folds/repeats.
+}
 }
 \description{
 Aggregates performance metrics from a fitted pipeline to rank models.

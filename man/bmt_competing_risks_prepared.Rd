@@ -7,13 +7,13 @@
 \format{
 A data frame with 177 rows and 7 variables:
 \describe{
-  \item{sex}{Factor indicating donor sex (`F`, `M`).}
-  \item{d}{Factor indicating diagnosis (`ALL`, `AML`).}
-  \item{phase}{Factor for disease phase at transplant (`CR1`, `CR2`, `CR3`, `Relapse`).}
-  \item{age}{Age (years) at transplant.}
-  \item{status}{Event indicator (0 = censored, 1 = relapse, 2 = treatment-related mortality).}
-  \item{source}{Factor for stem-cell source (`BM+PB`, `PB`).}
-  \item{ftime}{Follow-up time in months.}
+\item{sex}{Factor indicating donor sex (\code{F}, \code{M}).}
+\item{d}{Factor indicating diagnosis (\code{ALL}, \code{AML}).}
+\item{phase}{Factor for disease phase at transplant (\code{CR1}, \code{CR2}, \code{CR3}, \code{Relapse}).}
+\item{age}{Age (years) at transplant.}
+\item{status}{Event indicator (0 = censored, 1 = relapse, 2 = treatment-related mortality).}
+\item{source}{Factor for stem-cell source (\code{BM+PB}, \code{PB}).}
+\item{ftime}{Follow-up time in months.}
 }
 }
 \source{
@@ -29,7 +29,7 @@ predictors and retain the original competing-risks event coding.
 }
 \details{
 Derived from the bone marrow transplant competing risks dataset
-  distributed with the package and prepared for direct use with
-  `RunCRModels()`.
+distributed with the package and prepared for direct use with
+\code{RunCRModels()}.
 }
 \keyword{datasets}

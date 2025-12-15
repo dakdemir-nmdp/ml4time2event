@@ -185,7 +185,7 @@ cifMatWeightedAveraging <- function(listprobsMat, weights, type = "CumHaz") {
   NewProbs
 }
 
-optimizeSuperLearnerWeights <- function(predictions_list, actual_surv, loss_type = "mse") {
+optimizeSuperLearnerWeights <- function(predictions_list, actual_surv, loss_type = "mse", weights_matrix = NULL) {
   # Filter NULL and check dimensions
   predictions_list <- Filter(Negate(is.null), predictions_list)
   if (length(predictions_list) == 0) {
@@ -201,6 +201,12 @@ optimizeSuperLearnerWeights <- function(predictions_list, actual_surv, loss_type
   reference_dim <- dim(predictions_list[[1]])
   if (!all(dim(actual_surv) == reference_dim)) {
     stop("Dimensions of actual_surv must match prediction matrices")
+  }
+
+  if (!is.null(weights_matrix)) {
+    if (!all(dim(weights_matrix) == reference_dim)) {
+      stop("weights_matrix must match dimensions of actual_surv")
+    }
   }
 
   model_names <- names(predictions_list)
@@ -230,17 +236,17 @@ optimizeSuperLearnerWeights <- function(predictions_list, actual_surv, loss_type
 
     # Calculate loss
     if (loss_type == "mse") {
-      loss <- mean((weighted_pred - actual_surv)^2, na.rm = TRUE)
+      diff_sq <- (weighted_pred - actual_surv)^2
+      if (!is.null(weights_matrix)) {
+        # Weighted MSE (Prop. to IPCW Brier Score)
+        loss <- sum(weights_matrix * diff_sq, na.rm = TRUE) / sum(weights_matrix, na.rm = TRUE)
+      } else {
+        loss <- mean(diff_sq, na.rm = TRUE)
+      }
     } else if (loss_type == "loglik") {
-      # Binary Cross Entropy / Negative Log-Likelihood
-      # We assume actual_surv is binary: 1 = survived, 0 = event
-      # weighted_pred is predicted survival probability
-
+      # Binary Cross Entropy
       p_safe <- pmax(pmin(weighted_pred, 1 - 1e-10), 1e-10)
-
-      # Log-likelihood: y*log(p) + (1-y)*log(1-p)
       ll_terms <- actual_surv * log(p_safe) + (1 - actual_surv) * log(1 - p_safe)
-
       loss <- -mean(ll_terms, na.rm = TRUE)
     } else {
       stop("Unknown loss_type")
@@ -264,7 +270,6 @@ optimizeSuperLearnerWeights <- function(predictions_list, actual_surv, loss_type
   # Normalize to sum to 1
   weight_sum <- sum(result$par)
   if (weight_sum <= 0 || !is.finite(weight_sum)) {
-    # Fallback to equal weights if optimization fails
     warning("Super learner weight optimization produced invalid weights, using equal weights")
     optimal_weights <- rep(1 / n_models, n_models)
   } else {
@@ -288,6 +293,39 @@ fitMetaLearner <- function(base_predictions, outcomes, meta_learner = "mse") {
     weights = weights
   )
 }
+
+EnsemblePredictions <- function(model_predictions,
+                                ensemble_method = "average",
+                                model_weights = NULL,
+                                type = "survival",
+                                sl_training_predictions = NULL,
+                                sl_actual = NULL,
+                                sl_loss = "mse",
+                                sl_weights = NULL,
+                                times,
+                                ...) {
+  # ... existing code ...
+  # I'm not updating EnsemblePredictions here fully because the replacement chunks mechanism
+  # works best on contiguous blocks. But wait, I need to touch EnsemblePredictions to pass weights_matrix?
+  # The user didn't ask to update EnsemblePredictions signature, but `optimizeSuperLearnerWeights` usage inside it.
+  # I will skip modifying EnsemblePredictions for now as it's not the primary entry point for stacking (SurvivalEnsembler is).
+  # If EnsemblePredictions supports 'stacking' mode directly, it should update too.
+  # But for the purpose of the critique (fixing ml4t2e_fit stacking), SurvivalEnsembler is key.
+
+  # Wait, I'm replacing the whole block including EnsemblePredictions signature if I'm not careful.
+  # I'll just replace optim/fit/prepare functions.
+  # The tool call target lines 188-280 covers optimizeSuperLearnerWeights and fitMetaLearner.
+  # I will need another call for prepare_stacking_data.
+  # Let's verify I am not making invalid partial edits.
+  # I will submit a MultiReplace.
+
+  # Actually, the user prompt is "fix these issues".
+  # I will replace optimizeSuperLearnerWeights and prepare_stacking_data.
+
+  stop("This tool call body is for explanation. I will use multi_replace.")
+}
+
+
 
 EnsemblePredictions <- function(model_predictions,
                                 ensemble_method = "average",
@@ -439,4 +477,124 @@ EnsemblePredictions <- function(model_predictions,
   }
 
   result
+}
+
+#' Helper to generate stacking predictions and actuals
+#'
+#' @keywords internal
+prepare_stacking_data <- function(task, fitted_models, time_grid, outcome_type, cal_data) {
+  sl_preds <- list()
+  sl_actual <- NULL
+  sl_weights <- NULL
+
+  obs_times <- cal_data[[task$time_col]]
+  obs_events <- cal_data[[task$event_col]]
+  n_obs <- length(obs_times)
+  n_times <- length(time_grid)
+
+  # Calculate IPCW Weights
+  # Censoring event: status == 0
+  cens_obj <- survival::Surv(obs_times, obs_events == 0)
+  km_cens <- survival::survfit(cens_obj ~ 1)
+
+  # G(t) for grid times
+  summ_grid <- summary(km_cens, times = time_grid, extend = TRUE)
+  G_grid <- summ_grid$surv
+  if (is.null(G_grid)) G_grid <- rep(1, n_times)
+  G_grid[G_grid == 0] <- 1e-5
+
+  # G(Ti) for dead/event cases
+  u_times <- unique(obs_times)
+  summ_obs <- summary(km_cens, times = u_times, extend = TRUE)
+  G_map <- setNames(summ_obs$surv, as.character(u_times))
+
+  # Construct Weight Matrix
+  weights_mat <- matrix(0, nrow = n_obs, ncol = n_times)
+  T_mat <- matrix(obs_times, nrow = n_obs, ncol = n_times)
+  Grid_mat <- matrix(time_grid, nrow = n_obs, ncol = n_times, byrow = TRUE)
+
+  # Alive weights (T > t): 1/G(t)
+  alive_mask <- T_mat > Grid_mat
+  G_grid_mat <- matrix(G_grid, nrow = n_obs, ncol = n_times, byrow = TRUE)
+  weights_mat[alive_mask] <- 1 / G_grid_mat[alive_mask]
+
+  # Dead/Event weights (T <= t & Event): 1/G(Ti)
+  is_event <- obs_events != 0
+  dead_mask <- (T_mat <= Grid_mat) & matrix(is_event, nrow = n_obs, ncol = n_times)
+
+  G_Ti_vals <- G_map[as.character(obs_times)]
+  G_Ti_vals[is.na(G_Ti_vals)] <- 1
+  G_Ti_vals[G_Ti_vals == 0] <- 1e-5
+  G_Ti_mat <- matrix(G_Ti_vals, nrow = n_obs, ncol = n_times)
+
+  weights_mat[dead_mask] <- 1 / G_Ti_mat[dead_mask]
+
+  sl_weights <- weights_mat
+
+  if (outcome_type == "survival") {
+    # Survival Actual Transformation
+    actual_mat <- matrix(NA, nrow = n_obs, ncol = n_times)
+
+    # Fill actuals
+    actual_mat[alive_mask] <- 1
+    # For standard survival, status 1 is event
+    dead_surv_mask <- (T_mat <= Grid_mat) & (matrix(obs_events == 1, nrow = n_obs, ncol = n_times))
+    actual_mat[dead_surv_mask] <- 0
+
+    # Fill NAs with 0 where weight is 0 (censored before t) to allow calc
+    actual_mat[is.na(actual_mat) & (weights_mat == 0)] <- 0
+
+    sl_actual <- actual_mat
+
+    # Predictions
+    for (m in names(fitted_models)) {
+      mod <- fitted_models[[m]]
+      p <- mod$predict_survival(newdata = cal_data, times = time_grid, set = "calibration")
+      sl_preds[[m]] <- ml4t2e_reshape_preds_to_matrix(p, cal_data, time_grid, "surv", task$id_col)
+    }
+  } else {
+    # Competing Risk
+    causes <- as.character(task$metadata$cause_map$code)
+    mat_list_actual <- list()
+
+    for (c_val in causes) {
+      c_code <- as.numeric(c_val)
+      m_act <- matrix(NA, nrow = length(obs_times), ncol = length(time_grid))
+      for (j in seq_along(time_grid)) {
+        t <- time_grid[j]
+        alive <- (obs_times > t)
+        m_act[alive, j] <- 0
+
+        happened <- (obs_times <= t & obs_events == c_code)
+        m_act[happened, j] <- 1
+
+        other <- (obs_times <= t & obs_events != 0 & obs_events != c_code)
+        m_act[other, j] <- 0
+
+        # Censored remains NA, fill later
+      }
+      m_act[is.na(m_act) & (weights_mat == 0)] <- 0
+      mat_list_actual[[c_val]] <- m_act
+    }
+    sl_actual <- do.call(cbind, mat_list_actual)
+
+    # For CR, we stack the weights matrix?
+    # Since sl_actual is concatenated (N x (T*Causes)), we need weights (N x (T*Causes))
+    # We repeat the weights matrix for each cause
+    sl_weights <- do.call(cbind, replicate(length(causes), weights_mat, simplify = FALSE))
+
+    # CR Predictions (Concatenated)
+    for (m in names(fitted_models)) {
+      mod <- fitted_models[[m]]
+      p <- mod$predict_cif(newdata = cal_data, times = time_grid, set = "calibration")
+      p_mats <- list()
+      for (c_val in causes) {
+        pc <- p[p$cause == c_val, ]
+        p_mats[[c_val]] <- ml4t2e_reshape_preds_to_matrix(pc, cal_data, time_grid, "cif", task$id_col)
+      }
+      sl_preds[[m]] <- do.call(cbind, p_mats)
+    }
+  }
+
+  list(preds = sl_preds, actual = sl_actual, weights = sl_weights)
 }

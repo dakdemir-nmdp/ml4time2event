@@ -28,7 +28,7 @@ BrierScoreCR(
 
 \item{pred_times}{Numeric vector of time grid from predictions}
 
-\item{time}{Deprecated parameter for backward compatibility; use `eval_times`}
+\item{time}{Deprecated parameter for backward compatibility; use \code{eval_times}}
 }
 \value{
 Numeric Brier score at specified time(s)
@@ -38,15 +38,17 @@ Computes mean squared error between predicted cumulative incidence functions
 and observed event status for a specified cause. Accounts for competing events.
 }
 \details{
-**Formula**:
+\strong{Formula}:
 \eqn{BS_j(t) = E[(CIF_j(t|X) - Y_j(t))^2]}
 
 where \eqn{CIF_j(t|X)} is predicted CIF for cause \eqn{j} and \eqn{Y_j(t)}
 is binary indicator of cause \eqn{j} occurring by time \eqn{t}.
 
-**Interpretation**:
-- Range: 0 (perfect) to 1 (worst)
-- Combines calibration and discrimination
-- Computed only for observations at risk (event of interest or censored/competing)
+\strong{Interpretation}:
+\itemize{
+\item Range: 0 (perfect) to 1 (worst)
+\item Combines calibration and discrimination
+\item Computed only for observations at risk (event of interest or censored/competing)
+}
 }
 \keyword{internal}

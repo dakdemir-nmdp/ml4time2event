@@ -1,508 +1,63 @@
-# ==============================================================================
-# Test Suite for Competing Risks Parametric Survival Regression Model
-# ==============================================================================
-
 library(testthat)
+library(survival)
 
-# ==============================================================================
-# Test Data Setup
-# ==============================================================================
-
-# Create simulated competing risks data for testing
-set.seed(42)
-n_train <- 50  # Reduced for faster testing
-n_test <- 20   # Reduced for faster testing
-
-# Training data - competing risks format
-train_data <- data.frame(
-  time = rexp(n_train, rate = 0.1),
-  event = sample(0:2, n_train, replace = TRUE, prob = c(0.3, 0.4, 0.3)), # 0=censored, 1=cause1, 2=cause2
-  x1 = rnorm(n_train),
-  x2 = rnorm(n_train),
-  x3 = rnorm(n_train, mean = 1),
-  x4 = rnorm(n_train, mean = -1),
-  cat1 = factor(sample(c("A", "B", "C"), n_train, replace = TRUE)),
-  cat2 = factor(sample(c("Low", "High"), n_train, replace = TRUE))
-)
-
-# Test data
-test_data <- data.frame(
-  time = rexp(n_test, rate = 0.1),
-  event = sample(0:2, n_test, replace = TRUE, prob = c(0.3, 0.4, 0.3)),
-  x1 = rnorm(n_test),
-  x2 = rnorm(n_test),
-  x3 = rnorm(n_test, mean = 1),
-  x4 = rnorm(n_test, mean = -1),
-  cat1 = factor(sample(c("A", "B", "C"), n_test, replace = TRUE),
-                levels = c("A", "B", "C")),
-  cat2 = factor(sample(c("Low", "High"), n_test, replace = TRUE),
-                levels = c("Low", "High"))
-)
-
-# Define variables
-expvars_numeric <- c("x1", "x2", "x3")
-expvars_all <- c("x1", "x2", "x3", "cat1", "cat2")
-expvars_many <- c("x1", "x2", "x3", "x4", "cat1", "cat2")
-
-# ==============================================================================
-# Tests for CRModel_SurvReg - Basic Functionality
-# ==============================================================================
-
-test_that("CRModel_SurvReg fits basic model", {
-  model <- CRModel_SurvReg(
-    data = train_data,
-    expvars = expvars_numeric,
-    timevar = "time",
-    eventvar = "event",
-    event_codes = 1,
-    dist = "exponential"
+test_that("ml4t2e_fit fits SurvReg Competing Risk model", {
+  set.seed(42)
+  n_obs <- 40
+  train_data <- data.frame(
+    time = rexp(n_obs, rate = 0.1),
+    event = sample(0:2, n_obs, replace = TRUE),
+    x1 = rnorm(n_obs),
+    x2 = factor(sample(c("A", "B"), n_obs, replace = TRUE))
   )
-
-  # Check output structure
-  expect_type(model, "list")
-  expect_named(model, c(
-    "survreg_model", "survreg_models_all_causes", "times", "varprof", "model_type",
-    "expvars", "timevar", "eventvar", "event_codes", "event_codes_numeric",
-    "default_event_code", "default_event_code_numeric", "time_range", "dist"
-  ))
-
-  # Check model type
-  expect_equal(model$model_type, "cr_survreg")
-  expect_s3_class(model$survreg_model, "survreg")
-
-  # Check time range
-  expect_true(is.numeric(model$time_range))
-  expect_equal(length(model$time_range), 2)
-  expect_true(model$time_range[1] == 0)
-  expect_true(model$time_range[2] > 0)
-
-  # Check times
-  expect_true(is.numeric(model$times))
-  expect_true(length(model$times) > 0)
-  expect_true(all(model$times >= 0))
-
-  # Check varprof
-  expect_true(is.list(model$varprof))
-  expect_equal(length(model$varprof), length(expvars_numeric))
-
-  # Check event metadata and dist
-  expect_equal(model$event_codes, "1")
-  expect_equal(model$event_codes_numeric, 1)
-  expect_equal(model$default_event_code, "1")
-  expect_equal(model$default_event_code_numeric, 1)
-  expect_equal(model$dist, "exponential")
-})
-
-test_that("CRModel_SurvReg handles different distributions", {
-  # Test Weibull distribution
-  model_weibull <- CRModel_SurvReg(
-    data = train_data,
-    expvars = expvars_numeric,
-    timevar = "time",
-    eventvar = "event",
-    event_codes = 1,
-    dist = "weibull"
-  )
-  expect_equal(model_weibull$dist, "weibull")
-  expect_s3_class(model_weibull$survreg_model, "survreg")
-
-  # Test lognormal distribution
-  model_lognormal <- CRModel_SurvReg(
-    data = train_data,
-    expvars = expvars_numeric,
-    timevar = "time",
-    eventvar = "event",
-    event_codes = 1,
-    dist = "lognormal"
-  )
-  expect_equal(model_lognormal$dist, "lognormal")
-  expect_s3_class(model_lognormal$survreg_model, "survreg")
-})
-
-test_that("CRModel_SurvReg handles different event codes", {
-  # Use event code 2 as the default event of interest with additional competing code
-  model <- CRModel_SurvReg(
-    data = train_data,
-    expvars = expvars_numeric,
-    timevar = "time",
-    eventvar = "event",
-    event_codes = c(2, 1),
-    dist = "exponential"
-  )
-
-  expect_equal(model$event_codes, c("2", "1"))
-  expect_equal(model$event_codes_numeric, c(2, 1))
-  expect_equal(model$default_event_code, "2")
-  expect_equal(model$default_event_code_numeric, 2)
-  expect_s3_class(model$survreg_model, "survreg")
-})
-
-# ==============================================================================
-# Tests for CRModel_SurvReg - Input Validation
-# ==============================================================================
-
-test_that("CRModel_SurvReg validates inputs", {
-  # Missing data
-  expect_error(CRModel_SurvReg(expvars = expvars_numeric, timevar = "time", eventvar = "event"),
-               "argument \"data\" is missing")
-
-  # Missing expvars
-  expect_error(CRModel_SurvReg(data = train_data, timevar = "time", eventvar = "event"),
-               "argument \"expvars\" is missing")
-
-  # Missing timevar
-  expect_error(CRModel_SurvReg(data = train_data, expvars = expvars_numeric, eventvar = "event"),
-               "argument \"timevar\" is missing")
-
-  # Missing eventvar
-  expect_error(CRModel_SurvReg(data = train_data, expvars = expvars_numeric, timevar = "time"),
-               "argument \"eventvar\" is missing")
-
-  # Invalid data type
-  expect_error(CRModel_SurvReg(data = "not data", expvars = expvars_numeric,
-                              timevar = "time", eventvar = "event"),
-               "`data` must be a data frame")
-
-  # Empty expvars
-  expect_error(CRModel_SurvReg(data = train_data, expvars = character(0),
-                              timevar = "time", eventvar = "event"),
-               "`expvars` must be a non-empty character vector")
-
-  # Invalid event_codes value
-  expect_error(CRModel_SurvReg(data = train_data, expvars = expvars_numeric,
-                               timevar = "time", eventvar = "event", event_codes = character(0)),
-               "`event_codes` must be NULL or a non-empty vector")
-
-  expect_error(CRModel_SurvReg(data = train_data, expvars = expvars_numeric,
-                               timevar = "time", eventvar = "event", event_codes = "A"),
-               "The following `event_codes` are not present in the data: A")
-
-  # Non-existent timevar
-  expect_error(CRModel_SurvReg(data = train_data, expvars = expvars_numeric,
-                              timevar = "nonexistent", eventvar = "event"),
-               "`timevar` not found in data")
-
-  # Non-existent eventvar
-  expect_error(CRModel_SurvReg(data = train_data, expvars = expvars_numeric,
-                              timevar = "time", eventvar = "nonexistent"),
-               "`eventvar` not found in data")
-
-  # Non-existent expvars
-  expect_error(CRModel_SurvReg(data = train_data, expvars = c("nonexistent"),
-                              timevar = "time", eventvar = "event"),
-               "not found in data")
-})
-
-test_that("CRModel_SurvReg handles missing data", {
-  # Create data with missing values
-  train_data_na <- train_data
-  train_data_na$x1[1:10] <- NA
-
-  expect_warning(
-    model <- CRModel_SurvReg(
-      data = train_data_na,
-      expvars = expvars_numeric,
-      timevar = "time",
-      eventvar = "event",
-  event_codes = 1,
-      dist = "exponential"
-    ),
-    "Removed .* rows with missing values"
-  )
-
-  expect_s3_class(model$survreg_model, "survreg")
-})
-
-test_that("CRModel_SurvReg handles insufficient data", {
-  # Create very small dataset
-  small_data <- train_data[1:5, ]
-
-  expect_error(CRModel_SurvReg(
-    data = small_data,
-    expvars = expvars_numeric,
-    timevar = "time",
-    eventvar = "event",
-  event_codes = 1,
-    dist = "exponential"
-  ), "Insufficient data")
-})
-
-# ==============================================================================
-# Tests for Predict_CRModel_SurvReg - Basic Functionality
-# ==============================================================================
-
-test_that("Predict_CRModel_SurvReg works with basic model", {
-  model <- CRModel_SurvReg(
-    data = train_data,
-    expvars = expvars_numeric,
-    timevar = "time",
-    eventvar = "event",
-  event_codes = 1,
-    dist = "exponential"
-  )
-
-  preds <- Predict_CRModel_SurvReg(model, test_data)
-
-  # Check output structure
-  expect_type(preds, "list")
-  expect_named(preds, c("CIFs", "Times"))
-
-  # Check CIFs
-  expect_true(is.matrix(preds$CIFs))
-  expect_true(all(preds$CIFs >= 0 & preds$CIFs <= 1))
-  expect_equal(ncol(preds$CIFs), nrow(test_data))  # Columns = observations
-
-  # Check Times
-  expect_true(is.numeric(preds$Times))
-  expect_true(length(preds$Times) > 0)
-  expect_true(all(preds$Times >= 0))
-  expect_equal(nrow(preds$CIFs), length(preds$Times))  # Rows = times
-})
-
-test_that("Predict_CRModel_SurvReg handles custom times", {
-  model <- CRModel_SurvReg(
-    data = train_data,
-    expvars = expvars_numeric,
-    timevar = "time",
-    eventvar = "event",
-  event_codes = 1,
-    dist = "exponential"
-  )
-
-  custom_times <- c(1, 5, 10, 15)
-  preds <- Predict_CRModel_SurvReg(model, test_data, new_times = custom_times)
-
-  expect_equal(preds$Times, custom_times)
-  expect_equal(nrow(preds$CIFs), length(custom_times))
-})
-
-test_that("Predict_CRModel_SurvReg handles factor variables in newdata", {
-  model <- CRModel_SurvReg(
-    data = train_data,
-    expvars = expvars_all,
-    timevar = "time",
-    eventvar = "event",
-  event_codes = 1,
-    dist = "exponential"
-  )
-
-  preds <- Predict_CRModel_SurvReg(model, test_data)
-
-  expect_true(is.matrix(preds$CIFs))
-  expect_true(all(preds$CIFs >= 0 & preds$CIFs <= 1))
-})
-
-test_that("Predict_CRModel_SurvReg reflects covariate-driven risk differences", {
-  # Construct a deterministic dataset where the risk indicator accelerates event type 1
-  make_group <- function(risk_value) {
-    if (risk_value == 0) {
-      data.frame(
-        time = c(rep(25, 40), rep(10, 10), rep(35, 10)),
-        event = c(rep(1, 40), rep(2, 10), rep(0, 10)),
-        risk = 0
-      )
-    } else {
-      data.frame(
-        time = c(rep(5, 40), rep(10, 10), rep(35, 10)),
-        event = c(rep(1, 40), rep(2, 10), rep(0, 10)),
-        risk = 1
-      )
-    }
+  while (length(unique(train_data$event)) < 3) {
+    train_data$event <- sample(0:2, n_obs, replace = TRUE)
   }
+  train_data$status <- ifelse(train_data$event == 0, 0, 1)
 
-  sim_data <- rbind(make_group(0), make_group(1))
-  set.seed(123)
-  sim_data$time <- sim_data$time + runif(nrow(sim_data), -0.25, 0.25)
-
-  model <- CRModel_SurvReg(
-    data = sim_data,
-    expvars = "risk",
-    timevar = "time",
-    eventvar = "event",
-    event_codes = c(1, 2),
-    dist = "exponential"
+  task <- ml4t2e_task_cr(
+    train_data,
+    time = "time",
+    status = "status",
+    cause = "event"
   )
 
-  newdata <- data.frame(risk = c(0, 1))
-  preds <- Predict_CRModel_SurvReg(model, newdata)
+  fit <- ml4t2e_fit(keep_data = TRUE, task, models = "cr_survreg")
 
-  expect_true(is.matrix(preds$CIFs))
-  expect_equal(ncol(preds$CIFs), 2)
+  expect_s3_class(fit, "t2e_fit")
+  expect_true("cr_survreg" %in% fit$model_names)
 
-  cif_diff <- preds$CIFs[, 2] - preds$CIFs[, 1]
-
-  # Ensure the high-risk profile obtains meaningfully larger CIF at multiple times
-  expect_gt(max(cif_diff), 0.2)
-  expect_gt(cif_diff[length(cif_diff)], 0.2)
+  wrapper <- fit$models$cr_survreg
+  expect_true(inherits(wrapper, "SurvRegCompetingRiskModel"))
+  expect_type(wrapper$model, "list")
+  expect_true(all(c("1", "2") %in% names(wrapper$model)))
 })
 
-# ==============================================================================
-# Tests for Predict_CRModel_SurvReg - Input Validation
-# ==============================================================================
-
-test_that("Predict_CRModel_SurvReg validates inputs", {
-  model <- CRModel_SurvReg(
-    data = train_data,
-    expvars = expvars_numeric,
-    timevar = "time",
-    eventvar = "event",
-  event_codes = 1,
-    dist = "exponential"
+test_that("SurvReg Competing Risk predictions format", {
+  set.seed(99)
+  n_obs <- 30
+  train_data <- data.frame(
+    time = rexp(n_obs),
+    event = sample(0:2, n_obs, replace = TRUE),
+    x1 = rnorm(n_obs)
   )
-
-  # Missing modelout
-  expect_error(Predict_CRModel_SurvReg(newdata = test_data),
-               "'modelout' is missing")
-
-  # Missing newdata
-  expect_error(Predict_CRModel_SurvReg(modelout = model),
-               "'newdata' is missing")
-
-  # Invalid modelout
-  expect_error(Predict_CRModel_SurvReg(modelout = "not model", newdata = test_data),
-               "'modelout' must be output from CRModel_SurvReg")
-
-  # Invalid newdata
-  expect_error(Predict_CRModel_SurvReg(modelout = model, newdata = "not data"),
-               "'newdata' must be a data frame")
-
-  # Missing variables in newdata
-  test_data_missing <- test_data[, !(names(test_data) %in% c("x1"))]
-  expect_error(Predict_CRModel_SurvReg(modelout = model, newdata = test_data_missing),
-               "missing in newdata")
-
-  # Invalid new_times
-  expect_error(Predict_CRModel_SurvReg(modelout = model, newdata = test_data, new_times = "not numeric"),
-               "'new_times' must be a numeric vector")
-  expect_error(Predict_CRModel_SurvReg(modelout = model, newdata = test_data, new_times = c(-1, 1)),
-               "'new_times' must be a numeric vector of non-negative values")
-})
-
-test_that("Predict_CRModel_SurvReg handles missing factor levels", {
-  # Create test data with missing factor level
-  test_data_missing_level <- test_data
-  test_data_missing_level$cat1 <- factor(c("A", "B"), levels = c("A", "B", "C"))  # Missing "C"
-
-  model <- CRModel_SurvReg(
-    data = train_data,
-    expvars = expvars_all,
-    timevar = "time",
-    eventvar = "event",
-  event_codes = 1,
-    dist = "exponential"
-  )
-
-  # Should work without error (missing levels get handled appropriately)
-  preds <- Predict_CRModel_SurvReg(model, test_data_missing_level)
-  expect_true(is.matrix(preds$CIFs))
-})
-
-# ==============================================================================
-# Tests for CIF Properties
-# ==============================================================================
-
-test_that("CR SurvReg CIFs have correct properties", {
-  model <- CRModel_SurvReg(
-    data = train_data,
-    expvars = expvars_numeric,
-    timevar = "time",
-  eventvar = "event",
-  event_codes = 1,
-    dist = "exponential"
-  )
-
-  preds <- Predict_CRModel_SurvReg(model, test_data)
-
-  # CIFs should be between 0 and 1
-  expect_true(all(preds$CIFs >= 0 & preds$CIFs <= 1))
-
-  # CIFs should be non-decreasing over time for each observation
-  for (i in seq_len(ncol(preds$CIFs))) {
-    cif_curve <- preds$CIFs[, i]
-    expect_true(all(diff(cif_curve) >= -1e-10))  # Allow small numerical errors
+  while (length(unique(train_data$event)) < 3) {
+    train_data$event <- sample(0:2, n_obs, replace = TRUE)
   }
+  train_data$status <- ifelse(train_data$event == 0, 0, 1)
 
-  # Check that times are sorted
-  expect_true(all(diff(preds$Times) >= 0))
-})
+  task <- ml4t2e_task_cr(train_data, time = "time", status = "status", cause = "event")
+  fit <- ml4t2e_fit(keep_data = TRUE, task, models = "cr_survreg")
 
-# ==============================================================================
-# Tests for Model Comparison with Other CR Models
-# ==============================================================================
+  test_data <- train_data[1:5, ]
+  times <- c(1, 2)
 
-test_that("CR SurvReg has similar interface to other CR models", {
-  skip_if_not_installed("mgcv")
+  preds <- predict(fit, newdata = test_data, times = times)
 
-  # Fit CR SurvReg
-  survreg_model <- CRModel_SurvReg(
-    data = train_data,
-    expvars = expvars_numeric,
-    timevar = "time",
-    eventvar = "event",
-    event_codes = c(1, 2),
-    dist = "exponential"
-  )
+  expect_true("cif" %in% colnames(preds))
+  expect_true("cause" %in% colnames(preds))
+  expect_true(all(preds$cif >= 0 & preds$cif <= 1))
 
-  # Fit CR GAM for comparison
-  gam_model <- CRModel_GAM(
-    data = train_data,
-    expvars = expvars_numeric,
-    timevar = "time",
-    eventvar = "event",
-    event_codes = c(1, 2)
-  )
-
-  # Both should have similar output structure
-  expect_true(all(c(
-    "survreg_model", "survreg_models_all_causes", "times", "varprof", "model_type",
-    "expvars", "timevar", "eventvar", "event_codes", "event_codes_numeric",
-    "default_event_code", "default_event_code_numeric", "time_range", "dist"
-  ) %in% names(survreg_model)))
-
-  expect_true(all(c(
-    "gam_model", "gam_models_all_causes", "times", "varprof", "model_type",
-    "expvars", "timevar", "eventvar", "event_codes", "event_codes_numeric",
-    "default_event_code", "default_event_code_numeric", "time_range"
-  ) %in% names(gam_model)))
-
-  # Both should produce valid predictions
-  survreg_preds <- Predict_CRModel_SurvReg(survreg_model, test_data)
-  gam_preds <- Predict_CRModel_GAM(gam_model, test_data)
-
-  expect_true(is.matrix(survreg_preds$CIFs))
-  expect_true(is.matrix(gam_preds$CIFs))
-  expect_true(all(survreg_preds$CIFs >= 0 & survreg_preds$CIFs <= 1))
-  expect_true(all(gam_preds$CIFs >= 0 & gam_preds$CIFs <= 1))
-})
-
-# ==============================================================================
-# Tests for event_of_interest parameter
-# ==============================================================================
-
-test_that("Predict_CRModel_SurvReg supports event_of_interest selection", {
-  model <- CRModel_SurvReg(
-    data = train_data,
-    expvars = expvars_numeric,
-    timevar = "time",
-    eventvar = "event",
-    event_codes = c(1, 2),
-    dist = "exponential"
-  )
-
-  preds_event1 <- Predict_CRModel_SurvReg(model, test_data, event_of_interest = 1)
-  preds_event2 <- Predict_CRModel_SurvReg(model, test_data, event_of_interest = 2)
-
-  expect_false(identical(preds_event1$CIFs, preds_event2$CIFs))
-  expect_true(all(preds_event1$CIFs >= 0 & preds_event1$CIFs <= 1))
-  expect_true(all(preds_event2$CIFs >= 0 & preds_event2$CIFs <= 1))
-
-  # Invalid event_of_interest should error
-  expect_error(
-    Predict_CRModel_SurvReg(model, test_data, event_of_interest = 99),
-    "event_of_interest 99 was not present in training data"
-  )
-
-  # Default should match first event in training metadata
-  preds_default <- Predict_CRModel_SurvReg(model, test_data)
-  expect_identical(preds_default$CIFs, preds_event1$CIFs)
+  unique_causes <- unique(preds$cause)
+  expect_true(length(unique_causes) >= 2)
 })

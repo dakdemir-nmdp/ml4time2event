@@ -16,7 +16,7 @@ timedepConcordanceCR(
 )
 }
 \arguments{
-\item{SurvObj}{Surv object with structure: `Surv(time, status=cause)`}
+\item{SurvObj}{Surv object with structure: \code{Surv(time, status=cause)}}
 
 \item{Predictions}{Matrix of predicted CIFs (rows = times, cols = observations)}
 
@@ -37,18 +37,20 @@ Measures how well predicted cumulative incidence functions rank pairs
 of observations where one had the competing event of interest.
 }
 \details{
-**Formula**:
+\strong{Formula}:
 For cause \eqn{j} at time \eqn{t}:
 \eqn{C_j(t) = \frac{\sum_{i,j} I(t_i < t_j) \cdot I(\hat{CIF}_{j,i}(t) > \hat{CIF}_{j,j}(t)) \cdot I(\delta_j = j)}{\sum_{i,j} I(t_i < t_j) \cdot I(\delta_j = j)}}
 
-**Interpretation**:
-- Range: 0.5 (random) to 1.0 (perfect)
-- Computed only among pairs where the event of interest occurred
-- Competing events exclude observations from risk set
+\strong{Interpretation}:
+\itemize{
+\item Range: 0.5 (random) to 1.0 (perfect)
+\item Computed only among pairs where the event of interest occurred
+\item Competing events exclude observations from risk set
+}
 }
 \references{
 Fine, J. P., & Gray, R. J. (1999). "A proportional hazards model for the
-subdistribution of a competing risk." *Journal of the American Statistical Association*,
+subdistribution of a competing risk." \emph{Journal of the American Statistical Association},
 94(446), 496–509.
 }
 \keyword{internal}

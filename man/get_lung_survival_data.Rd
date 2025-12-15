@@ -8,11 +8,11 @@ get_lung_survival_data()
 }
 \value{
 A tibble with survival outcomes, engineered predictors, and no
-  missing values.
+missing values.
 }
 \description{
 Returns the preprocessed NCCTG lung cancer survival dataset used throughout
 the vignettes. When the package is installed the precomputed object
-`lung_survival_prepared` is loaded; otherwise a local CSV under `inst/extdata`
+\code{lung_survival_prepared} is loaded; otherwise a local CSV under \code{inst/extdata}
 is processed on the fly.
 }

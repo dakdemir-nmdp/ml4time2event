@@ -13,7 +13,6 @@ CoxSurvivalModel <- R6::R6Class(
     basehaz_function = NULL,
     time_grid = NULL,
     task = NULL,
-
     fit = function(task, time_grid, ...) {
       super$fit(task = task, ...)
       data <- task$data
@@ -52,7 +51,6 @@ CoxSurvivalModel <- R6::R6Class(
       self$fitted <- TRUE
       invisible(self)
     },
-
     predict_survival = function(newdata, times, set = "test", ...) {
       private$ensure_fitted()
       newdata <- .ensure_prediction_data(newdata, self$task)
@@ -79,30 +77,67 @@ CoxSurvivalModel <- R6::R6Class(
       surv_matrix <- exp(-outer(H0, risk_factor))
 
       id_values <- newdata[[self$task$id_col]]
-      preds_complete <- new_survival_prediction(
-        id = rep(id_values_complete, each = length(times)),
-        time = rep(times, times = length(id_values_complete)),
-        surv = as.vector(surv_matrix),
-        model = rep(model_name, length(id_values_complete) * length(times)),
-        ensemble = FALSE,
-        set = set
-      )
-      if (all(complete_idx)) {
-        return(preds_complete)
+      n_total <- nrow(newdata)
+
+      # Initialize result containers with length N
+      out_id <- rep(NA, n_total * length(times))
+      out_time <- rep(times, times = n_total)
+      out_surv <- rep(NA_real_, n_total * length(times))
+      out_model <- rep(model_name, n_total * length(times))
+
+      # Fill in complete cases
+      if (any(complete_idx)) {
+        # Calculate matrix
+        id_values_complete <- newdata_complete[[self$task$id_col]]
+        lp <- stats::predict(self$model, newdata = newdata_complete, type = "lp")
+        risk_factor <- exp(lp)
+        surv_matrix <- exp(-outer(H0, risk_factor))
+
+        # We need to map these back to the correct positions
+        # surv_matrix is T x N_complete
+        # We want to fill out_surv.
+
+        # Easier way: Build the complete tibble, then join back to the full ID frame?
+        # Or manual indexing. Manual is safer for order.
+
+        # Indices in the flattened vector logic:
+        # Structure is: ID1_t1, ID1_t2, ..., ID2_t1, ...
+        # But the generic uses: rep(id, each=T), rep(time, times=N)
+        # So: ID1_t1, ID1_t2, ...
+
+        # Let's trust new_survival_prediction constructor but pass NAs where needed.
+
+        # Logic:
+        # 1. Prediction for complete cases
+        # 2. Reconstruct full vector respecting original order.
+
+        full_surv_by_id <- matrix(NA, nrow = length(times), ncol = n_total)
+
+        full_surv_by_id[, complete_idx] <- surv_matrix
+
+        # Flatten (cols are IDs, rows are times)
+        # new_survival_prediction expects: id = rep(id_values, each=length(times))
+        # So we need vector: ID1_AllTimes, ID2_AllTimes, ...
+        # as.vector(full_surv_by_id) does: Time1_ID1, Time2_ID1 ... NO.
+        # as.vector flattens column-major.
+        # Column 1 is Time1...TimeT for ID1.
+        # So as.vector(full_surv_by_id) is exactly what we need!
+
+        out_surv <- as.vector(full_surv_by_id)
       }
 
-      missing_ids <- id_values[!complete_idx]
-      preds_missing <- new_survival_prediction(
-        id = rep(missing_ids, each = length(times)),
-        time = rep(times, times = length(missing_ids)),
-        surv = rep(NA_real_, length(missing_ids) * length(times)),
-        model = rep(model_name, length(missing_ids) * length(times)),
+      # Ensure IDs matched flattened structure
+      out_id <- rep(id_values, each = length(times))
+
+      new_survival_prediction(
+        id = out_id,
+        time = out_time,
+        surv = out_surv,
+        model = out_model,
         ensemble = FALSE,
         set = set
       )
-      dplyr::bind_rows(preds_complete, preds_missing)
     },
-
     predict_risk = function(newdata, times = NULL, set = "test", ...) {
       private$ensure_fitted()
       newdata <- .ensure_prediction_data(newdata, self$task)
@@ -142,13 +177,11 @@ CoxSurvivalModel <- R6::R6Class(
       )
       dplyr::bind_rows(preds_complete, preds_missing)
     },
-
     model_info = function() {
       info <- super$model_info()
       info$label <- "Cox proportional hazards"
       info
     },
-
     required_packages = function() {
       c("survival")
     }

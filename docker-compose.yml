@@ -1,0 +1,12 @@
+services:
+  ml4time2event:
+    build: .
+    image: ml4time2event:latest
+    platform: linux/amd64
+    ports:
+      - "8787:8787"
+    environment:
+      - PASSWORD=ml4time2event
+      - ROOT=true
+    volumes:
+      - .:/home/rstudio/ml4time2event

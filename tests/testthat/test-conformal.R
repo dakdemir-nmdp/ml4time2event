@@ -11,7 +11,7 @@ test_that("conformal prediction works for survival", {
   
   # Fit with conformal calibration
   set.seed(123)
-  fit <- ml4t2e_fit(
+  fit <- ml4t2e_fit(keep_data = TRUE, 
     task,
     models = "cox",
     conformal_calibration = 0.5 # Use 50% for calibration to ensure enough data
@@ -49,7 +49,7 @@ test_that("conformal prediction works for competing risks", {
   
   # Fit with conformal calibration
   set.seed(123)
-  fit <- ml4t2e_fit(
+  fit <- ml4t2e_fit(keep_data = TRUE, 
     task,
     models = "cox", # cr_cox
     conformal_calibration = 0.5

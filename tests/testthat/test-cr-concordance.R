@@ -20,14 +20,15 @@ x1 <- rnorm(n_obs)
 lp <- beta * x1
 
 # Simulate competing risks times
-time1 <- rexp(n_obs, rate = exp(lp - mean(lp) + log(0.05)))  # Cause 1
-time2 <- rexp(n_obs, rate = exp(-lp - mean(-lp) + log(0.05)))  # Cause 2 (inverse relationship)
+time1 <- rexp(n_obs, rate = exp(lp - mean(lp) + log(0.05))) # Cause 1
+time2 <- rexp(n_obs, rate = exp(-lp - mean(-lp) + log(0.05))) # Cause 2 (inverse relationship)
 censor_time <- rexp(n_obs, rate = 0.03)
 
 # Determine which event occurs first
 min_time <- pmin(time1, time2, censor_time)
 event <- ifelse(min_time == time1, 1L,
-                ifelse(min_time == time2, 2L, 0L))
+  ifelse(min_time == time2, 2L, 0L)
+)
 
 cr_data <- data.frame(
   time = min_time,
@@ -60,9 +61,9 @@ test_that("Competing risks concordance index is > 0.5 for models with predictive
   )
 
   # Fit a Fine-Gray model (should have good concordance since x1 is predictive for cause 1)
-  cr_fit <- ml4t2e_fit(
+  cr_fit <- ml4t2e_fit(keep_data = TRUE, 
     task = cr_task,
-    models = "fine_gray",
+    models = "cr_fine_gray",
     controls = list(times = seq(0, max(train_data$time), length.out = 10))
   )
 
@@ -116,7 +117,7 @@ test_that("Competing risks concordance index handles multiple causes", {
   )
 
   # Fit cause-specific Cox model
-  cr_fit <- ml4t2e_fit(
+  cr_fit <- ml4t2e_fit(keep_data = TRUE, 
     task = cr_task,
     models = "cox",
     controls = list(times = seq(0, max(train_data$time), length.out = 10))
@@ -131,7 +132,7 @@ test_that("Competing risks concordance index handles multiple causes", {
   # Should have concordance for each cause
   expect_true("cause" %in% colnames(metrics))
   causes <- unique(metrics$cause)
-  expect_length(causes, 2)  # Two competing causes
+  expect_length(causes, 2) # Two competing causes
 
   # All concordance indices should be >= 0.5
   c_indices <- metrics$value[metrics$metric == "c_index"]
