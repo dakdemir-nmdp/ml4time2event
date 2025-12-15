@@ -1,6 +1,67 @@
 # ml4time2event
 
-Machine learning for time-to-event analysis. Provides tools for predicting survival outcomes and competing risks using statistical and machine learning methods.
+<!-- badges: start -->
+[![R-CMD-check](https://github.com/dakdemir-nmdp/ml4time2event/actions/workflows/R-CMD-check.yml/badge.svg)](https://github.com/dakdemir-nmdp/ml4time2event/actions/workflows/R-CMD-check.yml)
+[![test-coverage](https://github.com/dakdemir-nmdp/ml4time2event/actions/workflows/test-coverage.yml/badge.svg)](https://github.com/dakdemir-nmdp/ml4time2event/actions/workflows/test-coverage.yml)
+[![lint](https://github.com/dakdemir-nmdp/ml4time2event/actions/workflows/lint.yml/badge.svg)](https://github.com/dakdemir-nmdp/ml4time2event/actions/workflows/lint.yml)
+<!-- badges: end -->
+
+**Machine learning for time-to-event analysis**. Provides tools for predicting survival outcomes and competing risks using statistical and machine learning methods.
+
+## Limitations
+
+**Important**: This section documents known limitations and areas under active development. We believe in transparency about what works well and what doesn't.
+
+### What Works Well ✅
+
+- **Core Functionality**: Task creation, model fitting, prediction, and evaluation are stable and well-tested
+- **Model Variety**: 22+ model engines covering both survival and competing risks
+- **Simple Ensembling**: Unweighted averaging (`ensemble = "simple"`) works reliably
+- **Conformal Prediction**: Conformal calibration provides valid confidence bands
+- **SHAP Explainability**: Model interpretation via SHAP values
+- **Input Validation**: Comprehensive validation catches invalid inputs early with clear error messages
+
+### Current Limitations ⚠️
+
+- **Ensemble Stacking**: Currently `ensemble = "stack"` performs simple averaging, **not** optimized Super Learner meta-learning. This is being improved in a future release. Use `ensemble = "simple"` for now to be explicit about what you're getting.
+
+- **Neural Networks**: The `shallownn` models are implemented in pure R with custom gradient descent. They work but are:
+  - Slower than gradient boosting alternatives (XGBoost, LightGBM)
+  - Lack advanced features (GPU acceleration, automatic differentiation)
+  - Consider marked as **experimental** - use `xgboost` or `gbm` for production
+
+- **Advanced Survival Features**: Not yet supported:
+  - Time-varying covariates
+  - Multi-state models
+  - Cure models
+  - Left truncation (delayed entry)
+
+- **Hyperparameter Tuning**: Limited built-in hyperparameter optimization. Users should tune models externally and pass optimized parameters via `controls` argument.
+
+### In Active Development 🚧
+
+- **Data Splitting**: Fixing data leakage issue when using both stacking and conformal calibration together
+- **True Super Learner**: Implementing optimized ensemble weight learning
+- **Registry Metadata**: Enhancing model registry with capability queries
+
+### When to Use This Package
+
+**Good fit for**:
+- Research projects needing multiple survival/competing risks models
+- Comparing model performance across different algorithms
+- Generating SHAP-based explanations for survival models
+- Quick prototyping of survival analysis pipelines
+
+**Consider alternatives for**:
+- Production systems requiring maximum performance (use specialized packages)
+- Advanced survival modeling features not listed above
+- Projects needing only a single well-known model (use `survival` package directly)
+
+### Reporting Issues
+
+Found a bug or limitation not listed here? Please [open an issue](https://github.com/dakdemir-nmdp/ml4time2event/issues) with a reproducible example.
+
+---
 
 ## Installation
 

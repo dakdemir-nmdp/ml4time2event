@@ -58,7 +58,8 @@ test_task <- ml4t2e_task_surv(test_df, time = "time", event = "event")
 # ==============================================================================
 
 test_that("ml4t2e_fit fits basic Cox model", {
-  fit <- ml4t2e_fit(keep_data = TRUE, 
+  fit <- ml4t2e_fit(
+    keep_data = TRUE,
     task = train_task,
     models = "cox",
     ensemble = "none"
@@ -75,7 +76,8 @@ test_that("ml4t2e_fit fits basic Cox model", {
 
 test_that("Cox model handles factor variables", {
   # Train data already has factors cat1, cat2
-  fit <- ml4t2e_fit(keep_data = TRUE, 
+  fit <- ml4t2e_fit(
+    keep_data = TRUE,
     task = train_task,
     models = "cox",
     ensemble = "none"
@@ -88,7 +90,8 @@ test_that("Cox model handles factor variables", {
 })
 
 test_that("Cox model predictions match expected structure", {
-  fit <- ml4t2e_fit(keep_data = TRUE, 
+  fit <- ml4t2e_fit(
+    keep_data = TRUE,
     task = train_task,
     models = "cox",
     ensemble = "none"
@@ -112,7 +115,8 @@ test_that("Cox model handles penalized regression (via glmnet) if specified", {
   # 'glmnet' engine maps to glmnet.
   # If the user wants penalized Cox, they should use model='glmnet'.
 
-  fit_glmnet <- ml4t2e_fit(keep_data = TRUE, 
+  fit_glmnet <- ml4t2e_fit(
+    keep_data = TRUE,
     task = train_task,
     models = "glmnet", # Explicitly use glmnet engine
     ensemble = "none",
@@ -128,7 +132,10 @@ test_that("Cox model fails gracefully with invalid data", {
   invalid_df$event <- rep(0, nrow(invalid_df)) # No events
 
   # Task creation itself validates data and should error if no events
-  expect_error(ml4t2e_task_surv(invalid_df, "time", "event"), "No observed events")
+  expect_error(
+    ml4t2e_task_surv(invalid_df, "time", "event"),
+    "All observations are censored.*Cannot fit time-to-event model"
+  )
 
   # Test missing feature columns behavior
   invalid_test <- test_df

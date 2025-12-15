@@ -11,7 +11,7 @@ ml4t2e_fit(
   recipe = NULL,
   resampling = NULL,
   seed = NULL,
-  keep_data = FALSE,
+  keep_data = TRUE,
   controls = list(),
   conformal_calibration = NULL
 )
@@ -31,7 +31,7 @@ Common engines include:
 \itemize{
 \item \code{FALSE} or \code{"none"}: No ensembling; returns individual model predictions only.
 \item \code{"simple"}: Unweighted average of predictions across models.
-\item \code{"auto"}, \code{TRUE}: Alias for \code{"simple"} (stacking not yet implemented; falls back with warning).
+\item \code{"auto"}, \code{TRUE}: Alias for \code{"simple"}.
 \item \code{"stack"}: Uses blending (data splitting) to learn ensemble weights via Super Learner optimization.
 }
 

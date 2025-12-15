@@ -50,40 +50,77 @@
         ))
     }
 
-    # Both stacking and conformal
+    # Both stacking and conformal - CRITICAL: Use 3-way split to prevent data leakage
     if (is_stacking && is_conformal) {
-        ratio <- conformal_ratio # Total holdout ratio
-        num_holdout <- floor(n_total * ratio)
+        # IMPORTANT: We need THREE separate, non-overlapping sets:
+        # 1. Training set (60%) - for fitting base models
+        # 2. Stacking set (20%) - for training meta-learner
+        # 3. Conformal set (20%) - for calibrating prediction intervals
+        #
+        # Using the same data for stacking and conformal creates leakage because:
+        # - Meta-learner learns weights from holdout
+        # - Conformal bands are computed on same holdout
+        # - Result: Overly optimistic confidence intervals
 
-        # Validate we have enough data
-        if (num_holdout < 4) {
+        # Use a fixed 60-20-20 split when both are requested
+        # (ignoring conformal_ratio parameter to ensure proper 3-way split)
+        train_ratio <- 0.60
+        stack_ratio <- 0.20
+
+        num_train <- floor(n_total * train_ratio)
+        num_stack <- floor(n_total * stack_ratio)
+        num_conf <- n_total - num_train - num_stack # Remainder for conformal
+
+        # Validate we have enough data for 3-way split
+        if (num_train < 5 || num_stack < 2 || num_conf < 2) {
             rlang::abort(
                 glue::glue(
-                    "Insufficient data for both stacking and conformal calibration.\n",
-                    "Total observations: {n_total}\n",
-                    "Requested holdout: {num_holdout} ({ratio*100}%)\n",
-                    "Minimum required: 4 (at least 2 per split)\n",
-                    "Suggestion: Reduce conformal_calibration ratio or use only one of stacking/conformal."
+                    "Insufficient data for 3-way split (training + stacking + conformal).\\n",
+                    "Total observations: {n_total}\\n",
+                    "Required split: Train={num_train} (min 5), Stack={num_stack} (min 2), Conformal={num_conf} (min 2)\\n",
+                    "Minimum total required: ~10 observations\\n",
+                    "Suggestion: Use a larger dataset, or disable either stacking or conformal calibration."
                 ),
                 class = "insufficient_data_error"
             )
         }
 
-        # Split holdout 50/50 between stacking and conformal
-        holdout_indices <- sample(seq_len(n_total), size = num_holdout)
-        num_stack <- floor(num_holdout / 2)
+        # Create random permutation for 3-way split
+        all_indices <- sample(seq_len(n_total))
 
-        stack_indices <- holdout_indices[1:num_stack]
-        conf_indices <- holdout_indices[(num_stack + 1):num_holdout]
+        # Assign to three SEPARATE, NON-OVERLAPPING sets
+        train_indices <- all_indices[1:num_train]
+        stack_indices <- all_indices[(num_train + 1):(num_train + num_stack)]
+        conf_indices <- all_indices[(num_train + num_stack + 1):n_total]
+
+        # Sanity check: no overlap
+        stopifnot(
+            length(intersect(train_indices, stack_indices)) == 0,
+            length(intersect(train_indices, conf_indices)) == 0,
+            length(intersect(stack_indices, conf_indices)) == 0,
+            length(train_indices) + length(stack_indices) + length(conf_indices) == n_total
+        )
 
         return(list(
-            train_data = task$data[-holdout_indices, ],
+            train_data = task$data[train_indices, ],
             stack_data = task$data[stack_indices, ],
             conf_data = task$data[conf_indices, ],
-            split_type = "both",
+            split_type = "threeway",
             split_info = glue::glue(
-                "Split {n_total} observations: Train={nrow(task$data[-holdout_indices,])}, ",
-                "Stack={length(stack_indices)}, Conformal={length(conf_indices)}"
+                "3-way split to prevent data leakage: ",
+                "Train={length(train_indices)} ({round(100*length(train_indices)/n_total)}%), ",
+                "Stack={length(stack_indices)} ({round(100*length(stack_indices)/n_total)}%), ",
+                "Conformal={length(conf_indices)} ({round(100*length(conf_indices)/n_total)}%)"
+            ),
+            # Include split details for transparency
+            split_details = list(
+                n_total = n_total,
+                n_train = length(train_indices),
+                n_stack = length(stack_indices),
+                n_conformal = length(conf_indices),
+                train_indices = train_indices,
+                stack_indices = stack_indices,
+                conformal_indices = conf_indices
             )
         ))
     }

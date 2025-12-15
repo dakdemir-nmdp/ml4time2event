@@ -63,9 +63,10 @@ ml4t2e_fit <- function(task,
                        keep_data = TRUE,
                        controls = list(),
                        conformal_calibration = NULL) {
-  if (!inherits(task, "t2e_task")) {
-    rlang::abort("`task` must be created with `ml4t2e_task_*()`.")
-  }
+  # Validate task structure
+  .validate_task(task, context = "ml4t2e_fit()")
+
+  # Validate seed if provided
   if (!is.null(seed)) {
     if (!is.numeric(seed) || length(seed) != 1) {
       rlang::abort("`seed` must be a single numeric value.")
@@ -82,11 +83,16 @@ ml4t2e_fit <- function(task,
   ensemble_mode <- tolower(ensemble_mode)
   ensemble_enabled <- !ensemble_choice %in% c("FALSE", "none")
 
+  # Validate ensemble strategy
+  if (ensemble_enabled) {
+    .validate_ensemble_strategy(ensemble_mode, context = "ml4t2e_fit()")
+  }
+
   outcome_type <- attr(task, "task_type")
   models <- unique(models)
-  if (length(models) == 0) {
-    rlang::abort("`models` must contain at least one engine name.")
-  }
+
+  # Validate models against registry
+  .validate_models(models, outcome_type, context = "ml4t2e_fit()")
 
   train_task <- task
   stack_data <- NULL

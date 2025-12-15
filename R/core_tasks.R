@@ -25,6 +25,16 @@ ml4t2e_task_surv <- function(data,
   data_tbl <- dplyr::as_tibble(data)
   .task_constructors_check_columns(data_tbl, c(time, event, id))
 
+  # Comprehensive data quality validation
+  .validate_data_quality(
+    data = data_tbl,
+    required_cols = c(time, event),
+    id_col = id,
+    time_col = time,
+    event_col = event,
+    context = "ml4t2e_task_surv()"
+  )
+
   if (is.null(id)) {
     id <- ".task_id"
     data_tbl[[id]] <- seq_len(nrow(data_tbl))
@@ -95,6 +105,16 @@ ml4t2e_task_cr <- function(data,
 
   data_tbl <- dplyr::as_tibble(data)
   .task_constructors_check_columns(data_tbl, c(time, status, cause, id))
+
+  # Comprehensive data quality validation
+  .validate_data_quality(
+    data = data_tbl,
+    required_cols = c(time, status, cause),
+    id_col = id,
+    time_col = time,
+    event_col = status,
+    context = "ml4t2e_task_cr()"
+  )
 
   if (is.null(id)) {
     id <- ".task_id"
@@ -205,8 +225,10 @@ ml4t2e_task_cr <- function(data,
     }
     missing_features <- setdiff(features, colnames(data))
     if (length(missing_features) > 0) {
-      rlang::abort(paste0("`features` contains unknown columns: ",
-                          paste(missing_features, collapse = ", ")))
+      rlang::abort(paste0(
+        "`features` contains unknown columns: ",
+        paste(missing_features, collapse = ", ")
+      ))
     }
     features
   }
