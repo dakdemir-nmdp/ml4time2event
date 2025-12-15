@@ -1,13 +1,3 @@
-#' Neural Network Core Utilities
-#'
-#' Shared functions for shallow neural network implementations across
-#' survival and competing risks models. These functions handle weight
-#' initialization, forward propagation, Cox loss optimization, and
-#' baseline hazard estimation.
-#'
-#' @keywords internal
-#' @noRd
-
 # ============================================================================
 # Weight Initialization and Manipulation
 # ============================================================================

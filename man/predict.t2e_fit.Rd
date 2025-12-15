@@ -9,7 +9,7 @@
   newdata = NULL,
   times = NULL,
   type = NULL,
-  include = "all",
+  include = "fit_default",
   conformal_alpha = NULL,
   ...
 )

@@ -64,10 +64,6 @@ EnsemblerBase <- R6::R6Class(
           "Ensemble strategy '{self$strategy}' is not available for {context} predictions."
         ))
       }
-    },
-    fallback_to_simple = function() {
-      rlang::warn("Stacked ensembling is not yet implemented; using simple averaging instead.")
-      self$strategy <- "simple"
     }
   )
 )

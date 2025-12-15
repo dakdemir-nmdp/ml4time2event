@@ -24,7 +24,7 @@ predict.t2e_fit <- function(object,
                             newdata = NULL,
                             times = NULL,
                             type = NULL,
-                            include = "all",
+                            include = "fit_default",
                             conformal_alpha = NULL,
                             ...) {
     if (!inherits(object, "t2e_fit")) {
@@ -113,65 +113,98 @@ predict.t2e_fit <- function(object,
             scores_obj <- object$conformal$scores[[engine]]
             if (!is.null(scores_obj)) {
                 if (identical(outcome_type, "survival") && identical(type, "survival")) {
-                    time_indices <- match(times, object$time_grid)
-                    valid_t_idx <- !is.na(time_indices)
-                    if (!all(valid_t_idx)) {
-                        rlang::warn("Some requested times are not in the calibration time grid. Bands will be NA for those times.")
-                    }
+                    # Pre-compute quantiles for all grid points
+                    grid_times <- object$time_grid
+                    n_grid <- length(grid_times)
+                    q_grid <- numeric(n_grid)
 
-                    q_values <- rep(NA_real_, length(times))
-
-                    for (k in seq_along(times)) {
-                        if (valid_t_idx[k]) {
-                            idx_grid <- time_indices[k]
-                            s <- scores_obj$scores[, idx_grid]
-                            w <- scores_obj$weights[, idx_grid]
-                            q_values[k] <- ml4t2e_weighted_quantile(s, w, conformal_alpha)
+                    found_scores <- FALSE
+                    if (!is.null(scores_obj$scores) && !is.null(scores_obj$weights)) {
+                        found_scores <- TRUE
+                        for (g_idx in seq_len(n_grid)) {
+                            s <- scores_obj$scores[, g_idx]
+                            w <- scores_obj$weights[, g_idx]
+                            q_grid[g_idx] <- ml4t2e_weighted_quantile(s, w, conformal_alpha)
                         }
                     }
 
-                    q_map <- data.frame(time = times, q = q_values)
-                    pred <- pred %>%
-                        dplyr::left_join(q_map, by = "time") %>%
-                        dplyr::mutate(
-                            lower = pmax(0, surv - q),
-                            upper = pmin(1, surv + q)
-                        ) %>%
-                        dplyr::select(-q)
+                    if (found_scores) {
+                        # Interpolate to requested times
+                        # Use step-function (constant) or linear?
+                        # Conformal scores Q(t) are often smooth-ish. Linear is reasonable.
+                        # Use rule=2 to clamp to range (carry forward/backward)
+                        q_interp <- stats::approx(grid_times, q_grid, xout = times, rule = 2)$y
+
+                        q_map <- data.frame(time = times, q = q_interp)
+
+                        pred <- pred %>%
+                            dplyr::left_join(q_map, by = "time") %>%
+                            dplyr::mutate(
+                                lower = pmax(0, surv - q),
+                                upper = pmin(1, surv + q)
+                            ) %>%
+                            dplyr::select(-q)
+                    } else {
+                        rlang::warn(glue::glue("No scores found for engine {engine}"))
+                    }
                 } else if (identical(outcome_type, "competing_risk") && identical(type, "cif")) {
+                    # Competing Risks Interpolation
+                    grid_times <- object$time_grid
+                    n_grid <- length(grid_times)
+
                     q_df_list <- list()
+
+                    # scores_obj$scores is a list of causes? No, scores_obj IS a list wrapper:
+                    # scores_obj = list(scores = list("1" = ..., "2" = ...))
+                    # Wait, look at ml4t2e_calibrate in conformal_prediction.R
+                    # scores_list[[cause_val]] <- .compute_scores_core(...)
+                    # scores <- list(scores = scores_list)
+                    # So scores_obj$scores is a list of cause-specific score objects.
+
                     for (cause_val in names(scores_obj$scores)) {
-                        cause_scores <- scores_obj$scores[[cause_val]]
-                        time_indices <- match(times, object$time_grid)
-                        valid_t_idx <- !is.na(time_indices)
+                        cause_scores_struct <- scores_obj$scores[[cause_val]]
+                        # cause_scores_struct has $scores (matrix) and $weights (matrix)
 
-                        q_vals <- rep(NA_real_, length(times))
-                        for (k in seq_along(times)) {
-                            if (valid_t_idx[k]) {
-                                idx_grid <- time_indices[k]
-                                s <- cause_scores$scores[idx_grid, ]
-                                w <- cause_scores$weights[idx_grid, ]
-                                q_vals[k] <- ml4t2e_weighted_quantile(s, w, conformal_alpha)
+                        if (!is.null(cause_scores_struct$scores)) {
+                            q_grid <- numeric(n_grid)
+                            for (g_idx in seq_len(n_grid)) {
+                                s <- cause_scores_struct$scores[, g_idx]
+                                w <- cause_scores_struct$weights[, g_idx]
+                                q_grid[g_idx] <- ml4t2e_weighted_quantile(s, w, conformal_alpha)
                             }
+
+                            q_interp <- stats::approx(grid_times, q_grid, xout = times, rule = 2)$y
+                            q_df_list[[cause_val]] <- data.frame(time = times, cause = cause_val, q = q_interp, stringsAsFactors = FALSE)
                         }
-                        q_df_list[[cause_val]] <- data.frame(time = times, cause = cause_val, q = q_vals, stringsAsFactors = FALSE)
                     }
 
-                    q_map <- dplyr::bind_rows(q_df_list)
+                    if (length(q_df_list) > 0) {
+                        q_map <- dplyr::bind_rows(q_df_list)
 
-                    if (is.numeric(pred$cause) && !is.numeric(q_map$cause)) {
-                        q_map$cause <- as.numeric(q_map$cause)
-                    } else if (is.factor(pred$cause)) {
-                        q_map$cause <- as.factor(q_map$cause)
+                        if (is.numeric(pred$cause) && !is.numeric(q_map$cause)) {
+                            q_map$cause <- as.numeric(q_map$cause)
+                        } else if (is.factor(pred$cause)) {
+                            # Need to match factor levels or convert to char for joining
+                            # Safest to join on character
+                            pred$cause_join <- as.character(pred$cause)
+                            q_map$cause_join <- as.character(q_map$cause)
+                        } else {
+                            pred$cause_join <- as.character(pred$cause)
+                            q_map$cause_join <- as.character(q_map$cause)
+                        }
+
+                        # Fix lint
+                        cause_join <- NULL
+
+                        # Join
+                        pred <- pred %>%
+                            dplyr::left_join(q_map %>% dplyr::select(-cause), by = c("time", "cause_join")) %>%
+                            dplyr::mutate(
+                                lower = pmax(0, cif - q),
+                                upper = pmin(1, cif + q)
+                            ) %>%
+                            dplyr::select(-q, -cause_join)
                     }
-
-                    pred <- pred %>%
-                        dplyr::left_join(q_map, by = c("time", "cause")) %>%
-                        dplyr::mutate(
-                            lower = pmax(0, cif - q),
-                            upper = pmin(1, cif + q)
-                        ) %>%
-                        dplyr::select(-q)
                 }
             }
         }
@@ -200,11 +233,25 @@ predict.t2e_fit <- function(object,
 }
 
 .normalize_include <- function(include, models) {
+    # Default behavior: If 'fit_default' or missing/NULL, prioritize ensemble
+    if (length(include) == 1 && include == "fit_default") {
+        if ("ensemble" %in% models) {
+            return("ensemble")
+        } else {
+            return(models)
+        }
+    }
+
     if (identical(include, "all")) {
         return(models)
     }
     include <- unique(include)
-    include <- include[include %in% models]
+    valid <- include %in% models
+    if (!all(valid)) {
+        invalid <- include[!valid]
+        rlang::warn(paste0("Ignoring unknown models in include: ", paste(invalid, collapse = ", ")))
+        include <- include[valid]
+    }
     if (length(include) == 0) {
         rlang::abort("`include` did not match any fitted models.")
     }

@@ -2,7 +2,7 @@
 #' @description Integrate a curve (scores) over a specified time range using the trapezoidal rule.
 #' @param times numeric vector of time points.
 #' @param scores numeric vector of scores corresponding to time points.
-#' @param minmax numeric vector of length 2 specifying the integration limits [min, max].
+#' @param minmax numeric vector of length 2 specifying the integration limits (min, max).
 #' @param scale logical, if TRUE, scale the result by the length of the integration interval.
 #' @return numeric value representing the integrated score.
 #' @importFrom pracma trapz
@@ -28,7 +28,7 @@ Integrator <- function(times, scores, minmax = c(1, 35), scale = FALSE) {
   if (length(timesn) < 2) {
     if (minmax[1] == minmax[2]) {
       return(0)
-    } 
+    }
     return(0)
   }
 

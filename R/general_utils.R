@@ -163,11 +163,14 @@ listrules <- function(x, i = NULL) {
 #' @return Matrix (n x m).
 #' @keywords internal
 ml4t2e_reshape_preds_to_matrix <- function(preds, data, time_grid, val_col, id_col = NULL) {
-  # Optimize using pivot_wider
+  # Input validation
+  if (!all(c("time", val_col) %in% names(preds))) {
+    stop(sprintf("preds must contain 'time' and '%s' columns", val_col))
+  }
+
+  # Handle IDs
   if (is.null(id_col)) {
-    # If no ID column, we assume row order if reliable, but safer to add a temp id
     data_ids <- seq_len(nrow(data))
-    # We must ensure preds has a corresponding id or we can't map
     if (!"id" %in% names(preds)) {
       stop("preds must have an 'id' column")
     }
@@ -175,42 +178,55 @@ ml4t2e_reshape_preds_to_matrix <- function(preds, data, time_grid, val_col, id_c
     data_ids <- data[[id_col]]
   }
 
-  # Ensure preds has numeric time for column ordering
-  preds$time <- as.numeric(preds$time)
+  # Standardize times to character for consistent column naming
+  # Use high precision formatting to avoid collision
+  fmt_time <- function(t) sprintf("%.10g", t)
 
-  # Pivot
-  # We select only needed columns to avoid issues
-  wide_df <- preds[, c("id", "time", val_col)] %>%
-    tidyr::pivot_wider(names_from = "time", values_from = dplyr::all_of(val_col))
+  preds_clean <- preds
+  # Initialize to avoid lint NOTE
+  time_str <- NULL
+  preds_clean$time_str <- fmt_time(as.numeric(preds$time))
+  time_grid_str <- fmt_time(as.numeric(time_grid))
 
-  # Ensure columns cover time_grid and are ordered
-  target_cols <- as.character(time_grid)
+  # Filter to only times in the grid (ignores extra predictions)
+  preds_clean <- preds_clean[preds_clean$time_str %in% time_grid_str, ]
 
-  # Check if all times are present
-  missing_times <- setdiff(target_cols, names(wide_df))
-  if (length(missing_times) > 0) {
-    for (mt in missing_times) {
-      wide_df[[mt]] <- NA
-    }
+  wide_df <- preds_clean %>%
+    dplyr::select(id, time_str, dplyr::all_of(val_col)) %>%
+    tidyr::pivot_wider(
+      names_from = "time_str",
+      values_from = dplyr::all_of(val_col),
+      values_fn = mean # Handle duplicates if any (shouldn't be)
+    )
+
+  # Create a template dataframe to ensure all IDs and Times exist
+  col_order <- time_grid_str
+
+  # Ensure all target columns exist
+  missing_cols <- setdiff(col_order, names(wide_df))
+  if (length(missing_cols) > 0) {
+    for (mc in missing_cols) wide_df[[mc]] <- NA_real_
   }
 
-  # Reorder columns to match time_grid
-  wide_df <- wide_df[, c("id", target_cols)]
+  # Join with original IDs to ensure correct row order and missing IDs are handled
+  df_map <- data.frame(id = data_ids, stringsAsFactors = FALSE)
 
-  # Reorder rows to match data_ids
-  order_df <- data.frame(id = data_ids, stringsAsFactors = FALSE)
-
-  # Ensure types match for join
-  if (class(order_df$id) != class(wide_df$id)) {
-    if (is.numeric(order_df$id)) {
-      wide_df$id <- as.numeric(wide_df$id)
-    } else {
-      wide_df$id <- as.character(wide_df$id)
-    }
+  # Harmonize ID types
+  if (!identical(class(df_map$id), class(wide_df$id))) {
+    wide_df$id <- as(wide_df$id, class(df_map$id))
   }
 
-  final_df <- dplyr::left_join(order_df, wide_df, by = "id")
+  df_final <- dplyr::left_join(df_map, wide_df, by = "id")
 
-  # Convert to matrix
-  as.matrix(final_df[, target_cols])
+  # Extract matrix
+  mat <- as.matrix(df_final[, col_order])
+
+  # Ensure numeric (matrix might become character if NAs handled poorly?)
+  mode(mat) <- "numeric"
+
+  if (ncol(mat) != length(time_grid)) {
+    stop("Reshaped matrix has wrong number of columns")
+  }
+
+  mat
 }

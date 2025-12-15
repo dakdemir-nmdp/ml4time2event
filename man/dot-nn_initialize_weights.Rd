@@ -2,7 +2,7 @@
 % Please edit documentation in R/nn_core.R
 \name{.nn_initialize_weights}
 \alias{.nn_initialize_weights}
-\title{Neural Network Core Utilities}
+\title{Initialize neural network weights}
 \usage{
 .nn_initialize_weights(n_in, n_hidden)
 }
@@ -15,9 +15,7 @@
 List with matrices W1, W2 and vectors b1, b2
 }
 \description{
-Shared functions for shallow neural network implementations across
-survival and competing risks models. These functions handle weight
-initialization, forward propagation, Cox loss optimization, and
-baseline hazard estimation.
+Creates random initial weights for a shallow neural network with one
+hidden layer using sigmoid activation and linear output.
 }
 \keyword{internal}

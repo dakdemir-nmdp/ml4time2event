@@ -2,7 +2,7 @@
 % Please edit documentation in R/data_splits.R
 \name{.split_data_for_training}
 \alias{.split_data_for_training}
-\title{Data Splitting Utilities for Training}
+\title{Split data for ensemble stacking and/or conformal calibration}
 \usage{
 .split_data_for_training(
   task,
@@ -24,7 +24,11 @@
 List with train_data, stack_data, conf_data, and metadata
 }
 \description{
-Functions to handle data splitting for stacking, conformal calibration,
-and their combinations. Provides validation and clear error messages.
+Handles three scenarios:
+\enumerate{
+\item Stacking only: Splits data into train + stack (meta-learner)
+\item Conformal only: Splits data into train + conformal calibration
+\item Both: Splits data into train + stack + conformal (holdout split 50/50)
+}
 }
 \keyword{internal}

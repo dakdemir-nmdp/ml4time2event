@@ -2,7 +2,7 @@
 % Please edit documentation in R/validation.R
 \name{.validate_task}
 \alias{.validate_task}
-\title{Input Validation Utilities}
+\title{Validate task object}
 \usage{
 .validate_task(
   task,
@@ -21,7 +21,6 @@
 Invisible TRUE or aborts with informative error
 }
 \description{
-Comprehensive validation functions with informative error messages.
-Uses checkmate for type validation when available, falls back to base R.
+Ensures task has required structure and fields.
 }
 \keyword{internal}

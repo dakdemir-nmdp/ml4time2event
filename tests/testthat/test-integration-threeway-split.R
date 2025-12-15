@@ -22,24 +22,28 @@ test_that("ml4t2e_fit uses 3-way split with ensemble + conformal", {
 
     task <- ml4t2e_task_surv(data, time = "time", event = "event", id = "id")
 
-    # Use ensemble="simple" to trigger ensembling but not broken stacking optimization
-    # The 3-way split is still used when ANY ensemble mode + conformal are both enabled
+    # Expect weights to be optimized (stacking enabled)
+    # The 3-way split is used when ANY ensemble mode + conformal are both enabled
     expect_message(
         fit <- ml4t2e_fit(
             task = task,
-            models = c("cox"),
-            ensemble = "simple", # Use simple averaging, not broken stack optimization
+            models = c("cox", "random_forest"),
+            ensemble = "stack",
             conformal_calibration = 0.2,
-            keep_data = TRUE
+            keep_data = TRUE,
+            controls = list(times = c(0.5, 1, 2))
         ),
         "split" # Should mention splitting
     )
 
     expect_s3_class(fit, "t2e_fit")
     expect_true(!is.null(fit$ensemble))
+    expect_equal(fit$ensemble$strategy, "stack")
+    expect_true(!is.null(fit$ensemble$weights))
+    expect_equal(length(fit$ensemble$weights), 2)
 
     # Verify conformal scores were computed
-    expect_true(!is.null(fit$conformal_scores))
+    expect_true(!is.null(fit$conformal))
 })
 
 test_that("Conformal-only still uses 2-way split", {
@@ -97,11 +101,12 @@ test_that("Predictions work correctly with ensemble + conformal calibration", {
         models = c("cox"),
         ensemble = "simple", # Use simple averaging
         conformal_calibration = 0.2,
-        keep_data = TRUE
+        keep_data = TRUE,
+        controls = list(times = c(0.5, 1, 2)) # Ensure grid matches prediction times
     )
 
     # Predictions should work normally
-    preds <- predict(fit, newdata = test_data, times = c(0.5, 1, 2))
+    preds <- predict(fit, newdata = test_data, times = c(0.5, 1, 2), include = "ensemble")
 
     expect_s3_class(preds, "t2e_pred")
     expect_equal(nrow(preds), n_test * 3) # 20 obs * 3 times
@@ -112,7 +117,8 @@ test_that("Predictions work correctly with ensemble + conformal calibration", {
         fit,
         newdata = test_data,
         times = c(0.5, 1, 2),
-        conformal_alpha = 0.1
+        conformal_alpha = 0.1,
+        include = "ensemble"
     )
 
     expect_s3_class(preds_conf, "t2e_pred")

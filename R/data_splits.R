@@ -1,11 +1,3 @@
-#' Data Splitting Utilities for Training
-#'
-#' Functions to handle data splitting for stacking, conformal calibration,
-#' and their combinations. Provides validation and clear error messages.
-#'
-#' @keywords internal
-#' @noRd
-
 #' Split data for ensemble stacking and/or conformal calibration
 #'
 #' Handles three scenarios:

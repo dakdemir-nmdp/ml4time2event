@@ -1,11 +1,3 @@
-#' Input Validation Utilities
-#'
-#' Comprehensive validation functions with informative error messages.
-#' Uses checkmate for type validation when available, falls back to base R.
-#'
-#' @keywords internal
-#' @noRd
-
 #' Validate task object
 #'
 #' Ensures task has required structure and fields.
