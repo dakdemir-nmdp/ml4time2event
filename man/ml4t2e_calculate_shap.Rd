@@ -14,6 +14,8 @@ ml4t2e_calculate_shap(
 )
 }
 \arguments{
+\item{object}{A fitted pipeline produced by \code{ml4t2e_fit_pipeline()} or a \code{t2e_fit} object.}
+
 \item{data}{Data frame of observations to explain.}
 
 \item{time_horizon}{Single positive numeric time horizon used for expected
@@ -26,8 +28,6 @@ time lost calculations.}
 when available.}
 
 \item{...}{Additional arguments forwarded to the underlying SHAP engine.}
-
-\item{pipeline}{A fitted pipeline produced by \code{ml4t2e_fit_pipeline()}.}
 }
 \value{
 An object of class \code{ml4t2e_shap} containing SHAP values, baseline

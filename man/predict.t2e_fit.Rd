@@ -30,8 +30,8 @@ time grid used during training.}
 \item \code{"cif"}: Cumulative incidence (default for competing risk tasks).
 }}
 
-\item{include}{Character vector of models to include. \code{"all"} (default)
-includes all individual models + ensemble.}
+\item{include}{Character vector of models to include. \code{"fit_default"} (default)
+includes the ensemble if available, otherwise all models. Use \code{"all"} to force inclusion of all models.}
 
 \item{conformal_alpha}{Optional alpha for conformal intervals (e.g. 0.05 for 95\%).}
 

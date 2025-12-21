@@ -10,11 +10,6 @@ ml4t2e_calibrate(object, data)
 \item{object}{A \code{t2e_fit} object.}
 
 \item{data}{A data frame to be used for calibration. Must contain the same time/event columns as the training data.}
-
-\item{split}{Optional numeric (0 < split < 1). If provided, and \code{data} is NULL, the original training data (stored in \code{object$task$data})
-will be split, with \code{split} fraction used for calibration. \emph{Note: this requires re-fitting if the model was already trained on all data,
-which this function does NOT do. This argument is reserved for future pipelines where fitting and calibration are coupled.}
-Currently, you must provide \code{data}.}
 }
 \value{
 A \code{t2e_fit} object with a \verb{$conformal} slot containing scores and weights.

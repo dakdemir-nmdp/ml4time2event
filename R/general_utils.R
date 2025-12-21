@@ -117,7 +117,8 @@ listrules <- function(x, i = NULL) {
   tryCatch(
     {
       # Use the internal partykit function to get rules
-      all_rules <- partykit:::.list.rules.party(x)
+      list_rules_party <- utils::getFromNamespace(".list.rules.party", "partykit")
+      all_rules <- list_rules_party(x)
       # Get terminal nodes
       terminal_nodes <- partykit::nodeids(x, terminal = TRUE)
 

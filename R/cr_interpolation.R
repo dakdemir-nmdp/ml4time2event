@@ -7,7 +7,7 @@
 #' @return interpolated CIF values at times x
 #' @importFrom stats approx
 #' @noRd
-cifInterpolator<-function(x, probs, times){
+cifInterpolator <- function(x, probs, times) {
   # Sort times and probs together to handle unsorted input
   if (length(times) > 1) {
     sort_order <- order(times)
@@ -30,10 +30,12 @@ cifInterpolator<-function(x, probs, times){
   # Use stats::approx with ties = "ordered" and rule = 2 for proper handling
   # This will interpolate but stats::approx doesn't propagate NAs correctly
   # We need to post-process to handle NA propagation
-  result <- stats::approx(x = times, y = probs, xout = x,
-                          method = "linear", yleft = 0,
-                          yright = probs[length(probs)],
-                          rule = 2, ties = "ordered")$y
+  result <- stats::approx(
+    x = times, y = probs, xout = x,
+    method = "linear", yleft = 0,
+    yright = probs[length(probs)],
+    rule = 2, ties = "ordered"
+  )$y
 
   # Post-process to propagate NAs: if interpolating between any NA endpoint, set to NA
   for (i in seq_along(x)) {
@@ -79,7 +81,7 @@ cifMatInterpolator <- function(probsMat, times, new_times, enforce_monotonicity 
     stop("probsMat must be a matrix. Got ", class(probsMat), " instead.")
   }
   if (nrow(probsMat) == 0 || ncol(probsMat) == 0) {
-    stop("probsMat must have positive dimensions. Got dimensions: ", paste(dim(probsMat), collapse="x"))
+    stop("probsMat must have positive dimensions. Got dimensions: ", paste(dim(probsMat), collapse = "x"))
   }
   if (!is.numeric(times)) {
     stop("times must be numeric. Got ", class(times), " instead.")
@@ -102,25 +104,25 @@ cifMatInterpolator <- function(probsMat, times, new_times, enforce_monotonicity 
   new_times <- as.vector(new_times)
   n_obs <- ncol(probsMat)
   n_new_times <- length(new_times)
-  result_mat <- matrix(NA_real_, nrow=n_new_times, ncol=n_obs)
+  result_mat <- matrix(NA_real_, nrow = n_new_times, ncol = n_obs)
   for (i in seq_len(n_obs)) {
     probs <- probsMat[, i]
     if (all(is.na(probs))) {
       result_mat[, i] <- NA
       next
     }
-    
+
     # If any NA values and propagate_na is TRUE, set all results to NA
     if (propagate_na && any(is.na(probs))) {
       result_mat[, i] <- NA
       next
     }
-    
+
     # Sort times and probs together (in case they're not already sorted)
     sort_order <- order(times)
     times_sorted <- times[sort_order]
     probs_sorted <- probs[sort_order]
-    
+
     # Add time 0 with CIF 0 if not present
     if (!0 %in% times_sorted) {
       times_aug <- c(0, times_sorted)
@@ -129,40 +131,43 @@ cifMatInterpolator <- function(probsMat, times, new_times, enforce_monotonicity 
       times_aug <- times_sorted
       probs_aug <- probs_sorted
     }
-    
+
     # Explicitly handle time 0
     zero_indices <- which(new_times == 0)
-    
+
     # Interpolate to new times with robust error handling
     if (length(times_aug) < 2) {
       interp_probs <- rep(probs_aug[1], length(new_times))
     } else {
-      interp_probs <- tryCatch({
-        stats::approx(
-          x = times_aug,
-          y = probs_aug,
-          xout = new_times,
-          method = "linear",
-          yleft = 0,
-          yright = if (all(is.na(probs_aug))) NA else utils::tail(probs_aug[!is.na(probs_aug)], 1),
-          rule = 2,
-          ties = "ordered"
-        )$y
-      }, error = function(e) {
-        warning("Interpolation failed for observation ", i, ": ", e$message)
-        rep(NA_real_, length(new_times))
-      })
+      interp_probs <- tryCatch(
+        {
+          stats::approx(
+            x = times_aug,
+            y = probs_aug,
+            xout = new_times,
+            method = "linear",
+            yleft = 0,
+            yright = if (all(is.na(probs_aug))) NA else utils::tail(probs_aug[!is.na(probs_aug)], 1),
+            rule = 2,
+            ties = "ordered"
+          )$y
+        },
+        error = function(e) {
+          warning("Interpolation failed for observation ", i, ": ", e$message)
+          rep(NA_real_, length(new_times))
+        }
+      )
     }
-    
+
     # Force time 0 to have CIF value exactly 0
     if (length(zero_indices) > 0) {
       interp_probs[zero_indices] <- 0
     }
-    
+
     # Store in result matrix
     result_mat[, i] <- interp_probs
   }
-  
+
   # Ensure monotonicity (CIF should be non-decreasing) if requested
   if (enforce_monotonicity && n_new_times > 1) {
     for (i in seq_len(n_obs)) {
@@ -171,7 +176,7 @@ cifMatInterpolator <- function(probsMat, times, new_times, enforce_monotonicity 
       }
     }
   }
-  
+
   # Return the interpolated matrix
   return(result_mat)
 }
@@ -185,7 +190,7 @@ cifMatInterpolator <- function(probsMat, times, new_times, enforce_monotonicity 
 #' @param na.rm logical, whether to remove NAs when averaging.
 #' @return averaged CIF matrix (rows=new_times, cols=observations)
 #' @noRd
-cifMatListAveraging<-function(listprobsMat, type="CumHaz", na.rm = FALSE){
+cifMatListAveraging <- function(listprobsMat, type = "CumHaz", na.rm = FALSE) {
   # Validate type parameter first, regardless of list length
   if (!type %in% c("CumHaz", "prob")) {
     stop("Type must be either 'CumHaz' or 'prob'")
@@ -196,74 +201,78 @@ cifMatListAveraging<-function(listprobsMat, type="CumHaz", na.rm = FALSE){
     warning("Empty list provided to cifMatListAveraging")
     return(NULL)
   }
-  
+
   # Filter out NULL entries
   listprobsMat <- Filter(Negate(is.null), listprobsMat)
-  
+
   # Check if any valid entries remain
   if (length(listprobsMat) == 0) {
     warning("No valid matrices in list after filtering NULL entries")
     return(NULL)
   }
-  
+
   # If only one model, return its predictions directly
   if (length(listprobsMat) == 1) {
     return(listprobsMat[[1]])
   }
-  
+
   # Validate that all elements are matrices with same dimensions
   dims <- lapply(listprobsMat, dim)
   first_dims <- dims[[1]]
   valid_entries <- sapply(dims, function(d) {
     identical(d, first_dims) && length(d) == 2 && all(d > 0)
   })
-  
+
   if (!all(valid_entries)) {
     invalid_indices <- which(!valid_entries)
     # Change warning to error to match test expectations
-    stop("All matrices in listprobsMat must have the same dimensions. Invalid matrix dimensions detected at positions: ", 
-            paste(invalid_indices, collapse=", "),
-            ". Expected dimensions: ", paste(first_dims, collapse="x"))
+    stop(
+      "All matrices in listprobsMat must have the same dimensions. Invalid matrix dimensions detected at positions: ",
+      paste(invalid_indices, collapse = ", "),
+      ". Expected dimensions: ", paste(first_dims, collapse = "x")
+    )
   }
 
   # Check dimensions consistency
   dims <- lapply(listprobsMat, dim)
-  
+
   # Handle cases where some predictions might be vectors not matrices
   is_matrix <- sapply(dims, function(d) !is.null(d) && length(d) == 2)
   if (!all(is_matrix)) {
-      # Change warning to error to match test expectations
-      stop("All elements in listprobsMat must be matrices. Some predictions are not matrices.")
+    # Change warning to error to match test expectations
+    stop("All elements in listprobsMat must be matrices. Some predictions are not matrices.")
   }
-  
-  dim_strings <- sapply(dims, paste, collapse="x")
+
+  dim_strings <- sapply(dims, paste, collapse = "x")
 
   # If dimensions are inconsistent, throw error
   if (length(unique(dim_strings)) > 1) {
-    stop("All matrices in listprobsMat must have the same dimensions. Found dimensions: ",
-         paste(unique(dim_strings), collapse = ", "))
+    stop(
+      "All matrices in listprobsMat must have the same dimensions. Found dimensions: ",
+      paste(unique(dim_strings), collapse = ", ")
+    )
   }
 
-  if (type=="CumHaz"){
+  if (type == "CumHaz") {
     # Create an array to hold cumulative hazards
-    HazzardArray<-array(dim=c(dim(listprobsMat[[1]]),length(listprobsMat)))
-    for (i in seq_along(listprobsMat)){
+    HazzardArray <- array(dim = c(dim(listprobsMat[[1]]), length(listprobsMat)))
+    for (i in seq_along(listprobsMat)) {
       # Calculate cumulative hazard: -log(1 - P)
       # Add small epsilon to avoid log(0)
-      HazzardArray[,,i]<--log(1 - listprobsMat[[i]] + 1e-10)
+      HazzardArray[, , i] <- -log(1 - listprobsMat[[i]] + 1e-10)
     }
     # Calculate the mean cumulative hazard across models
-    MeanHazzard<-apply(HazzardArray, c(1,2),function(x)(mean(x, na.rm = na.rm)))
+    MeanHazzard <- apply(HazzardArray, c(1, 2), function(x) (mean(x, na.rm = na.rm)))
     # Convert mean cumulative hazard back to probability: 1 - exp(-H)
-    NewProbs<-1-exp(-MeanHazzard)
-  } else if (type=="prob"){
+    NewProbs <- 1 - exp(-MeanHazzard)
+  } else if (type == "prob") {
     # Create an array to hold probabilities
-    ProbsArray<-array(dim=c(dim(listprobsMat[[1]]),length(listprobsMat)))
-    for (i in seq_along(listprobsMat)){
-      ProbsArray[,,i]<-listprobsMat[[i]]
+    ProbsArray <- array(dim = c(dim(listprobsMat[[1]]), length(listprobsMat)))
+    for (i in seq_along(listprobsMat)) {
+      ProbsArray[, , i] <- listprobsMat[[i]]
     }
     # Calculate the mean probability across models
-    NewProbs<-apply(ProbsArray, c(1,2),function(x)(mean(x, na.rm = na.rm)))
+    NewProbs <- apply(ProbsArray, c(1, 2), function(x) (mean(x, na.rm = na.rm)))
     # Ensure probabilities are bounded between 0 and 1
     NewProbs <- pmax(pmin(NewProbs, 1.0), 0.0)
   }
@@ -299,7 +308,6 @@ cifMatListAveraging<-function(listprobsMat, type="CumHaz", na.rm = FALSE){
 #' @importFrom stats approx
 #' @noRd
 aalenJohansenCIF <- function(cause_specific_survs, times, event_of_interest) {
-
   # Input validation
   if (!is.list(cause_specific_survs) || length(cause_specific_survs) == 0) {
     stop("'cause_specific_survs' must be a non-empty list of survival matrices")
@@ -308,8 +316,10 @@ aalenJohansenCIF <- function(cause_specific_survs, times, event_of_interest) {
   event_of_interest <- as.character(event_of_interest)
 
   if (!event_of_interest %in% names(cause_specific_survs)) {
-    stop("'event_of_interest' (", event_of_interest, ") not found in cause_specific_survs names: ",
-         paste(names(cause_specific_survs), collapse = ", "))
+    stop(
+      "'event_of_interest' (", event_of_interest, ") not found in cause_specific_survs names: ",
+      paste(names(cause_specific_survs), collapse = ", ")
+    )
   }
 
   # Get dimensions
@@ -332,7 +342,7 @@ aalenJohansenCIF <- function(cause_specific_survs, times, event_of_interest) {
   names(cause_specific_hazards) <- names(cause_specific_survs)
 
   for (k in names(cause_specific_survs)) {
-    S_k <- cause_specific_survs[[k]]  # [times, observations]
+    S_k <- cause_specific_survs[[k]] # [times, observations]
 
     # Initialize hazard matrix
     hazard_k <- matrix(0, nrow = n_times, ncol = n_obs)
@@ -340,7 +350,7 @@ aalenJohansenCIF <- function(cause_specific_survs, times, event_of_interest) {
     # Calculate incremental hazards
     # For t > 1: h(t) = -[S(t) - S(t-1)] / S(t-1)
     for (i in 2:n_times) {
-      S_prev <- S_k[i-1, ]
+      S_prev <- S_k[i - 1, ]
       S_curr <- S_k[i, ]
 
       # Avoid division by zero
@@ -402,9 +412,9 @@ aalenJohansenCIF <- function(cause_specific_survs, times, event_of_interest) {
     } else {
       # CIF(t) = CIF(t-1) + h_j(t) * S_overall(t-1)
       if (n_obs == 1) {
-        CIF[i, 1] <- CIF[i-1, 1] + h_j[i, 1] * S_overall[i-1, 1]
+        CIF[i, 1] <- CIF[i - 1, 1] + h_j[i, 1] * S_overall[i - 1, 1]
       } else {
-        CIF[i, ] <- CIF[i-1, ] + h_j[i, ] * S_overall[i-1, ]
+        CIF[i, ] <- CIF[i - 1, ] + h_j[i, ] * S_overall[i - 1, ]
       }
     }
   }
@@ -435,16 +445,15 @@ aalenJohansenCIF <- function(cause_specific_survs, times, event_of_interest) {
 #' @return matrix of CIF values (rows=times, cols=observations)
 #' @noRd
 aalenJohansenFromCoxModels <- function(cox_models, newdata, times, event_of_interest) {
-  
   event_of_interest <- as.character(event_of_interest)
   n_times <- length(times)
   n_obs <- nrow(newdata)
-  
+
   # Initialize CIF matrix
   cif_matrix <- matrix(0, nrow = n_times, ncol = n_obs)
-  
 
-  
+
+
   # For each observation
   for (i in 1:n_obs) {
     obs_data <- newdata[i, , drop = FALSE]
@@ -453,42 +462,42 @@ aalenJohansenFromCoxModels <- function(cox_models, newdata, times, event_of_inte
       cif_matrix[, i] <- NA_real_
       next
     }
-    
+
     # Calculate cause-specific hazards at each time point
     cause_hazards <- vector("list", length(cox_models))
     names(cause_hazards) <- names(cox_models)
-    
+
     for (cause in names(cox_models)) {
       cox_model <- cox_models[[cause]]
-      
+
       # Get baseline cumulative hazard. This will now error out if newdata is problematic.
       base_surv <- survival::survfit(cox_model, newdata = obs_data)
-      
+
       # Extract hazard increments (Nelson-Aalen style)
       if (length(base_surv$time) > 0 && !any(is.na(base_surv$surv))) {
         # Interpolate baseline cumulative hazard to our time grid
         cum_base_haz <- stats::approx(
-          x = c(0, base_surv$time), 
+          x = c(0, base_surv$time),
           y = c(0, -log(pmax(base_surv$surv, 1e-10))), # Avoid log(0)
-          xout = times, 
-          method = "constant", 
-          f = 0, 
+          xout = times,
+          method = "constant",
+          f = 0,
           rule = 2
         )$y
-        
+
         # Convert to hazard increments
         haz_increments <- diff(c(0, cum_base_haz))
       } else {
         haz_increments <- rep(0, n_times)
       }
-      
+
       cause_hazards[[cause]] <- haz_increments
     }
-    
+
     # Calculate overall survival using all cause-specific hazards
     overall_surv <- rep(1, n_times)
     cum_overall_haz <- 0
-    
+
     for (t in 1:n_times) {
       # Add hazard increment from all causes
       for (cause in names(cause_hazards)) {
@@ -496,16 +505,16 @@ aalenJohansenFromCoxModels <- function(cox_models, newdata, times, event_of_inte
       }
       overall_surv[t] <- exp(-cum_overall_haz)
     }
-    
 
-    
+
+
     # Calculate CIF using Aalen-Johansen formula
     # CIF_j(t) = ∫_0^t S(s-) * λ_j(s) ds
     # Discrete version: CIF_j(t) = Σ_{s≤t} S(s-) * Δλ_j(s)
-    
+
     if (event_of_interest %in% names(cause_hazards)) {
       target_hazards <- cause_hazards[[event_of_interest]]
-      
+
       for (t in 1:n_times) {
         if (t == 1) {
           # At time 0, CIF should be 0
@@ -517,18 +526,19 @@ aalenJohansenFromCoxModels <- function(cox_models, newdata, times, event_of_inte
           }
         } else {
           # CIF(t) = CIF(t-1) + S(t-1) * Δλ_j(t)
-          cif_matrix[t, i] <- cif_matrix[t-1, i] + overall_surv[t-1] * target_hazards[t]
+          cif_matrix[t, i] <- cif_matrix[t - 1, i] + overall_surv[t - 1] * target_hazards[t]
         }
       }
     }
   }
-  
+
   # Ensure CIF is bounded [0, 1] and monotonic
   # Use matrix() to preserve dimensions after pmax/pmin operations
   original_dims <- dim(cif_matrix)
-  cif_matrix <- matrix(pmax(0, pmin(as.vector(cif_matrix), 1)), 
-                       nrow = original_dims[1], ncol = original_dims[2])
-  
+  cif_matrix <- matrix(pmax(0, pmin(as.vector(cif_matrix), 1)),
+    nrow = original_dims[1], ncol = original_dims[2]
+  )
+
   # Ensure monotonicity
   if (n_obs == 1) {
     cif_matrix[, 1] <- cummax(cif_matrix[, 1])
@@ -537,6 +547,6 @@ aalenJohansenFromCoxModels <- function(cox_models, newdata, times, event_of_inte
       cif_matrix[, j] <- cummax(cif_matrix[, j])
     }
   }
-  
+
   return(cif_matrix)
 }

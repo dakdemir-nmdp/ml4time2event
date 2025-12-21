@@ -13,8 +13,8 @@ NULL
 #'   * `"survival"`: Survival probabilities (default for survival tasks).
 #'   * `"risk"`: Risk score (e.g., log-hazard).
 #'   * `"cif"`: Cumulative incidence (default for competing risk tasks).
-#' @param include Character vector of models to include. `"all"` (default)
-#'   includes all individual models + ensemble.
+#' @param include Character vector of models to include. `"fit_default"` (default)
+#'   includes the ensemble if available, otherwise all models. Use `"all"` to force inclusion of all models.
 #' @param conformal_alpha Optional alpha for conformal intervals (e.g. 0.05 for 95%).
 #' @param ... Additional arguments passed to methods.
 #'

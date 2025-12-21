@@ -193,6 +193,14 @@ optimizeSuperLearnerWeights <- function(predictions_list, actual_surv, loss_type
   }
 
   n_models <- length(predictions_list)
+  model_names <- names(predictions_list)
+
+  # Trivial case: only 1 model
+  if (n_models == 1) {
+    w <- c(1.0)
+    names(w) <- model_names
+    return(w)
+  }
 
   if (!is.matrix(actual_surv)) {
     stop("actual_surv must be a matrix of observed survival or CIF values")
@@ -209,7 +217,6 @@ optimizeSuperLearnerWeights <- function(predictions_list, actual_surv, loss_type
     }
   }
 
-  model_names <- names(predictions_list)
   if (is.null(model_names) || any(model_names == "")) {
     stop("predictions_list must be a named list")
   }
@@ -221,12 +228,12 @@ optimizeSuperLearnerWeights <- function(predictions_list, actual_surv, loss_type
     stop("All prediction matrices must share the same dimensions. Offenders: ", paste(bad_models, collapse = ", "))
   }
 
-  # Objective function to minimize
-  objective <- function(weights) {
-    # Ensure weights sum to 1 and are non-negative
-    if (any(weights < 0) || abs(sum(weights) - 1) > 1e-6) {
-      return(.Machine$double.xmax)
-    }
+  # Objective function using Softmax Parameterization
+  # par: Unconstrained vector of length n_models
+  objective <- function(par) {
+    # Softmax to get weights summing to 1 and positive
+    exps <- exp(par - max(par)) # safe exp
+    weights <- exps / sum(exps)
 
     # Compute weighted average
     weighted_pred <- Reduce(`+`, mapply(function(p, w) p * w,
@@ -238,13 +245,11 @@ optimizeSuperLearnerWeights <- function(predictions_list, actual_surv, loss_type
     if (loss_type == "mse") {
       diff_sq <- (weighted_pred - actual_surv)^2
       if (!is.null(weights_matrix)) {
-        # Weighted MSE (Prop. to IPCW Brier Score)
         loss <- sum(weights_matrix * diff_sq, na.rm = TRUE) / sum(weights_matrix, na.rm = TRUE)
       } else {
         loss <- mean(diff_sq, na.rm = TRUE)
       }
     } else if (loss_type == "loglik") {
-      # Binary Cross Entropy
       p_safe <- pmax(pmin(weighted_pred, 1 - 1e-10), 1e-10)
       ll_terms <- actual_surv * log(p_safe) + (1 - actual_surv) * log(1 - p_safe)
       loss <- -mean(ll_terms, na.rm = TRUE)
@@ -255,27 +260,21 @@ optimizeSuperLearnerWeights <- function(predictions_list, actual_surv, loss_type
     loss
   }
 
-  # Initialize with equal weights
-  init_weights <- rep(1 / n_models, n_models)
+  # Initialize: par = 0 implies equal weights
+  init_par <- rep(0, n_models)
 
-  # Optimize with constraints
+  # Optimize (BFGS is fine for unconstrained)
   result <- optim(
-    par = init_weights,
+    par = init_par,
     fn = objective,
-    method = "L-BFGS-B",
-    lower = rep(0, n_models),
-    upper = rep(1, n_models)
+    method = "BFGS"
   )
 
-  # Normalize to sum to 1
-  weight_sum <- sum(result$par)
-  if (weight_sum <= 0 || !is.finite(weight_sum)) {
-    warning("Super learner weight optimization produced invalid weights, using equal weights")
-    optimal_weights <- rep(1 / n_models, n_models)
-  } else {
-    optimal_weights <- result$par / weight_sum
-  }
-  names(optimal_weights) <- names(predictions_list)
+  # Convert optimal par back to weights
+  best_par <- result$par
+  exps <- exp(best_par - max(best_par))
+  optimal_weights <- exps / sum(exps)
+  names(optimal_weights) <- model_names
 
   optimal_weights
 }

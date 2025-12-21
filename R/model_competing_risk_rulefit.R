@@ -241,7 +241,8 @@ RulefitCompetingRiskModel <- R6::R6Class(
         return(list())
     }
     if (exists(".list.rules.party", where = asNamespace("partykit"), mode = "function")) {
-        rule_strings <- partykit:::.list.rules.party(x)
+        list_rules_party <- utils::getFromNamespace(".list.rules.party", "partykit")
+        rule_strings <- list_rules_party(x)
         node_ids <- names(partykit::nodeids(x, terminal = TRUE))
         names(rule_strings) <- node_ids
         return(rule_strings)

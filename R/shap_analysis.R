@@ -162,7 +162,7 @@ ml4t2e_shap_predict_fn <- function(object,
 #' pipeline by wrapping the tidy survival predictions in a prediction function
 #' suitable for `fastshap` or `kernelshap`.
 #'
-#' @param pipeline A fitted pipeline produced by `ml4t2e_fit_pipeline()`.
+#' @param object A fitted pipeline produced by `ml4t2e_fit_pipeline()` or a `t2e_fit` object.
 #' @param data Data frame of observations to explain.
 #' @param time_horizon Single positive numeric time horizon used for expected
 #'   time lost calculations.

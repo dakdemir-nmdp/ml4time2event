@@ -213,10 +213,6 @@ ml4t2e_weighted_quantile <- function(x, w, alpha) {
 #'
 #' @param object A `t2e_fit` object.
 #' @param data A data frame to be used for calibration. Must contain the same time/event columns as the training data.
-#' @param split Optional numeric (0 < split < 1). If provided, and `data` is NULL, the original training data (stored in `object$task$data`)
-#'   will be split, with `split` fraction used for calibration. *Note: this requires re-fitting if the model was already trained on all data,
-#'   which this function does NOT do. This argument is reserved for future pipelines where fitting and calibration are coupled.*
-#'   Currently, you must provide `data`.
 #'
 #' @return A `t2e_fit` object with a `$conformal` slot containing scores and weights.
 #' @export

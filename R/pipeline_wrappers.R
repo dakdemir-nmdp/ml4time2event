@@ -29,7 +29,6 @@
 #' @return A fitted `T2EPipeline` object (also inheriting the
 #'   `ml4t2e_pipeline` class for S3 helpers).
 #' @keywords internal
-#' @noRd
 #' @export
 ml4t2e_fit_pipeline <- function(data,
                                 analysis_type = c("survival", "competing_risks"),

@@ -3,6 +3,7 @@
 #' Engines register themselves at package load so that the public API can look up
 #' constructors, metadata, and dependencies.
 #'
+#' @importFrom methods as
 #' @keywords internal
 .t2e_model_registry <- new.env(parent = emptyenv())
 .t2e_model_registry$models <- list()

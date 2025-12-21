@@ -248,40 +248,9 @@ timedepConcordance <- function(predsurv, pred_times, obstimes, obsevents, TestMa
 }
 
 
-#' Brier Score for Survival Predictions
-#'
-#' Computes mean squared error between predicted survival probabilities and
-#' observed binary event status at specified time points. Lower values indicate
-#' better calibration.
-#'
-#' **Formula**:
-#' \eqn{BS(t) = E[(S(t|X) - Y(t))^2]}
-#'
-#' where \eqn{S(t|X)} is predicted survival probability and \eqn{Y(t)} is binary
-#' event status at time \eqn{t}.
-#'
-#' **Interpretation**:
-#' - Range: 0 (perfect calibration) to 1 (worst)
-#' - Combines discrimination and calibration
-#' - 0.25 at all times = baseline for completely random predictions
-#'
-#' @param predsurv Matrix of predicted survival probabilities (rows = times, cols = observations)
-#' @param pred_times Numeric vector of time points
-#' @param obstimes Observed times
-#' @param obsevents Binary event indicator
-#' @param eval_times Optional evaluation time points. If NULL, computed at all `pred_times`.
-#' @param TestMat Optional test matrix (currently unused)
-#'
-#' @return List of class `ml4time2event_brier` containing Brier scores and time grid
-#'
-#' @references
-#' Brier, G. W. (1950). "Verification of forecasts expressed in terms of
-#' probability." *Monthly Weather Review*, 78(1), 1–3.
-#'
-#' @keywords internal
-#'
 
 # Internal helpers for IPCW
+#' @noRd
 .fit_censoring_km <- function(times, events) {
   # Fit KM for censoring (status=0 is event)
   # 0 = censored for survival, so status = 0 is the event of interest for censoring
