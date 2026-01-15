@@ -164,48 +164,7 @@ autoplot(surv_fit, include = c("ensemble", "cox", "random_forest"))
 autoplot(surv_preds_val, include = "ensemble")
 ```
 
-```
-
-# 6. Conformal Prediction Bands
-
-We can also generate calibrated confidence bands for the survival curves using conformal prediction. This requires fitting the model with a calibration split.
-
-```{r conformal}
-# Fit with conformal calibration (using 20% of data for calibration)
-surv_fit_conformal <- ml4t2e_fit(
-  task = surv_task,
-  models = c("cox", "random_forest"),
-  ensemble = "auto",
-  controls = list(times = seq(0, 1000, length.out = 75)),
-  conformal_calibration = 0.2,
-  keep_data = TRUE
-)
-
-# Predict with 90% confidence bands (alpha = 0.1)
-preds_conformal <- predict(
-  surv_fit_conformal,
-  newdata = lung_test[1:3, ], # Predict for first 3 patients
-  times = seq(0, 1000, length.out = 75),
-  type = "survival",
-  include = "ensemble",
-  conformal_alpha = 0.1
-)
-
-# Visualize bands for the first patient
-library(ggplot2)
-preds_p1 <- preds_conformal %>% filter(id == lung_test$id[1])
-
-ggplot(preds_p1, aes(x = time, y = surv)) +
-  geom_line(color = "blue") +
-  geom_ribbon(aes(ymin = lower, ymax = upper), alpha = 0.2, fill = "blue") +
-  labs(
-    title = "Survival Curve with 90% Conformal Confidence Bands",
-    y = "Survival Probability", x = "Time"
-  ) +
-  theme_minimal()
-```
-
-# 7. Permutation-based feature importance
+# 6. Permutation-based feature importance
 
 Permutation importance is built into the core API for survival fits.
 
@@ -221,7 +180,7 @@ surv_importance
 autoplot(surv_importance)
 ```
 
-# 8. Pipelines with recipes and resampling
+# 7. Pipelines with recipes and resampling
 
 For workflows that require preprocessing and resampling, wrap everything in a `T2EPipeline`. Recipes are optional, but when supplied they are baked automatically during prediction/evaluation.
 
@@ -253,7 +212,7 @@ surv_pipeline$evaluate(
 )
 ```
 
-# 9. Persist results
+# 8. Persist results
 
 Fits are regular R objects; use `ml4t2e_save()` / `ml4t2e_load()` for the primary API or base R `saveRDS()` for ad-hoc serialization.
 
