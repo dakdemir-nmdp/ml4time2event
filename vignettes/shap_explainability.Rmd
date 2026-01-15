@@ -1,6 +1,6 @@
 ---
 title: "SHAP-Based Explainability for Time-to-Event Pipelines"
-author: "ml4time2event team"
+author: "Deniz Akdemir"
 date: "`r Sys.Date()`"
 output:
   rmarkdown::html_document:

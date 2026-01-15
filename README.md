@@ -1,11 +1,5 @@
 # ml4time2event
 
-<!-- badges: start -->
-[![R-CMD-check](https://github.com/dakdemir-nmdp/ml4time2event/actions/workflows/R-CMD-check.yml/badge.svg)](https://github.com/dakdemir-nmdp/ml4time2event/actions/workflows/R-CMD-check.yml)
-[![test-coverage](https://github.com/dakdemir-nmdp/ml4time2event/actions/workflows/test-coverage.yml/badge.svg)](https://github.com/dakdemir-nmdp/ml4time2event/actions/workflows/test-coverage.yml)
-[![lint](https://github.com/dakdemir-nmdp/ml4time2event/actions/workflows/lint.yml/badge.svg)](https://github.com/dakdemir-nmdp/ml4time2event/actions/workflows/lint.yml)
-<!-- badges: end -->
-
 **Machine learning for time-to-event analysis**. Provides tools for predicting survival outcomes and competing risks using statistical and machine learning methods.
 
 ## Limitations
@@ -93,19 +87,6 @@ renv::restore()
 Packages install into the project-local `renv/library` directory (configured via `.Renviron`) so the environment stays isolated from your global R library. Some dependencies, such as `igraph`, may require external toolchains (e.g., `gfortran`) when binaries are unavailable on your platform; install those system requirements before running `renv::restore()`.
 
 When you change dependencies, run `renv::snapshot()` to update `renv.lock` so teammates get the same versions.
-
-## Docker Support
-
-This package includes a Dockerized environment for reproducible research and development. It uses `renv` to ensure the exact same package versions are used.
-
- To start the RStudio Server container:
- ```bash
- docker-compose up --build
- ```
-
- Then access RStudio at [http://localhost:8787](http://localhost:8787) (user: `rstudio`, password: `ml4time2event`).
-
- For more details, see [README_DOCKER.md](README_DOCKER.md).
 
 ## Quickstart (3–5 lines)
 

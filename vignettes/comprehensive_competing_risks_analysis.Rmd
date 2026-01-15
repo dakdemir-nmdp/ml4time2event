@@ -1,6 +1,6 @@
 ---
 title: "Comprehensive Competing-Risks Analysis with ml4time2event"
-author: "ml4time2event team"
+author: "Deniz Akdemir"
 date: "`r Sys.Date()`"
 output:
   rmarkdown::html_vignette:

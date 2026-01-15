@@ -1,7 +1,7 @@
 ---
 title: "BART Implementation Summary - Quick Reference"
 subtitle: "Key Points for Meeting with Dr. Rodney Sparapani"
-author: "ml4time2event Development Team"
+author: "Deniz Akdemir"
 date: "`r Sys.Date()`"
 output:
   word_document:
