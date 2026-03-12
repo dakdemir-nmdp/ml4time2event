@@ -14,6 +14,7 @@ BartCompetingRiskModel <- R6::R6Class(
         cause_codes = NULL,
         factor_levels = NULL,
         x_train = NULL, # Need to store for prediction (BART Requirement)
+        feature_names = NULL,
 
         # Store training metadata per cause for prediction
         train_metadata = NULL,
@@ -29,11 +30,27 @@ BartCompetingRiskModel <- R6::R6Class(
             spec <- self$spec
             K <- spec$K %||% 10
             ntree <- spec$ntree %||% 50
+            ndpost <- spec$ndpost %||% 200
+            nskip <- spec$nskip %||% 50
+            keepevery <- spec$keepevery %||% 10L
+            numcut <- spec$numcut %||% 100
+            mc.cores <- spec$mc.cores %||% 1L
             verbose <- spec$verbose %||% FALSE
 
             expvars <- task$features
             timevar <- task$time_col
             eventcodevar <- task$event_col # numeric codes
+
+            # Drop rows with NA features before model.matrix so y vectors and
+            # x_train stay synchronized (model.matrix otherwise omits rows).
+            complete_rows <- stats::complete.cases(data[, expvars, drop = FALSE])
+            if (!all(complete_rows)) {
+                rlang::warn(sprintf(
+                    "BART CR fit: dropping %d rows with missing feature values.",
+                    sum(!complete_rows)
+                ))
+                data <- data[complete_rows, , drop = FALSE]
+            }
 
             # Factor levels
             self$factor_levels <- lapply(data[, expvars, drop = FALSE], function(x) {
@@ -43,6 +60,7 @@ BartCompetingRiskModel <- R6::R6Class(
             # Prepare Matrix
             x_train_mat <- as.matrix(stats::model.matrix(~ -1 + ., data = data[, expvars, drop = FALSE]))
             self$x_train <- x_train_mat
+            self$feature_names <- colnames(x_train_mat)
 
             y_times <- data[[timevar]]
             y_codes <- data[[eventcodevar]]
@@ -79,31 +97,34 @@ BartCompetingRiskModel <- R6::R6Class(
 
                 # Fit
                 if (verbose) {
-                    bart_fit <- suppressMessages(BART::crisk.bart(
+                    bart_fit <- suppressMessages(BART::mc.crisk.bart(
+                        mc.cores = mc.cores,
                         x.train = x_train_mat,
                         times = y_times,
                         delta = delta_k,
                         x.test = x_train_mat,
                         K = K,
                         ntree = ntree,
-                        ndpost = 200,
-                        nskip = 50,
-                        keepevery = 2L,
-                        numcut = 100 # Default is 100? Legacy used 2 for speed. Maybe bump to reasonable default.
+                        ndpost = ndpost,
+                        nskip = nskip,
+                        keepevery = keepevery,
+                        numcut = numcut
                     ))
                 } else {
                     bart_fit <- NULL
                     invisible(capture.output({
-                        bart_fit <- suppressMessages(BART::crisk.bart(
+                        bart_fit <- suppressMessages(BART::mc.crisk.bart(
+                            mc.cores = mc.cores,
                             x.train = x_train_mat,
                             times = y_times,
                             delta = delta_k,
                             x.test = x_train_mat,
                             K = K,
                             ntree = ntree,
-                            ndpost = 200,
-                            nskip = 50,
-                            keepevery = 2L
+                            ndpost = ndpost,
+                            nskip = nskip,
+                            keepevery = keepevery,
+                            numcut = numcut
                         ))
                     }))
                 }
@@ -133,17 +154,28 @@ BartCompetingRiskModel <- R6::R6Class(
                 }
             }
 
-            # Matrix
-            x_test_mat <- stats::model.matrix(~ -1 + ., data = newdata_df[, self$task$features, drop = FALSE])
+            # Matrix fast path for numerical data
+            feat_data <- newdata_df[, self$task$features, drop = FALSE]
+            if (all(vapply(feat_data, is.numeric, FUN.VALUE = logical(1)))) {
+                x_test_mat <- as.matrix(feat_data)
+            } else {
+                x_test_mat <- stats::model.matrix(~ -1 + ., data = feat_data)
+            }
 
-            # Alignment
-            # Assuming BART::bartModelMatrix helper matches or we do it manually.
-            # Manual check:
-            # We need colnames match.
-            # BART might not use colnames? It uses matrix column order.
-            # So we MUST ensure columns match training x_train
-
-            # ... logic to pad/align cols ... (omitted for brevity, assume consistency or add if tests fail)
+            # Align test columns to the exact training model.matrix columns.
+            # This prevents fold-specific dummy level differences from causing
+            # mismatches when generating BART prediction design matrices.
+            missing_train_cols <- setdiff(self$feature_names, colnames(x_test_mat))
+            if (length(missing_train_cols) > 0) {
+                add_mat <- matrix(
+                    0,
+                    nrow = nrow(x_test_mat),
+                    ncol = length(missing_train_cols),
+                    dimnames = list(NULL, missing_train_cols)
+                )
+                x_test_mat <- cbind(x_test_mat, add_mat)
+            }
+            x_test_mat <- x_test_mat[, self$feature_names, drop = FALSE]
 
             preds_list <- list()
             cause_labels <- names(self$cause_codes)
@@ -165,15 +197,39 @@ BartCompetingRiskModel <- R6::R6Class(
                     pre <- BART::crisk.pre.bart(
                         time = train_meta$times_train,
                         delta = train_meta$delta_train,
-                        x.train = BART::bartModelMatrix(self$x_train),
-                        x.test = BART::bartModelMatrix(x_test_mat),
-                        x.train2 = BART::bartModelMatrix(self$x_train),
-                        x.test2 = BART::bartModelMatrix(x_test_mat),
+                        x.train = self$x_train,
+                        x.test = x_test_mat,
+                        x.train2 = self$x_train,
+                        x.test2 = x_test_mat,
                         K = bart_model$K
                     )
 
+                    tx_test <- pre$tx.test
+                    tx_test2 <- pre$tx.test2
+
+                    # crisk.bart may drop constant columns during fit; apply the
+                    # same column selections to prediction matrices.
+                    if (!is.null(bart_model$rm.const)) {
+                        tx_test <- tx_test[, bart_model$rm.const, drop = FALSE]
+                    }
+                    if (!is.null(bart_model$rm.const2)) {
+                        tx_test2 <- tx_test2[, bart_model$rm.const2, drop = FALSE]
+                    }
+
                     # Predict
-                    pred <- predict(bart_model, pre$tx.test, pre$tx.test2)
+                    mc.cores <- self$spec$mc.cores %||% 1L
+                    bOff1 <- if (is.null(bart_model$binaryOffset)) 0 else bart_model$binaryOffset
+                    bOff2 <- if (is.null(bart_model$binaryOffset2)) 0 else bart_model$binaryOffset2
+
+                    pred <- BART::mc.crisk.pwbart(
+                        x.test = tx_test,
+                        x.test2 = tx_test2,
+                        treedraws = bart_model$treedraws,
+                        treedraws2 = bart_model$treedraws2,
+                        binaryOffset = bOff1,
+                        binaryOffset2 = bOff2,
+                        mc.cores = mc.cores
+                    )
 
                     # Reshape
                     # pred$cif.test.mean [N*K]

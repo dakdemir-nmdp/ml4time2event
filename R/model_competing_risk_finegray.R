@@ -61,6 +61,18 @@ FineGrayCompetingRiskModel <- R6::R6Class(
             timevar <- task$time_col
             eventvar <- task$event_col
 
+            # Keep feature matrix and outcome vectors synchronized.
+            # model.matrix() omits rows with NA by default; if we don't subset
+            # first, assigning the projected matrix into model_df will fail.
+            complete_rows <- stats::complete.cases(data[, expvars, drop = FALSE])
+            if (!all(complete_rows)) {
+                rlang::warn(sprintf(
+                    "Fine-Gray fit: dropping %d rows with missing feature values.",
+                    sum(!complete_rows)
+                ))
+                data <- data[complete_rows, , drop = FALSE]
+            }
+
             # 1. Prepare Matrix (Common for all causes, X is same)
             XYTrain <- data
             XYTrain[[eventvar]] <- as.numeric(XYTrain[[eventvar]])
@@ -125,12 +137,31 @@ FineGrayCompetingRiskModel <- R6::R6Class(
         predict_cif = function(newdata, times, set = "test", ...) {
             private$ensure_fitted()
             complete_data <- .ensure_prediction_data(newdata, self$task)
-            n_obs <- nrow(complete_data)
             req_times <- if (is.null(times)) self$time_grid else sort(unique(as.numeric(times)))
+
+            feature_frame <- complete_data[, self$task$features, drop = FALSE]
+            complete_idx <- stats::complete.cases(feature_frame)
+            id_all <- complete_data[[self$task$id_col]]
+
+            n_obs <- sum(complete_idx)
+            if (n_obs == 0) {
+                missing_list <- lapply(names(self$model), function(cause) {
+                    new_cif_prediction(
+                        id = rep(id_all, each = length(req_times)),
+                        time = rep(req_times, times = length(id_all)),
+                        cause = rep(cause, length(id_all) * length(req_times)),
+                        cif = rep(NA_real_, length(id_all) * length(req_times)),
+                        model = rep("fine_gray", length(id_all) * length(req_times)),
+                        ensemble = FALSE,
+                        set = set
+                    )
+                })
+                return(dplyr::bind_rows(missing_list))
+            }
 
             # Prepare Matrix
             expvars <- self$task$features
-            covmat <- stats::model.matrix(~ -1 + ., data = complete_data[, expvars, drop = FALSE])
+            covmat <- stats::model.matrix(~ -1 + ., data = complete_data[complete_idx, expvars, drop = FALSE])
 
             # Match columns
             expected_cols <- names(self$scaling$mean)
@@ -166,7 +197,16 @@ FineGrayCompetingRiskModel <- R6::R6Class(
             # I'll rely on the fact that coefs match the design matrix 'cov'.
 
             # Wait, if some models failed, I check first valid one.
-            valid_model <- self$model[[1]]
+            valid_model <- NULL
+            for (m in self$model) {
+                if (!is.null(m)) {
+                    valid_model <- m
+                    break
+                }
+            }
+            if (is.null(valid_model)) {
+                rlang::abort("Fine-Gray prediction failed: no fitted cause-specific model is available.")
+            }
             n_features_model <- length(valid_model$coef)
 
             Feat <- (covmat_scaled %*% self$loadings)[, 1:n_features_model, drop = FALSE]
@@ -233,7 +273,7 @@ FineGrayCompetingRiskModel <- R6::R6Class(
 
                 # Flatten column-major [times, obs] -> t1_obs1, t2_obs1...
                 cif_vec <- as.vector(Cif_mat)
-                id_col <- complete_data[[self$task$id_col]]
+                id_col <- id_all[complete_idx]
 
                 preds_list[[length(preds_list) + 1]] <- new_cif_prediction(
                     id = rep(id_col, each = length(req_times)),
@@ -246,7 +286,28 @@ FineGrayCompetingRiskModel <- R6::R6Class(
                 )
             }
 
-            dplyr::bind_rows(preds_list)
+            preds_complete <- dplyr::bind_rows(preds_list)
+
+            if (!all(complete_idx)) {
+                missing_ids <- id_all[!complete_idx]
+                rlang::warn(glue::glue(
+                    "Omitting {length(missing_ids)} rows with missing predictors for engine 'fine_gray'."
+                ))
+                missing_list <- lapply(names(self$model), function(cause) {
+                    new_cif_prediction(
+                        id = rep(missing_ids, each = length(req_times)),
+                        time = rep(req_times, times = length(missing_ids)),
+                        cause = rep(cause, length(missing_ids) * length(req_times)),
+                        cif = rep(NA_real_, length(missing_ids) * length(req_times)),
+                        model = rep("fine_gray", length(missing_ids) * length(req_times)),
+                        ensemble = FALSE,
+                        set = set
+                    )
+                })
+                preds_complete <- dplyr::bind_rows(preds_complete, dplyr::bind_rows(missing_list))
+            }
+
+            preds_complete
         },
         model_info = function() {
             info <- super$model_info()

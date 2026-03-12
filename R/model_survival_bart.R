@@ -17,6 +17,7 @@ BartSurvivalModel <- R6::R6Class(
     delta_train = NULL,
     varprof = NULL,
     feature_names = NULL,
+    bart_feature_names = NULL,
     fit = function(task, time_grid, ...) {
       super$fit(task = task, ...)
       self$task <- task
@@ -29,6 +30,10 @@ BartSurvivalModel <- R6::R6Class(
       spec <- self$spec
       K <- spec$K %||% 10
       ntree <- spec$ntree %||% 50
+      ndpost <- spec$ndpost %||% 200
+      nskip <- spec$nskip %||% 50
+      keepevery <- spec$keepevery %||% 10L
+      mc.cores <- spec$mc.cores %||% 1L
       verbose <- spec$verbose %||% FALSE
 
       # Data Prep
@@ -41,6 +46,19 @@ BartSurvivalModel <- R6::R6Class(
         if (is.factor(x)) levels(x) else NULL
       })
 
+      # Drop rows with NA features BEFORE model.matrix so that times_vec /
+      # x_train_mat stay in sync.  (model.matrix uses na.action=na.omit by
+      # default and silently shortens the matrix, which makes
+      # length(times) != nrow(x.train) and breaks surv.pre.bart.)
+      complete_rows <- stats::complete.cases(data[, expvars, drop = FALSE])
+      if (!all(complete_rows)) {
+        rlang::warn(sprintf(
+          "BART fit: dropping %d rows with missing feature values.",
+          sum(!complete_rows)
+        ))
+        data <- data[complete_rows, , drop = FALSE]
+      }
+
       times_vec <- data[[timevar]]
       delta_vec <- as.integer(data[[eventvar]] == 1)
 
@@ -49,32 +67,41 @@ BartSurvivalModel <- R6::R6Class(
       x_train_mat <- as.matrix(stats::model.matrix(~ -1 + ., data = data[, expvars, drop = FALSE]))
       self$feature_names <- colnames(x_train_mat)
 
+      # Capture which columns survive bartModelMatrix (rm.const / rm.dup) so
+      # we can align the test matrix to the exact same columns during predict.
+      # surv.bart calls bartModelMatrix internally; if we don't mirror that here
+      # the test matrix ends up with a different column count and predict fails.
+      x_train_bart <- BART::bartModelMatrix(x_train_mat)
+      self$bart_feature_names <- colnames(x_train_bart)
+
       # Fit
       bart_fit <- NULL
       if (verbose) {
-        bart_fit <- suppressMessages(BART::surv.bart(
+        bart_fit <- suppressMessages(BART::mc.surv.bart(
+          mc.cores = mc.cores,
           x.train = x_train_mat,
           times = times_vec,
           delta = delta_vec,
           x.test = x_train_mat, # minimal dummy
           K = K,
           ntree = ntree,
-          ndpost = 200,
-          nskip = 50,
-          keepevery = 2L
+          ndpost = ndpost,
+          nskip = nskip,
+          keepevery = keepevery
         ))
       } else {
         invisible(capture.output({
-          bart_fit <- suppressMessages(BART::surv.bart(
+          bart_fit <- suppressMessages(BART::mc.surv.bart(
+            mc.cores = mc.cores,
             x.train = x_train_mat,
             times = times_vec,
             delta = delta_vec,
             x.test = x_train_mat,
             K = K,
             ntree = ntree,
-            ndpost = 200,
-            nskip = 50,
-            keepevery = 2L
+            ndpost = ndpost,
+            nskip = nskip,
+            keepevery = keepevery
           ))
         }))
       }
@@ -109,31 +136,46 @@ BartSurvivalModel <- R6::R6Class(
       }
 
       # Model Matrix
-      x_test_mat <- stats::model.matrix(~ -1 + ., data = newdata_df[, self$task$features, drop = FALSE])
+      # Fast-path for numeric-only features to avoid slow model.matrix calls at inference
+      feat_data <- newdata_df[, self$task$features, drop = FALSE]
+      if (all(vapply(feat_data, is.numeric, FUN.VALUE = logical(1)))) {
+        x_test_mat <- as.matrix(feat_data)
+      } else {
+        x_test_mat <- stats::model.matrix(~ -1 + ., data = feat_data)
+      }
 
-      # Align columns?
-      # BART::bartModelMatrix handles some of this if factors are consistent.
-      # But if model matrix dropped columns (all 0 levels), we might have issues.
-      # Strict alignment
-      missing_cols <- setdiff(self$feature_names, colnames(x_test_mat))
-      if (length(missing_cols) > 0) {
-        add_mat <- matrix(0, nrow = nrow(x_test_mat), ncol = length(missing_cols))
-        colnames(add_mat) <- missing_cols
+      # Align test columns to the exact training model.matrix columns used in
+      # fit().  This is required so surv.pre.bart() can build tx.test with the
+      # same structure expected by predict.survbart().
+      missing_train_cols <- setdiff(self$feature_names, colnames(x_test_mat))
+      if (length(missing_train_cols) > 0) {
+        add_mat <- matrix(0,
+          nrow = nrow(x_test_mat), ncol = length(missing_train_cols),
+          dimnames = list(NULL, missing_train_cols)
+        )
         x_test_mat <- cbind(x_test_mat, add_mat)
       }
       x_test_mat <- x_test_mat[, self$feature_names, drop = FALSE]
 
-      # Prepare BART prediction
+      # Prepare BART prediction matrix. x.train is required here; omitting it
+      # can produce a malformed tx.test and trigger a column-mismatch error in
+      # predict.survbart().  Pass events= to reuse the fitted model time grid.
       pre <- BART::surv.pre.bart(
         times = self$times_train,
         delta = self$delta_train,
-        x.train = BART::bartModelMatrix(self$x_train),
-        x.test = BART::bartModelMatrix(x_test_mat),
-        K = self$model$K
+        x.train = self$x_train,
+        x.test = x_test_mat,
+        events = self$model$times
       )
 
-      # Predict
-      pred <- predict(self$model, pre$tx.test)
+      # Predict using optimized C++ multi-threaded backend
+      mc.cores <- self$spec$mc.cores %||% 1L
+      pred <- BART::mc.surv.pwbart(
+        x.test = pre$tx.test,
+        treedraws = self$model$treedraws,
+        binaryOffset = self$model$binaryOffset,
+        mc.cores = mc.cores
+      )
 
       # Extract mean survival
       # pred$surv.test.mean is vector [patient1_times, patient2_times...]

@@ -13,6 +13,7 @@ RandomForestCompetingRiskModel <- R6::R6Class(
         task = NULL,
         cause_codes = NULL,
         varprof = NULL,
+        factor_levels = NULL,
         fit = function(task, time_grid, ...) {
             super$fit(task = task, ...)
 
@@ -52,6 +53,10 @@ RandomForestCompetingRiskModel <- R6::R6Class(
                     data_fit[[col]] <- as.factor(data_fit[[col]])
                 }
             }
+
+            self$factor_levels <- lapply(data_fit[, features, drop = FALSE], function(x) {
+                if (is.factor(x)) levels(x) else NULL
+            })
 
             # Using standard Surv formula with data_fit
             # Note: variable names in formula must match data
@@ -129,59 +134,95 @@ RandomForestCompetingRiskModel <- R6::R6Class(
                 if (is.character(complete_data[[col]])) {
                     complete_data[[col]] <- as.factor(complete_data[[col]])
                 }
+                levels_train <- self$factor_levels[[col]]
+                if (!is.null(levels_train) && col %in% colnames(complete_data)) {
+                    complete_data[[col]] <- factor(as.character(complete_data[[col]]), levels = levels_train)
+                }
             }
+
+            feature_frame <- complete_data[, self$task$features, drop = FALSE]
+            complete_idx <- stats::complete.cases(feature_frame)
+
+            ids_all <- complete_data[[self$task$id_col]]
+            ids_complete <- ids_all[complete_idx]
+            pred_data <- complete_data[complete_idx, , drop = FALSE]
 
             cause_labels <- names(self$cause_codes)
             preds_list <- list()
-            id_complete <- complete_data[[self$task$id_col]]
 
             for (cause_label in cause_labels) {
                 model <- self$model[[cause_label]]
                 cause_code <- self$cause_codes[[cause_label]]
+                cif_complete <- matrix(
+                    NA_real_,
+                    nrow = length(ids_complete),
+                    ncol = length(target_times)
+                )
 
-                if (is.null(model)) {
-                    cif_vec <- rep(NA_real_, length(id_complete) * length(target_times))
-                } else {
-                    pred_obj <- randomForestSRC::predict.rfsrc(model, newdata = complete_data)
+                if (!is.null(model) && nrow(pred_data) > 0) {
+                    pred_obj <- randomForestSRC::predict.rfsrc(model, newdata = pred_data)
 
-                    # Extract CIF for specific cause
-                    # pred_obj$cif is [obs, times, cause]
-                    # Cause index:
-                    # rfsrc usually names causes as "CIF.1", "CIF.2".
-                    # We need to find the column corresponding to cause_code
+                    n_pred <- dim(pred_obj$cif)[1]
+                    if (!is.null(n_pred) && n_pred > 0) {
 
-                    cif_col_name <- paste0("CIF.", cause_code)
-                    if (!cif_col_name %in% dimnames(pred_obj$cif)[[3]]) {
-                        # Fallback: maybe causes are indices?
-                        # Just map by numeric index if names fail?
-                        # Risky.
-                        # Log warning and return NA
-                        cif_vals <- matrix(NA, nrow = length(id_complete), ncol = length(pred_obj$time.interest))
-                    } else {
-                        cif_vals <- pred_obj$cif[, , cif_col_name] # [obs, times]
+                        # Extract CIF for specific cause
+                        # pred_obj$cif is [obs, times, cause]
+                        # Cause index:
+                        # rfsrc usually names causes as "CIF.1", "CIF.2".
+                        # We need to find the column corresponding to cause_code
+
+                        cif_col_name <- paste0("CIF.", cause_code)
+                        if (!cif_col_name %in% dimnames(pred_obj$cif)[[3]]) {
+                            # Fallback: if cause dimension names are unavailable,
+                            # return NA for this cause.
+                            cif_vals <- matrix(NA, nrow = n_pred, ncol = length(pred_obj$time.interest))
+                        } else {
+                            cif_vals <- pred_obj$cif[, , cif_col_name] # [obs, times]
+                        }
+
+                        n_use <- min(nrow(cif_vals), length(ids_complete))
+                        cif_vals <- cif_vals[seq_len(n_use), , drop = FALSE]
+
+                        # Interpolate to target_times
+                        base_times <- c(0, pred_obj$time.interest)
+                        # Add 0 to cif_vals (time 0 = 0)
+                        cif_vals <- cbind(0, cif_vals) # now [obs, n_times+1]
+
+                        # We need [times, obs] for interpolator
+                        cif_vals_t <- t(cif_vals) # [times, obs]
+
+                        cif_interp <- cifMatInterpolator(cif_vals_t, base_times, target_times)
+                        cif_complete[seq_len(n_use), ] <- t(cif_interp[, seq_len(n_use), drop = FALSE])
                     }
-
-                    # Interpolate to target_times
-                    base_times <- c(0, pred_obj$time.interest)
-                    # Add 0 to cif_vals (time 0 = 0)
-                    cif_vals <- cbind(0, cif_vals) # now [obs, n_times+1]
-
-                    # We need [times, obs] for interpolator
-                    cif_vals_t <- t(cif_vals) # [times, obs]
-
-                    cif_interp <- cifMatInterpolator(cif_vals_t, base_times, target_times)
-                    cif_vec <- as.vector(cif_interp)
                 }
 
-                preds_list[[length(preds_list) + 1]] <- new_cif_prediction(
-                    id = rep(id_complete, each = length(target_times)),
-                    time = rep(target_times, times = length(id_complete)),
-                    cause = rep(cause_label, length(id_complete) * length(target_times)),
+                cif_vec <- as.vector(t(cif_complete))
+
+                preds_complete <- new_cif_prediction(
+                    id = rep(ids_complete, each = length(target_times)),
+                    time = rep(target_times, times = length(ids_complete)),
+                    cause = rep(cause_label, length(ids_complete) * length(target_times)),
                     cif = cif_vec,
-                    model = rep("random_forest", length(id_complete) * length(target_times)),
+                    model = rep("random_forest", length(ids_complete) * length(target_times)),
                     ensemble = FALSE,
                     set = set
                 )
+
+                if (!all(complete_idx)) {
+                    missing_ids <- ids_all[!complete_idx]
+                    preds_missing <- new_cif_prediction(
+                        id = rep(missing_ids, each = length(target_times)),
+                        time = rep(target_times, times = length(missing_ids)),
+                        cause = rep(cause_label, length(missing_ids) * length(target_times)),
+                        cif = rep(NA_real_, length(missing_ids) * length(target_times)),
+                        model = rep("random_forest", length(missing_ids) * length(target_times)),
+                        ensemble = FALSE,
+                        set = set
+                    )
+                    preds_list[[length(preds_list) + 1]] <- dplyr::bind_rows(preds_complete, preds_missing)
+                } else {
+                    preds_list[[length(preds_list) + 1]] <- preds_complete
+                }
             }
 
             result <- dplyr::bind_rows(preds_list)

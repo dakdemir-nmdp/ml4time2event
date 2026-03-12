@@ -7,8 +7,8 @@ ml4t2e_align_surv_predictions <- function(predsurv, pred_times, obstimes, contex
   if (!is.numeric(pred_matrix)) {
     rlang::abort(sprintf("'%s' must be numeric.", context))
   }
-  if (any(!is.finite(pred_matrix))) {
-    rlang::abort(sprintf("'%s' contains non-finite values.", context))
+  if (any(!is.finite(pred_matrix) & !is.na(pred_matrix))) {
+    rlang::abort(sprintf("'%s' contains non-finite values (NaN or Inf).", context))
   }
 
   if (missing(pred_times) || is.null(pred_times)) {

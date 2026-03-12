@@ -66,3 +66,30 @@ test_that("BART Competing Risk predictions format", {
   unique_causes <- unique(preds$cause)
   expect_true(length(unique_causes) >= 2)
 })
+
+test_that("BART Competing Risk honors ndpost control", {
+  skip_if_not_installed("BART")
+
+  set.seed(123)
+  n_obs <- 60
+  train_data <- data.frame(
+    time = rexp(n_obs, rate = 0.1),
+    event = sample(0:2, n_obs, replace = TRUE),
+    x1 = rnorm(n_obs)
+  )
+  while (length(unique(train_data$event)) < 3) {
+    train_data$event <- sample(0:2, n_obs, replace = TRUE)
+  }
+  train_data$status <- ifelse(train_data$event == 0, 0, 1)
+
+  task <- ml4t2e_task_cr(train_data, time = "time", status = "status", cause = "event")
+  fit <- ml4t2e_fit(
+    keep_data = TRUE,
+    task,
+    models = "cr_bart",
+    controls = list(cr_bart = list(ndpost = 33, nskip = 11, ntree = 25))
+  )
+
+  first_cause_model <- fit$models$cr_bart$model[[1]]
+  expect_equal(first_cause_model$ndpost, 33)
+})

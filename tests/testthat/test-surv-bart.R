@@ -56,3 +56,26 @@ test_that("BART Survival predictions format", {
   expect_true("surv" %in% colnames(preds))
   expect_true(all(preds$surv >= 0 & preds$surv <= 1))
 })
+
+test_that("BART Survival honors ndpost control", {
+  skip_if_not_installed("BART")
+
+  set.seed(123)
+  n_obs <- 40
+  surv_data <- data.frame(
+    time = rexp(n_obs, rate = 0.1),
+    status = sample(0:1, n_obs, replace = TRUE),
+    x1 = rnorm(n_obs)
+  )
+
+  task <- ml4t2e_task_surv(surv_data, time = "time", event = "status")
+
+  fit <- ml4t2e_fit(
+    keep_data = TRUE,
+    task,
+    models = "bart",
+    controls = list(bart = list(ndpost = 37, nskip = 13, ntree = 25))
+  )
+
+  expect_equal(fit$models$bart$model$ndpost, 37)
+})
